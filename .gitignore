@@ -1,0 +1,23 @@
+# dependencies
+node_modules/
+frontend/frontend/node_modules/
+
+# builds
+dist/
+build/
+
+# expo
+.expo/
+
+# env
+.env
+
+# logs
+*.log
+
+# OS
+.DS_Store
+
+# backend virtual env (if any)
+venv/
+__pycache__/

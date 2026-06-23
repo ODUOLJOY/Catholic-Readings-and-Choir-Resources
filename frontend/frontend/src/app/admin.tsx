@@ -57,7 +57,7 @@ export default function Admin() {
     } as any);
 
     await axios.post(
-      "http://YOUR_PC_IP:8000/upload",
+  "https://catholic-readings-and-choir-resource-app.onrender.com/upload",
       data,
       {
         headers: {

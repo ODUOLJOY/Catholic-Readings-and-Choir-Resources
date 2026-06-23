@@ -7,7 +7,7 @@ export default function ApproveScreen() {
 
   const load = async () => {
     try {
-      const res = await axios.get("http://localhost:8000/admin/pending");
+      const res = await axios.get("https://catholic-readings-and-choir-resource-app.onrender.com/admin/pending");
       setPending(res.data || []);
     } catch (err) {
       setPending([]);
@@ -19,7 +19,7 @@ export default function ApproveScreen() {
   }, []);
 
   const approve = async (id: number) => {
-    await axios.post(`http://localhost:8000/admin/approve/${id}`);
+    await axios.post(`https://catholic-readings-and-choir-resource-app.onrender.com/admin/approve/${id}`);
     load();
   };
 

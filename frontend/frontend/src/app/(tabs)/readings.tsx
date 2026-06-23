@@ -7,7 +7,7 @@ export default function Readings() {
   const load = async () => {
     try {
       const response = await fetch(
-        "http://127.0.0.1:8000/readings"
+        "https://catholic-readings-and-choir-resource-app.onrender.com/readings"
       );
 
       const data = await response.json();

@@ -15,9 +15,14 @@ app = FastAPI(
 )
 Base.metadata.create_all(bind=engine)
 
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://catholic-readings-and-choir-resourc.vercel.app",
+        "http://localhost:3000",
+        "http://localhost:8081"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

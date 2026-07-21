@@ -1,27 +1,113 @@
-from datetime import datetime
+from sqlalchemy.orm import Session
+
+from app.models.saint import Saint
 
 
-SAINTS = {
-    "01-01": "Mary, Mother of God",
-    "02-14": "Saints Cyril and Methodius",
-    "03-19": "Saint Joseph",
-    "06-29": "Saints Peter and Paul",
-    "08-15": "Assumption of Mary",
-    "11-01": "All Saints",
-    "12-25": "Nativity of the Lord"
-}
+class SaintService:
 
+    @staticmethod
+    def get_all(
+        db: Session,
+        skip: int = 0,
+        limit: int = 100,
+    ):
+        return (
+            db.query(Saint)
+            .order_by(Saint.name.asc())
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
 
-def get_today_saint():
+    @staticmethod
+    def get_by_id(
+        db: Session,
+        saint_id: int,
+    ):
+        return (
+            db.query(Saint)
+            .filter(Saint.id == saint_id)
+            .first()
+        )
 
-    today = datetime.now().strftime("%m-%d")
+    @staticmethod
+    def get_by_date(
+        db: Session,
+        month: int,
+        day: int,
+    ):
+        return (
+            db.query(Saint)
+            .filter(
+                Saint.month == month,
+                Saint.day == day,
+            )
+            .all()
+        )
 
-    saint = SAINTS.get(
-        today,
-        "Saint of the Day"
-    )
+    @staticmethod
+    def search(
+        db: Session,
+        query: str,
+    ):
+        return (
+            db.query(Saint)
+            .filter(
+                Saint.name.ilike(f"%{query}%")
+            )
+            .order_by(Saint.name.asc())
+            .all()
+        )
 
-    return {
-        "date": today,
-        "saint": saint
-    }
+    @staticmethod
+    def create(
+        db: Session,
+        saint: Saint,
+    ):
+        db.add(saint)
+        db.commit()
+        db.refresh(saint)
+        return saint
+
+    @staticmethod
+    def update(
+        db: Session,
+        saint_id: int,
+        data: dict,
+    ):
+        saint = (
+            db.query(Saint)
+            .filter(Saint.id == saint_id)
+            .first()
+        )
+
+        if not saint:
+            return None
+
+        for key, value in data.items():
+            if hasattr(saint, key):
+                setattr(saint, key, value)
+
+        db.commit()
+        db.refresh(saint)
+
+        return saint
+
+    @staticmethod
+    def delete(
+        db: Session,
+        saint_id: int,
+    ):
+        saint = (
+            db.query(Saint)
+            .filter(Saint.id == saint_id)
+            .first()
+        )
+
+        if not saint:
+            return False
+
+        db.delete(saint)
+        db.commit()
+
+        return True

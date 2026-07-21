@@ -1,9 +1,43 @@
 services:
   - type: web
-    name: catholic-backend
-    env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port 10000
+    name: catholic-readings-and-choir-resource-app
+    runtime: python
+    plan: free
+
+    rootDir: backend
+
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
+
+    startCommand: |
+      uvicorn app.main:app --host 0.0.0.0 --port $PORT
+
+    autoDeploy: true
+
+    healthCheckPath: /health
+
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.5
+
       - key: DATABASE_URL
-        value: postgresql://postgres.gpcachimljhpjgcvoasf:CatholicReadings2026!@aws-0-eu-west-1.pooler.supabase.com:6543/postgres
+        sync: false
+
+      - key: SECRET_KEY
+        sync: false
+
+      - key: ALGORITHM
+        value: HS256
+
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "60"
+
+      - key: REFRESH_TOKEN_EXPIRE_DAYS
+        value: "30"
+
+      - key: ENVIRONMENT
+        value: production
+
+      - key: FRONTEND_URL
+        value: https://catholic-readings-and-choir-resource-app.vercel.app

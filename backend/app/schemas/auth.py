@@ -1,29 +1,18 @@
-from datetime import datetime
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from pydantic import BaseModel, EmailStr, Field
+from typing import Optional
 
-
-# -------------------------
-# Registration
-# -------------------------
-
-class RegisterRequest(BaseModel):
-    full_name: str = Field(..., min_length=2, max_length=100)
-    email: EmailStr
-    password: str = Field(..., min_length=8, max_length=128)
-
-
-# -------------------------
-# Login
-# -------------------------
 
 class LoginRequest(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=6)
 
 
-# -------------------------
-# JWT Tokens
-# -------------------------
+class RegisterRequest(BaseModel):
+    full_name: str = Field(min_length=2, max_length=120)
+    email: EmailStr
+    password: str = Field(min_length=8)
+    parish_id: Optional[int] = None
+
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -35,59 +24,30 @@ class RefreshTokenRequest(BaseModel):
     refresh_token: str
 
 
-# -------------------------
-# Email Verification
-# -------------------------
-
-class VerifyEmailRequest(BaseModel):
-    token: str
-
-
-# -------------------------
-# Forgot Password
-# -------------------------
-
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
 
 class ResetPasswordRequest(BaseModel):
     token: str
-    new_password: str = Field(..., min_length=8, max_length=128)
+    password: str = Field(min_length=8)
 
 
-# -------------------------
-# Change Password
-# -------------------------
-
-class ChangePasswordRequest(BaseModel):
-    current_password: str
-    new_password: str = Field(..., min_length=8, max_length=128)
+class VerifyEmailRequest(BaseModel):
+    token: str
 
 
-# -------------------------
-# Authenticated User
-# -------------------------
+class MessageResponse(BaseModel):
+    message: str
 
-class AuthUser(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
 
+class UserResponse(BaseModel):
     id: int
-    uuid: str
     full_name: str
     email: EmailStr
     role: str
     is_active: bool
     is_verified: bool
-    profile_picture: str | None = None
-    phone_number: str | None = None
-    created_at: datetime
-    updated_at: datetime
 
-
-# -------------------------
-# Generic Response
-# -------------------------
-
-class MessageResponse(BaseModel):
-    message: str
+    class Config:
+        from_attributes = True

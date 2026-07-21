@@ -1,120 +1,132 @@
-import os
-from datetime import datetime, timedelta
-from typing import Optional
-
-from fastapi import Depends, HTTPException, Header, status
-from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
-from passlib.context import CryptContext
-from sqlalchemy.orm import Session
-
-from app import crud, models, schemas
-from app.database import get_db
-
-SECRET_KEY = os.getenv("SECRET_KEY", "replace-this-with-a-secure-secret")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
-ADMIN_CREATION_SECRET = os.getenv("ADMIN_CREATION_SECRET", "supersecret")
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+from datetime import datetime
+from uuid import uuid4
+import re
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+# =========================================================
+# GENERAL
+# =========================================================
+
+def utc_now():
+    return datetime.utcnow()
 
 
-def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+def generate_uuid() -> str:
+    return str(uuid4())
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+def slugify(text: str) -> str:
+    text = text.lower().strip()
+    text = re.sub(r"[^\w\s-]", "", text)
+    text = re.sub(r"[\s_-]+", "-", text)
+    return text
 
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> models.User:
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
-        if email is None:
-            raise credentials_exception
-        token_data = schemas.TokenData(email=email, role=payload.get("role"))
-    except JWTError:
-        raise credentials_exception
-    user = crud.get_user_by_email(db, email=token_data.email)
-    if user is None:
-        raise credentials_exception
-    return user
+# =========================================================
+# FILE HELPERS
+# =========================================================
+
+def get_file_extension(filename: str) -> str:
+    return filename.split(".")[-1].lower()
 
 
-def get_current_active_user(current_user: models.User = Depends(get_current_user)) -> models.User:
-    if not current_user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
-    return current_user
+def is_allowed_image(filename: str) -> bool:
+    return get_file_extension(filename) in {
+        "jpg",
+        "jpeg",
+        "png",
+        "webp",
+    }
 
 
-def get_current_active_admin(current_user: models.User = Depends(get_current_active_user)) -> models.User:
-    if current_user.role not in {"admin", "superadmin"}:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin privileges required")
-    return current_user
+def is_allowed_pdf(filename: str) -> bool:
+    return get_file_extension(filename) == "pdf"
 
 
-def get_current_active_superadmin(current_user: models.User = Depends(get_current_active_user)) -> models.User:
-    if current_user.role != "superadmin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Superadmin privileges required")
-    return current_user
+def is_allowed_audio(filename: str) -> bool:
+    return get_file_extension(filename) in {
+        "mp3",
+        "wav",
+        "aac",
+        "ogg",
+        "m4a",
+    }
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+def is_allowed_video(filename: str) -> bool:
+    return get_file_extension(filename) in {
+        "mp4",
+        "mov",
+        "avi",
+        "mkv",
+        "webm",
+    }
 
 
-def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+# =========================================================
+# USER HELPERS
+# =========================================================
+
+def normalize_email(email: str) -> str:
+    return email.strip().lower()
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+def full_name(first_name: str, last_name: str) -> str:
+    return f"{first_name.strip()} {last_name.strip()}"
 
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> models.User:
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
-        if email is None:
-            raise credentials_exception
-        token_data = schemas.TokenData(email=email, role=payload.get("role"))
-    except JWTError:
-        raise credentials_exception
-    user = crud.get_user_by_email(db, email=token_data.email)
-    if user is None:
-        raise credentials_exception
-    return user
+# =========================================================
+# READING HELPERS
+# =========================================================
+
+def reading_title(
+    feast: str | None,
+    saint: str | None,
+    reading_date,
+) -> str:
+
+    if feast:
+        return feast
+
+    if saint:
+        return f"Memorial of {saint}"
+
+    return reading_date.strftime("%A %d %B %Y")
 
 
-def get_current_active_user(current_user: models.User = Depends(get_current_user)) -> models.User:
-    if not current_user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
-    return current_user
+# =========================================================
+# API RESPONSE HELPERS
+# =========================================================
+
+def success(
+    message: str,
+    data=None,
+):
+    return {
+        "success": True,
+        "message": message,
+        "data": data,
+    }
 
 
-def get_current_active_admin(current_user: models.User = Depends(get_current_active_user)) -> models.User:
-    if current_user.role not in {"admin", "superadmin"}:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin privileges required")
-    return current_user
+def error(message: str):
+    return {
+        "success": False,
+        "message": message,
+    }
+
+
+# =========================================================
+# PAGINATION
+# =========================================================
+
+def paginate(
+    page: int = 1,
+    page_size: int = 20,
+):
+    page = max(page, 1)
+    page_size = max(min(page_size, 100), 1)
+
+    skip = (page - 1) * page_size
+
+    return skip, page_size

@@ -1,246 +1,294 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Optional
 
+from fastapi import HTTPException, status
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models.user import User, UserRole
+from app.models.user import User
+
+pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto",
+)
 
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# =====================================================
+# PASSWORD
+# =====================================================
+
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
 
 
-class AuthService:
-    def __init__(self, db: Session):
-        self.db = db
+def verify_password(
+    plain_password: str,
+    hashed_password: str,
+) -> bool:
+    return pwd_context.verify(
+        plain_password,
+        hashed_password,
+    )
 
-    # ------------------------
-    # Password Hashing
-    # ------------------------
 
-    @staticmethod
-    def hash_password(password: str) -> str:
-        return pwd_context.hash(password)
+# =====================================================
+# JWT TOKENS
+# =====================================================
 
-    @staticmethod
-    def verify_password(password: str, hashed_password: str) -> bool:
-        return pwd_context.verify(password, hashed_password)
+def create_access_token(user: User) -> str:
+    expire = datetime.utcnow() + timedelta(
+        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+    )
 
-    # ------------------------
-    # JWT Tokens
-    # ------------------------
+    payload = {
+        "sub": str(user.id),
+        "email": user.email,
+        "role": user.role,
+        "type": "access",
+        "exp": expire,
+    }
 
-    @staticmethod
-    def create_access_token(user: User) -> str:
-        expire = datetime.now(timezone.utc) + timedelta(
-            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-        )
+    return jwt.encode(
+        payload,
+        settings.SECRET_KEY,
+        algorithm=settings.ALGORITHM,
+    )
 
-        payload = {
-            "sub": str(user.id),
-            "email": user.email,
-            "role": user.role.value,
-            "type": "access",
-            "exp": expire,
-        }
 
-        return jwt.encode(
-            payload,
-            settings.SECRET_KEY,
-            algorithm=settings.ALGORITHM,
-        )
+def create_refresh_token(user: User) -> str:
+    expire = datetime.utcnow() + timedelta(
+        days=settings.REFRESH_TOKEN_EXPIRE_DAYS
+    )
 
-    @staticmethod
-    def create_refresh_token(user: User) -> str:
-        expire = datetime.now(timezone.utc) + timedelta(
-            days=settings.REFRESH_TOKEN_EXPIRE_DAYS
-        )
+    payload = {
+        "sub": str(user.id),
+        "type": "refresh",
+        "exp": expire,
+    }
 
-        payload = {
-            "sub": str(user.id),
-            "type": "refresh",
-            "exp": expire,
-        }
+    return jwt.encode(
+        payload,
+        settings.SECRET_KEY,
+        algorithm=settings.ALGORITHM,
+    )
 
-        return jwt.encode(
-            payload,
-            settings.SECRET_KEY,
-            algorithm=settings.ALGORITHM,
-        )
 
-    @staticmethod
-    def decode_token(token: str):
-        return jwt.decode(
+def verify_token(token: str) -> dict:
+    try:
+        payload = jwt.decode(
             token,
             settings.SECRET_KEY,
             algorithms=[settings.ALGORITHM],
         )
+        return payload
 
-    # ------------------------
-    # Registration
-    # ------------------------
-
-    def register(
-        self,
-        full_name: str,
-        email: str,
-        password: str,
-        role: UserRole = UserRole.USER,
-    ) -> User:
-
-        existing = (
-            self.db.query(User)
-            .filter(User.email == email.lower())
-            .first()
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token.",
         )
 
-        if existing:
-            raise ValueError("Email already exists.")
 
-        user = User(
-            full_name=full_name.strip(),
-            email=email.lower().strip(),
-            password_hash=self.hash_password(password),
-            role=role,
-            is_active=True,
-            is_verified=False,
-        )
+# =====================================================
+# USERS
+# =====================================================
 
-        self.db.add(user)
-        self.db.commit()
-        self.db.refresh(user)
+def authenticate_user(
+    db: Session,
+    email: str,
+    password: str,
+) -> Optional[User]:
 
-        return user
+    user = (
+        db.query(User)
+        .filter(User.email == email.lower())
+        .first()
+    )
 
-    # ------------------------
-    # Login
-    # ------------------------
+    if not user:
+        return None
 
-    def authenticate(
-        self,
-        email: str,
-        password: str,
-    ) -> Optional[User]:
-
-        user = (
-            self.db.query(User)
-            .filter(User.email == email.lower())
-            .first()
-        )
-
-        if not user:
-            return None
-
-        if not user.is_active:
-            return None
-
-        if user.locked_until and user.locked_until > datetime.now(
-            timezone.utc
-        ):
-            return None
-
-        if not self.verify_password(
-            password,
-            user.password_hash,
-        ):
-            user.failed_login_attempts += 1
-
-            if user.failed_login_attempts >= 5:
-                user.locked_until = datetime.now(
-                    timezone.utc
-                ) + timedelta(minutes=15)
-
-            self.db.commit()
-            return None
-
-        user.failed_login_attempts = 0
-        user.locked_until = None
-        user.last_login = datetime.now(timezone.utc)
-
-        self.db.commit()
-
-        return user
-
-    # ------------------------
-    # Get User
-    # ------------------------
-
-    def get_user(self, user_id: int) -> Optional[User]:
-        return (
-            self.db.query(User)
-            .filter(User.id == user_id)
-            .first()
-        )
-
-    def get_user_by_email(
-        self,
-        email: str,
-    ) -> Optional[User]:
-        return (
-            self.db.query(User)
-            .filter(User.email == email.lower())
-            .first()
-        )
-
-    # ------------------------
-    # Token User
-    # ------------------------
-
-    def get_current_user(
-        self,
-        token: str,
-    ) -> User:
-
-        try:
-            payload = self.decode_token(token)
-            user_id = int(payload["sub"])
-        except (JWTError, KeyError, ValueError):
-            raise ValueError("Invalid token.")
-
-        user = self.get_user(user_id)
-
-        if not user:
-            raise ValueError("User not found.")
-
-        return user
-
-    # ------------------------
-    # Update Password
-    # ------------------------
-
-    def update_password(
-        self,
-        user: User,
-        new_password: str,
+    if not verify_password(
+        password,
+        user.password_hash,
     ):
+        return None
 
-        user.password_hash = self.hash_password(
-            new_password
+    if not user.is_active:
+        raise HTTPException(
+            status_code=403,
+            detail="Account is disabled.",
         )
 
-        self.db.commit()
+    user.last_login = datetime.utcnow()
 
-    # ------------------------
-    # Verify Email
-    # ------------------------
+    db.commit()
 
-    def verify_email(self, user: User):
+    return user
 
-        user.is_verified = True
-        user.verification_token = None
 
-        self.db.commit()
+def create_user(
+    db: Session,
+    full_name: str,
+    email: str,
+    password: str,
+    parish_id: Optional[int] = None,
+) -> User:
 
-    # ------------------------
-    # Refresh Tokens
-    # ------------------------
+    exists = (
+        db.query(User)
+        .filter(User.email == email.lower())
+        .first()
+    )
 
-    def generate_tokens(self, user: User):
+    if exists:
+        raise HTTPException(
+            status_code=400,
+            detail="Email already exists.",
+        )
 
-        return {
-            "access_token": self.create_access_token(user),
-            "refresh_token": self.create_refresh_token(user),
-            "token_type": "bearer",
-        }
+    user = User(
+        full_name=full_name,
+        email=email.lower(),
+        password_hash=hash_password(password),
+        parish_id=parish_id,
+        role="USER",
+        is_active=True,
+        is_verified=False,
+    )
+
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    return user
+
+
+def get_current_user(
+    db: Session,
+    token: str,
+) -> User:
+
+    payload = verify_token(token)
+
+    user = (
+        db.query(User)
+        .filter(User.id == int(payload["sub"]))
+        .first()
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="User not found.",
+        )
+
+    return user
+
+
+# =====================================================
+# PASSWORD RESET
+# =====================================================
+
+def generate_reset_token(user: User) -> str:
+    expire = datetime.utcnow() + timedelta(hours=1)
+
+    payload = {
+        "sub": str(user.id),
+        "type": "reset",
+        "exp": expire,
+    }
+
+    return jwt.encode(
+        payload,
+        settings.SECRET_KEY,
+        algorithm=settings.ALGORITHM,
+    )
+
+
+def reset_password(
+    db: Session,
+    token: str,
+    new_password: str,
+):
+
+    payload = verify_token(token)
+
+    if payload.get("type") != "reset":
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid reset token.",
+        )
+
+    user = (
+        db.query(User)
+        .filter(User.id == int(payload["sub"]))
+        .first()
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found.",
+        )
+
+    user.password_hash = hash_password(
+        new_password
+    )
+
+    db.commit()
+
+
+# =====================================================
+# EMAIL VERIFICATION
+# =====================================================
+
+def generate_email_verification_token(
+    user: User,
+) -> str:
+
+    expire = datetime.utcnow() + timedelta(days=1)
+
+    payload = {
+        "sub": str(user.id),
+        "type": "verify",
+        "exp": expire,
+    }
+
+    return jwt.encode(
+        payload,
+        settings.SECRET_KEY,
+        algorithm=settings.ALGORITHM,
+    )
+
+
+def verify_email(
+    db: Session,
+    token: str,
+):
+
+    payload = verify_token(token)
+
+    if payload.get("type") != "verify":
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid verification token.",
+        )
+
+    user = (
+        db.query(User)
+        .filter(User.id == int(payload["sub"]))
+        .first()
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found.",
+        )
+
+    user.is_verified = True
+
+    db.commit()

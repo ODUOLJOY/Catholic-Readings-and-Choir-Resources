@@ -1,45 +1,52 @@
-from sqlalchemy import Column, Integer, String
 from app.database import Base
 
-class PendingReading(Base):
-    __tablename__ = "pending_readings"
+# Import ALL models here so SQLAlchemy can discover them
+# before Base.metadata.create_all() is called.
 
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String)
-    first_reading = Column(String)
-    psalm = Column(String)
-    gospel = Column(String)
+from app.models.user import User
+from app.models.parish import Parish
+from app.models.readings import Reading
 
+# Add these as you create them
+try:
+    from app.models.saint import Saint
+except ImportError:
+    Saint = None
 
-class Reading(Base):
-    __tablename__ = "readings"
+try:
+    from app.models.choir import ChoirResource
+except ImportError:
+    ChoirResource = None
 
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String)
-    first_reading = Column(String)
-    psalm = Column(String)
-    gospel = Column(String)
+try:
+    from app.models.favorite import Favorite
+except ImportError:
+    Favorite = None
 
+try:
+    from app.models.download import Download
+except ImportError:
+    Download = None
 
-class Saint(Base):
-    __tablename__ = "saints"
+try:
+    from app.models.notification import Notification
+except ImportError:
+    Notification = None
 
-    id = Column(Integer, primary_key=True)
-    name = Column(String)
-    content = Column(String)
+try:
+    from app.models.report import Report
+except ImportError:
+    Report = None
 
-
-class ChoirSong(Base):
-    __tablename__ = "choir_songs"
-
-    id = Column(Integer, primary_key=True)
-    title = Column(String)
-    lyrics = Column(String)
-
-
-class DownloadItem(Base):
-    __tablename__ = "downloads"
-
-    id = Column(Integer, primary_key=True)
-    title = Column(String)
-    file_url = Column(String)
+__all__ = [
+    "Base",
+    "User",
+    "Parish",
+    "Reading",
+    "Saint",
+    "ChoirResource",
+    "Favorite",
+    "Download",
+    "Notification",
+    "Report",
+]

@@ -1,68 +1,106 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, EmailStr, ConfigDict
 
+
+# ==========================================
+# Base User Schema
+# ==========================================
 
 class UserBase(BaseModel):
+    full_name: str
     email: EmailStr
-    full_name: str = Field(..., min_length=2, max_length=100)
+    parish_id: Optional[int] = None
 
+
+# ==========================================
+# Create User
+# ==========================================
 
 class UserCreate(UserBase):
-    password: str = Field(..., min_length=8, max_length=128)
-
-
-class UserLogin(BaseModel):
-    email: EmailStr
     password: str
 
 
-class UserUpdate(BaseModel):
-    full_name: Optional[str] = Field(None, min_length=2, max_length=100)
-    profile_image: Optional[str] = None
-    language: Optional[str] = None
-    dark_mode: Optional[bool] = None
+# ==========================================
+# Update User
+# ==========================================
 
+class UserUpdate(BaseModel):
+    full_name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    password: Optional[str] = None
+    parish_id: Optional[int] = None
+    profile_image: Optional[str] = None
+
+
+# ==========================================
+# Public User
+# ==========================================
 
 class UserResponse(UserBase):
-    model_config = ConfigDict(from_attributes=True)
-
     id: int
     role: str
     is_active: bool
     is_verified: bool
     profile_image: Optional[str] = None
-    language: str
-    dark_mode: bool
     created_at: datetime
-    updated_at: datetime
+    last_login: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 
-class Token(BaseModel):
-    access_token: str
-    refresh_token: str
-    token_type: str = "bearer"
+# ==========================================
+# Admin User View
+# ==========================================
+
+class UserAdminResponse(UserResponse):
+    updated_at: Optional[datetime] = None
 
 
-class TokenPayload(BaseModel):
-    sub: str
-    role: str
-    exp: int
+# ==========================================
+# User Profile
+# ==========================================
+
+class UserProfile(UserResponse):
+    bookmarked_readings: int = 0
+    downloaded_resources: int = 0
+    uploaded_resources: int = 0
 
 
-class PasswordResetRequest(BaseModel):
+# ==========================================
+# Password Change
+# ==========================================
+
+class ChangePassword(BaseModel):
+    current_password: str
+    new_password: str
+
+
+# ==========================================
+# Email Verification
+# ==========================================
+
+class VerifyEmail(BaseModel):
+    token: str
+
+
+# ==========================================
+# Password Reset
+# ==========================================
+
+class ForgotPassword(BaseModel):
     email: EmailStr
 
 
-class PasswordResetConfirm(BaseModel):
+class ResetPassword(BaseModel):
     token: str
-    new_password: str = Field(..., min_length=8, max_length=128)
+    new_password: str
 
 
-class EmailVerification(BaseModel):
-    token: str
+# ==========================================
+# Simple API Response
+# ==========================================
 
-
-class Message(BaseModel):
+class MessageResponse(BaseModel):
     message: str

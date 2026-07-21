@@ -1,52 +1,145 @@
-from datetime import datetime
+from datetime import date
+from sqlalchemy.orm import Session
+
+from app.models.readings import Reading
+from app.services.calendar import get_calendar_info
 
 
-def get_year_cycle():
-    year = datetime.now().year
+class MissalEngine:
+    """
+    Catholic Missal Engine.
 
-    cycle = year % 3
+    This service powers the Daily Readings API and is designed
+    so that future synchronization with official Catholic
+    lectionary providers can be added without changing the
+    frontend.
+    """
 
-    if cycle == 0:
-        return "A"
+    def __init__(self, db: Session):
+        self.db = db
 
-    if cycle == 1:
-        return "B"
+    # ==========================================
+    # DAILY READINGS
+    # ==========================================
 
-    return "C"
+    def get_today_readings(self):
+        return self.get_readings(date.today())
 
+    def get_readings(self, reading_date: date):
 
-def get_liturgical_season():
-    month = datetime.now().month
+        reading = (
+            self.db.query(Reading)
+            .filter(
+                Reading.reading_date == reading_date,
+                Reading.is_published == True,
+            )
+            .first()
+        )
 
-    if month in [11, 12]:
-        return "Advent"
-
-    if month in [1]:
-        return "Christmas"
-
-    if month in [2, 3]:
-        return "Lent"
-
-    if month in [4, 5]:
-        return "Easter"
-
-    return "Ordinary Time"
-
-
-def get_today_missal():
-
-    return {
-        "year": get_year_cycle(),
-
-        "season": get_liturgical_season(),
-
-        "readings": {
-            "first": "Isaiah 55:1-11",
-
-            "psalm": "Psalm 34",
-
-            "second": "Romans 8:18-23",
-
-            "gospel": "Matthew 13:1-23"
+        return {
+            "date": reading_date,
+            "calendar": get_calendar_info(reading_date),
+            "reading": reading,
         }
-    }
+
+    # ==========================================
+    # SEARCH
+    # ==========================================
+
+    def search(self, query: str):
+
+        return (
+            self.db.query(Reading)
+            .filter(
+                (Reading.feast.ilike(f"%{query}%"))
+                | (Reading.saint.ilike(f"%{query}%"))
+                | (Reading.first_reading.ilike(f"%{query}%"))
+                | (Reading.psalm.ilike(f"%{query}%"))
+                | (Reading.second_reading.ilike(f"%{query}%"))
+                | (Reading.gospel.ilike(f"%{query}%"))
+                | (Reading.reflection.ilike(f"%{query}%"))
+            )
+            .all()
+        )
+
+    # ==========================================
+    # FILTERS
+    # ==========================================
+
+    def by_season(self, season: str):
+
+        return (
+            self.db.query(Reading)
+            .filter(
+                Reading.liturgical_season == season,
+                Reading.is_published == True,
+            )
+            .order_by(Reading.reading_date.asc())
+            .all()
+        )
+
+    def by_year(self, year: str):
+
+        return (
+            self.db.query(Reading)
+            .filter(
+                Reading.liturgical_year == year,
+                Reading.is_published == True,
+            )
+            .order_by(Reading.reading_date.asc())
+            .all()
+        )
+
+    def by_language(self, language: str):
+
+        return (
+            self.db.query(Reading)
+            .filter(
+                Reading.language == language,
+                Reading.is_published == True,
+            )
+            .order_by(Reading.reading_date.asc())
+            .all()
+        )
+
+    # ==========================================
+    # DATE RANGE
+    # ==========================================
+
+    def between(
+        self,
+        start_date: date,
+        end_date: date,
+    ):
+
+        return (
+            self.db.query(Reading)
+            .filter(
+                Reading.reading_date >= start_date,
+                Reading.reading_date <= end_date,
+                Reading.is_published == True,
+            )
+            .order_by(Reading.reading_date.asc())
+            .all()
+        )
+
+    # ==========================================
+    # FUTURE AUTOMATIC LECTIONARY
+    # ==========================================
+
+    def sync_official_lectionary(self):
+        """
+        Reserved for future integration with
+        official Catholic lectionary providers.
+
+        This method will automatically update:
+        - Daily Readings
+        - Saints
+        - Liturgical Calendar
+        - Liturgical Seasons
+        - Liturgical Year (A/B/C)
+        """
+        return {
+            "success": False,
+            "message": "Official lectionary synchronization is not yet enabled.",
+        }

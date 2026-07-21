@@ -1,44 +1,71 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.database import Base, engine
 
-from app.routes import auth
-from app.routes import readings
-from app.routes import saints
-from app.routes import choir
-from app.routes import downloads
-from app.routes import uploads
-from app.routes import admin
+from app.database import init_db
+from app.routes import (
+    admin,
+    auth,
+    choir,
+    content,
+    downloads,
+    readings,
+    saints,
+    uploads,
+)
 
 app = FastAPI(
-    title="Catholic Readings API"
+    title="Catholic Readings & Choir Resource API",
+    description="Backend API for the Catholic Readings & Choir Resource App",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
 )
-Base.metadata.create_all(bind=engine)
 
+# Create database tables
+init_db()
 
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://catholic-readings-and-choir-resourc.vercel.app",
-        "http://localhost:3000",
-        "http://localhost:8081"
+        "http://localhost:8081",
+        "http://localhost:19006",
+        "http://127.0.0.1:8081",
+        "http://127.0.0.1:19006",
+        "https://catholic-readings-and-choir-resource-app.vercel.app",
+        "https://catholic-readings-and-choir-resource-app.onrender.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-app.include_router(auth.router)
-app.include_router(readings.router)
-app.include_router(saints.router)
-app.include_router(choir.router)
-app.include_router(downloads.router)
-app.include_router(uploads.router)
-app.include_router(admin.router)
+# API Routes
+app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(readings.router, prefix="/api/readings", tags=["Readings"])
+app.include_router(saints.router, prefix="/api/saints", tags=["Saints"])
+app.include_router(choir.router, prefix="/api/choir", tags=["Choir"])
+app.include_router(uploads.router, prefix="/api/uploads", tags=["Uploads"])
+app.include_router(downloads.router, prefix="/api/downloads", tags=["Downloads"])
+app.include_router(content.router, prefix="/api/content", tags=["Content"])
+app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 
-@app.get("/")
-def root():
+
+@app.get("/", tags=["System"])
+async def root():
     return {
-        "message": "Catholic API Running"
+        "application": "Catholic Readings & Choir Resource API",
+        "status": "online",
+        "version": "1.0.0",
+        "docs": "/docs",
+        "health": "/health",
     }
-    
+
+
+@app.get("/health", tags=["System"])
+async def health():
+    return {
+        "status": "healthy",
+        "database": "connected",
+        "api": "running",
+    }

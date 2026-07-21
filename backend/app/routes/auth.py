@@ -1,48 +1,200 @@
-from fastapi import APIRouter
+from datetime import timedelta
 
-router = APIRouter(
-    prefix="/auth",
-    tags=["Auth"]
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+from app.db.database import get_db
+from app.models.user import User
+from app.schemas.auth import (
+    LoginRequest,
+    RegisterRequest,
+    TokenResponse,
+)
+from app.schemas.user import UserResponse
+from app.services.auth_service import AuthService
+from app.auth.security import (
+    create_access_token,
+    create_refresh_token,
 )
 
-users = []
+router = APIRouter(
+    prefix="/api/auth",
+    tags=["Authentication"],
+)
 
-@router.get("/")
-def auth_home():
+
+@router.post(
+    "/register",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def register(
+    payload: RegisterRequest,
+    db: Session = Depends(get_db),
+):
+    existing = (
+        db.query(User)
+        .filter(User.email == payload.email.lower())
+        .first()
+    )
+
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail="Email already registered.",
+        )
+
+    user = AuthService.create_user(
+        db=db,
+        full_name=payload.full_name,
+        email=payload.email.lower(),
+        password=payload.password,
+    )
+
+    return user
+
+
+@router.post(
+    "/login",
+    response_model=TokenResponse,
+)
+def login(
+    payload: LoginRequest,
+    db: Session = Depends(get_db),
+):
+    user = AuthService.authenticate_user(
+        db,
+        payload.email.lower(),
+        payload.password,
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password.",
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=403,
+            detail="Account disabled.",
+        )
+
+    access_token = create_access_token(
+        data={
+            "sub": str(user.id),
+            "role": user.role,
+        }
+    )
+
+    refresh_token = create_refresh_token(
+        data={
+            "sub": str(user.id),
+        }
+    )
+
+    user.last_login = AuthService.now()
+
+    db.commit()
+
     return {
-        "message": "Auth route working"
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "user": user,
     }
 
-@router.post("/register")
-def register(user: dict):
 
-    users.append(user)
+@router.get(
+    "/me",
+    response_model=UserResponse,
+)
+def current_user(
+    user: User = Depends(AuthService.get_current_user),
+):
+    return user
+
+
+@router.post("/refresh")
+def refresh_token(
+    refresh_token: str,
+):
+    payload = AuthService.verify_refresh_token(
+        refresh_token
+    )
+
+    access_token = create_access_token(
+        data={
+            "sub": payload["sub"],
+            "role": payload.get("role", "user"),
+        }
+    )
 
     return {
-        "message": "registered successfully",
-        "user": user
+        "access_token": access_token,
+        "token_type": "bearer",
     }
 
-@router.post("/login")
-def login(data: dict):
 
-    email = data.get("email")
-    password = data.get("password")
+@router.post("/logout")
+def logout():
+    return {
+        "message": "Logged out successfully."
+    }
 
-    for user in users:
 
-        if (
-            user.get("email") == email
-            and
-            user.get("password") == password
-        ):
+@router.post("/forgot-password")
+def forgot_password(
+    email: str,
+    db: Session = Depends(get_db),
+):
+    user = (
+        db.query(User)
+        .filter(User.email == email.lower())
+        .first()
+    )
 
-            return {
-                "success": True,
-                "user": user
-            }
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found.",
+        )
+
+    token = AuthService.create_password_reset_token(user)
 
     return {
-        "success": False,
-        "message": "invalid credentials"
+        "message": "Password reset token generated.",
+        "reset_token": token,
+    }
+
+
+@router.post("/reset-password")
+def reset_password(
+    token: str,
+    password: str,
+    db: Session = Depends(get_db),
+):
+    user = AuthService.reset_password(
+        db=db,
+        token=token,
+        new_password=password,
+    )
+
+    return {
+        "message": "Password updated successfully."
+    }
+
+
+@router.post("/verify-email")
+def verify_email(
+    token: str,
+    db: Session = Depends(get_db),
+):
+    user = AuthService.verify_email(
+        db=db,
+        token=token,
+    )
+
+    return {
+        "message": "Email verified successfully."
     }

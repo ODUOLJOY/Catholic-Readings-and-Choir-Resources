@@ -1,11 +1,29 @@
 import { Tabs } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+import {
+  Ionicons,
+  MaterialCommunityIcons,
+  FontAwesome5,
+} from "@expo/vector-icons";
 
-export default function TabLayout() {
+export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
-        headerShown: true,
+        headerShown: false,
+        tabBarActiveTintColor: "#0B6623",
+        tabBarInactiveTintColor: "#777",
+        tabBarStyle: {
+          height: 65,
+          paddingBottom: 8,
+          paddingTop: 6,
+          backgroundColor: "#ffffff",
+          borderTopWidth: 1,
+          borderTopColor: "#e5e5e5",
+        },
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: "600",
+        },
       }}
     >
       <Tabs.Screen
@@ -13,7 +31,11 @@ export default function TabLayout() {
         options={{
           title: "Home",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home" color={color} size={size} />
+            <Ionicons
+              name="home"
+              color={color}
+              size={size}
+            />
           ),
         }}
       />
@@ -23,7 +45,11 @@ export default function TabLayout() {
         options={{
           title: "Readings",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="book" color={color} size={size} />
+            <MaterialCommunityIcons
+              name="book-open-page-variant"
+              color={color}
+              size={size}
+            />
           ),
         }}
       />
@@ -33,7 +59,11 @@ export default function TabLayout() {
         options={{
           title: "Choir",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="musical-notes" color={color} size={size} />
+            <MaterialCommunityIcons
+              name="music-clef-treble"
+              color={color}
+              size={size}
+            />
           ),
         }}
       />
@@ -43,7 +73,11 @@ export default function TabLayout() {
         options={{
           title: "Downloads",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="download" color={color} size={size} />
+            <Ionicons
+              name="download"
+              color={color}
+              size={size}
+            />
           ),
         }}
       />
@@ -53,7 +87,11 @@ export default function TabLayout() {
         options={{
           title: "Profile",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person" color={color} size={size} />
+            <FontAwesome5
+              name="user-circle"
+              color={color}
+              size={size}
+            />
           ),
         }}
       />

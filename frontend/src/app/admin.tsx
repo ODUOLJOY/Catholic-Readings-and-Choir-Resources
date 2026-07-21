@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Alert,
   ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
@@ -15,186 +15,182 @@ import { router } from "expo-router";
 const API_URL =
   "https://catholic-readings-and-choir-resource-app.onrender.com";
 
-export default function AdminScreen() {
+interface DashboardStats {
+  users: number;
+  admins: number;
+  readings: number;
+  choir_resources: number;
+  pending_uploads: number;
+  pending_reports: number;
+}
+
+export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
+  const [stats, setStats] = useState<DashboardStats>({
+    users: 0,
+    admins: 0,
+    readings: 0,
+    choir_resources: 0,
+    pending_uploads: 0,
+    pending_reports: 0,
+  });
 
   useEffect(() => {
-    loadProfile();
+    loadDashboard();
   }, []);
 
-  async function loadProfile() {
+  async function loadDashboard() {
     try {
       const token = await AsyncStorage.getItem("access_token");
 
-      if (!token) {
-        router.replace("/(auth)/login");
-        return;
-      }
+      const response = await axios.get(
+        `${API_URL}/api/admin/dashboard`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
-      const res = await axios.get(`${API_URL}/api/auth/me`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      setStats(response.data);
+    } catch (error) {
+      Alert.alert(
+        "Access Denied",
+        "Administrator privileges required."
+      );
 
-      const profile = res.data;
-
-      if (
-        profile.role !== "admin" &&
-        profile.role !== "super_admin"
-      ) {
-        Alert.alert(
-          "Access Denied",
-          "You are not authorized to access the Admin Dashboard."
-        );
-
-        router.replace("/(tabs)");
-        return;
-      }
-
-      setUser(profile);
-    } catch (err) {
-      await AsyncStorage.removeItem("access_token");
-      await AsyncStorage.removeItem("refresh_token");
-
-      router.replace("/(auth)/login");
+      router.replace("/(tabs)");
     } finally {
       setLoading(false);
     }
   }
 
   async function logout() {
-    await AsyncStorage.removeItem("access_token");
-    await AsyncStorage.removeItem("refresh_token");
-
-    delete axios.defaults.headers.common["Authorization"];
-
+    await AsyncStorage.clear();
     router.replace("/(auth)/login");
   }
 
   if (loading) {
     return (
-      <View style={styles.loader}>
-        <ActivityIndicator size="large" color="#0B6623" />
+      <View style={styles.loading}>
+        <ActivityIndicator
+          size="large"
+          color="#0B6623"
+        />
       </View>
     );
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={{ paddingBottom: 40 }}
-    >
+    <ScrollView style={styles.container}>
       <Text style={styles.title}>
-        Catholic Readings & Choir Resources
-      </Text>
-
-      <Text style={styles.subtitle}>
         Admin Dashboard
       </Text>
 
-      {user && (
-        <View style={styles.profile}>
-          <Text style={styles.profileText}>
-            {user.full_name}
+      <View style={styles.statsContainer}>
+        <View style={styles.card}>
+          <Text style={styles.number}>
+            {stats.users}
           </Text>
-
-          <Text style={styles.profileRole}>
-            {user.role.toUpperCase()}
-          </Text>
+          <Text>Total Users</Text>
         </View>
-      )}
+
+        <View style={styles.card}>
+          <Text style={styles.number}>
+            {stats.admins}
+          </Text>
+          <Text>Admins</Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.number}>
+            {stats.readings}
+          </Text>
+          <Text>Readings</Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.number}>
+            {stats.choir_resources}
+          </Text>
+          <Text>Choir Files</Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.number}>
+            {stats.pending_uploads}
+          </Text>
+          <Text>Pending Uploads</Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.number}>
+            {stats.pending_reports}
+          </Text>
+          <Text>Reports</Text>
+        </View>
+      </View>
 
       <TouchableOpacity
-        style={styles.card}
+        style={styles.button}
         onPress={() => router.push("/admin/upload")}
       >
-        <Text style={styles.cardTitle}>
-          Upload Readings
-        </Text>
-
-        <Text style={styles.cardText}>
-          Upload Daily Readings, Choir Files, PDFs,
-          Audio and Videos.
+        <Text style={styles.buttonText}>
+          Upload Choir Resource
         </Text>
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={styles.card}
-        onPress={() => router.push("/admin/approve")}
-      >
-        <Text style={styles.cardTitle}>
-          Approve Uploads
-        </Text>
-
-        <Text style={styles.cardText}>
-          Review user submitted resources.
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.card}
+        style={styles.button}
         onPress={() => router.push("/admin/readings")}
       >
-        <Text style={styles.cardTitle}>
+        <Text style={styles.buttonText}>
           Manage Readings
         </Text>
-
-        <Text style={styles.cardText}>
-          Edit or delete daily Catholic readings.
-        </Text>
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={styles.card}
-        onPress={() => router.push("/admin/saints")}
+        style={styles.button}
+        onPress={() => router.push("/admin/users")}
       >
-        <Text style={styles.cardTitle}>
-          Saints of the Day
-        </Text>
-
-        <Text style={styles.cardText}>
-          Manage saints and feast days.
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.card}
-        onPress={() => Alert.alert("Coming Soon")}
-      >
-        <Text style={styles.cardTitle}>
+        <Text style={styles.buttonText}>
           Manage Users
         </Text>
+      </TouchableOpacity>
 
-        <Text style={styles.cardText}>
-          View users, roles and permissions.
+      <TouchableOpacity
+        style={styles.button}
+        onPress={() => router.push("/admin/approve")}
+      >
+        <Text style={styles.buttonText}>
+          Approve Uploads
         </Text>
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={styles.card}
-        onPress={() => Alert.alert("Coming Soon")}
+        style={styles.button}
+        onPress={() => router.push("/admin/reports")}
       >
-        <Text style={styles.cardTitle}>
-          Reports
-        </Text>
-
-        <Text style={styles.cardText}>
-          View user reports and moderation queue.
+        <Text style={styles.buttonText}>
+          View Reports
         </Text>
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={styles.card}
-        onPress={() => Alert.alert("Coming Soon")}
+        style={styles.button}
+        onPress={() => router.push("/admin/analytics")}
       >
-        <Text style={styles.cardTitle}>
+        <Text style={styles.buttonText}>
           Analytics
         </Text>
+      </TouchableOpacity>
 
-        <Text style={styles.cardText}>
-          Application usage statistics.
+      <TouchableOpacity
+        style={styles.button}
+        onPress={() => router.push("/admin/saints")}
+      >
+        <Text style={styles.buttonText}>
+          Saints Database
         </Text>
       </TouchableOpacity>
 
@@ -211,83 +207,76 @@ export default function AdminScreen() {
 }
 
 const styles = StyleSheet.create({
-  loader: {
+  container: {
+    flex: 1,
+    backgroundColor: "#fff",
+    padding: 20,
+  },
+
+  loading: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
 
-  container: {
-    flex: 1,
-    backgroundColor: "#F5F5F5",
-    padding: 20,
-  },
-
   title: {
-    fontSize: 26,
-    fontWeight: "700",
+    fontSize: 30,
+    fontWeight: "bold",
     color: "#0B6623",
+    marginBottom: 20,
     textAlign: "center",
-    marginTop: 15,
   },
 
-  subtitle: {
-    fontSize: 18,
-    color: "#666",
-    textAlign: "center",
+  statsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
     marginBottom: 25,
   },
 
-  profile: {
-    backgroundColor: "#fff",
-    padding: 18,
-    borderRadius: 12,
-    marginBottom: 20,
-    elevation: 2,
-  },
-
-  profileText: {
-    fontSize: 18,
-    fontWeight: "700",
-  },
-
-  profileRole: {
-    marginTop: 6,
-    color: "#0B6623",
-    fontWeight: "700",
-  },
-
   card: {
-    backgroundColor: "#fff",
+    width: "48%",
+    backgroundColor: "#F3F6F4",
     padding: 18,
     borderRadius: 12,
     marginBottom: 15,
+    alignItems: "center",
     elevation: 2,
   },
 
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: "700",
+  number: {
+    fontSize: 28,
+    fontWeight: "bold",
     color: "#0B6623",
+    marginBottom: 5,
   },
 
-  cardText: {
-    marginTop: 8,
-    color: "#666",
-    fontSize: 15,
+  button: {
+    backgroundColor: "#0B6623",
+    padding: 15,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+
+  buttonText: {
+    color: "#fff",
+    fontWeight: "700",
+    textAlign: "center",
+    fontSize: 16,
   },
 
   logout: {
-    backgroundColor: "#B22222",
-    padding: 16,
+    backgroundColor: "#C62828",
+    padding: 15,
     borderRadius: 12,
-    marginTop: 25,
+    marginTop: 30,
+    marginBottom: 30,
   },
 
   logoutText: {
     color: "#fff",
-    fontWeight: "700",
     textAlign: "center",
-    fontSize: 17,
+    fontWeight: "700",
+    fontSize: 16,
   },
 });

@@ -35,15 +35,22 @@ def dashboard(
 ):
     require_admin(current_user)
 
+    # Count admins (both admin and super_admin roles)
+    admins_count = db.query(User).filter(
+        User.role.in_(["admin", "super_admin"])
+    ).count()
+
     return {
         "users": db.query(User).count(),
-        "readings": db.query(Reading).count(),
-        "pending_readings": db.query(Reading).filter(
-            Reading.approved == False
-        ).count(),
-        "published_readings": db.query(Reading).filter(
+        "admins": admins_count,
+        "readings": db.query(Reading).filter(
             Reading.published == True
         ).count(),
+        "choir_resources": 0,  # TODO: implement when ChoirResource model is created
+        "pending_uploads": db.query(Reading).filter(
+            Reading.approved == False
+        ).count(),
+        "pending_reports": 0,  # TODO: implement when Report model is created
     }
 
 

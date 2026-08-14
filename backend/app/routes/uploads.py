@@ -12,7 +12,7 @@ from fastapi import (
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.models.choir_resource import ChoirResource
+from app.models.choir import ChoirResource
 from app.models.user import User
 from app.routes.auth_dependency import require_admin
 

@@ -13,7 +13,7 @@ export default function TabsLayout() {
         tabBarActiveTintColor: "#0B6623",
         tabBarInactiveTintColor: "#777",
         tabBarStyle: {
-          height: 65,
+          height: 68,
           paddingBottom: 8,
           paddingTop: 6,
           backgroundColor: "#ffffff",
@@ -21,18 +21,19 @@ export default function TabsLayout() {
           borderTopColor: "#e5e5e5",
         },
         tabBarLabelStyle: {
-          fontSize: 12,
+          fontSize: 11,
           fontWeight: "600",
         },
       }}
     >
+      {/* HOME */}
       <Tabs.Screen
         name="index"
         options={{
           title: "Home",
           tabBarIcon: ({ color, size }) => (
             <Ionicons
-              name="home"
+              name="home-outline"
               color={color}
               size={size}
             />
@@ -40,13 +41,14 @@ export default function TabsLayout() {
         }}
       />
 
+      {/* DAILY READINGS */}
       <Tabs.Screen
         name="readings"
         options={{
           title: "Readings",
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons
-              name="book-open-page-variant"
+              name="book-open-page-variant-outline"
               color={color}
               size={size}
             />
@@ -54,13 +56,14 @@ export default function TabsLayout() {
         }}
       />
 
+      {/* CHOIR RESOURCES */}
       <Tabs.Screen
         name="choir"
         options={{
           title: "Choir",
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons
-              name="music-clef-treble"
+              name="music-box-multiple"
               color={color}
               size={size}
             />
@@ -68,13 +71,14 @@ export default function TabsLayout() {
         }}
       />
 
+      {/* DOWNLOADS */}
       <Tabs.Screen
         name="downloads"
         options={{
           title: "Downloads",
           tabBarIcon: ({ color, size }) => (
             <Ionicons
-              name="download"
+              name="download-outline"
               color={color}
               size={size}
             />
@@ -82,6 +86,7 @@ export default function TabsLayout() {
         }}
       />
 
+      {/* PROFILE */}
       <Tabs.Screen
         name="profile"
         options={{
@@ -93,6 +98,16 @@ export default function TabsLayout() {
               size={size}
             />
           ),
+        }}
+      />
+
+      {/* ADMIN SCREENS
+          These are registered with the router but hidden
+          from the normal bottom navigation. */}
+      <Tabs.Screen
+        name="admin"
+        options={{
+          href: null,
         }}
       />
     </Tabs>

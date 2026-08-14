@@ -1,65 +1,367 @@
-import { View, Text, Pressable, StyleSheet } from "react-native";
 import { router } from "expo-router";
+import {
+  ScrollView,
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+} from "react-native";
+import {
+  Ionicons,
+  MaterialCommunityIcons,
+} from "@expo/vector-icons";
 
 export default function Home() {
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>
-        Catholic Readings & Choir Resource App
-      </Text>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* HEADER */}
+      <View style={styles.header}>
+        <View style={styles.logo}>
+          <MaterialCommunityIcons
+            name="church"
+            size={34}
+            color="#fff"
+          />
+        </View>
 
+        <View>
+          <Text style={styles.welcome}>
+            Welcome
+          </Text>
+
+          <Text style={styles.appName}>
+            Catholic Readings
+          </Text>
+        </View>
+      </View>
+
+      {/* HERO */}
+      <View style={styles.hero}>
+        <Text style={styles.heroTitle}>
+          Catholic Readings &
+          {"\n"}
+          Choir Resources
+        </Text>
+
+        <Text style={styles.heroText}>
+          Daily Scripture, liturgical readings,
+          saints and Catholic choir resources
+          all in one place.
+        </Text>
+      </View>
+
+      {/* DAILY READINGS */}
       <Pressable
-        style={styles.button}
+        style={styles.mainCard}
         onPress={() => router.push("/readings")}
       >
-        <Text style={styles.buttonText}>Daily Readings</Text>
+        <View style={styles.iconCircle}>
+          <MaterialCommunityIcons
+            name="book-open-page-variant"
+            size={28}
+            color="#0B6623"
+          />
+        </View>
+
+        <View style={styles.cardContent}>
+          <Text style={styles.cardTitle}>
+            Daily Readings
+          </Text>
+
+          <Text style={styles.cardText}>
+            Today's First Reading, Psalm,
+            Second Reading and Gospel.
+          </Text>
+        </View>
+
+        <Ionicons
+          name="chevron-forward"
+          size={24}
+          color="#777"
+        />
       </Pressable>
 
+      {/* CHOIR */}
       <Pressable
-        style={styles.button}
+        style={styles.mainCard}
         onPress={() => router.push("/choir")}
       >
-        <Text style={styles.buttonText}>Choir Resources</Text>
+        <View style={styles.iconCircle}>
+          <MaterialCommunityIcons
+            name="music-box-multiple"
+            size={28}
+            color="#0B6623"
+          />
+        </View>
+
+        <View style={styles.cardContent}>
+          <Text style={styles.cardTitle}>
+            Choir Resources
+          </Text>
+
+          <Text style={styles.cardText}>
+            Entrance, Kyrie, Gloria, Psalms,
+            Offertory, Communion, Thanksgiving,
+            Exit and seasonal songs.
+          </Text>
+        </View>
+
+        <Ionicons
+          name="chevron-forward"
+          size={24}
+          color="#777"
+        />
       </Pressable>
 
+      {/* DOWNLOADS */}
       <Pressable
-        style={styles.button}
+        style={styles.mainCard}
         onPress={() => router.push("/downloads")}
       >
-        <Text style={styles.buttonText}>Offline Downloads</Text>
+        <View style={styles.iconCircle}>
+          <Ionicons
+            name="download-outline"
+            size={28}
+            color="#0B6623"
+          />
+        </View>
+
+        <View style={styles.cardContent}>
+          <Text style={styles.cardTitle}>
+            Offline Downloads
+          </Text>
+
+          <Text style={styles.cardText}>
+            Access your saved readings and choir
+            resources even when offline.
+          </Text>
+        </View>
+
+        <Ionicons
+          name="chevron-forward"
+          size={24}
+          color="#777"
+        />
       </Pressable>
 
+      {/* CATEGORIES */}
+      <Text style={styles.sectionTitle}>
+        Choir Categories
+      </Text>
+
+      <View style={styles.categoryGrid}>
+        {[
+          "Entrance",
+          "Kyrie & Gloria",
+          "Psalms",
+          "Gospel Acclamation",
+          "Offertory",
+          "Communion",
+          "Thanksgiving",
+          "Exit",
+          "Lent",
+          "Advent",
+          "Christmas",
+          "Easter",
+          "Pentecost",
+          "Marian",
+          "Wedding",
+          "Funeral",
+        ].map((category) => (
+          <Pressable
+            key={category}
+            style={styles.category}
+            onPress={() =>
+              router.push({
+                pathname: "/choir",
+                params: { category },
+              })
+            }
+          >
+            <MaterialCommunityIcons
+              name="music-note"
+              size={18}
+              color="#0B6623"
+            />
+
+            <Text style={styles.categoryText}>
+              {category}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {/* ADMIN */}
       <Pressable
-        style={styles.button}
+        style={styles.adminButton}
         onPress={() => router.push("/admin")}
       >
-        <Text style={styles.buttonText}>Admin Panel</Text>
+        <MaterialCommunityIcons
+          name="shield-account"
+          size={22}
+          color="#fff"
+        />
+
+        <Text style={styles.adminText}>
+          Admin Panel
+        </Text>
       </Pressable>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "center",
-    padding: 25,
-    gap: 15,
+    backgroundColor: "#F7F9F7",
   },
-  title: {
-    fontSize: 28,
-    fontWeight: "bold",
+
+  content: {
+    padding: 20,
+    paddingBottom: 40,
+  },
+
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 20,
-    textAlign: "center",
   },
-  button: {
-    backgroundColor: "#1e88e5",
-    padding: 15,
-    borderRadius: 10,
+
+  logo: {
+    width: 55,
+    height: 55,
+    borderRadius: 16,
+    backgroundColor: "#0B6623",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
   },
-  buttonText: {
-    color: "white",
-    textAlign: "center",
+
+  welcome: {
+    color: "#777",
+    fontSize: 14,
+  },
+
+  appName: {
+    color: "#0B6623",
+    fontSize: 21,
+    fontWeight: "800",
+  },
+
+  hero: {
+    backgroundColor: "#0B6623",
+    borderRadius: 20,
+    padding: 24,
+    marginBottom: 20,
+  },
+
+  heroTitle: {
+    color: "#fff",
+    fontSize: 27,
+    fontWeight: "800",
+    lineHeight: 34,
+  },
+
+  heroText: {
+    color: "#E8F4EB",
+    fontSize: 15,
+    lineHeight: 22,
+    marginTop: 12,
+  },
+
+  mainCard: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 13,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E6EAE7",
+  },
+
+  iconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "#EAF4ED",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 13,
+  },
+
+  cardContent: {
+    flex: 1,
+    marginRight: 8,
+  },
+
+  cardTitle: {
     fontSize: 18,
+    fontWeight: "700",
+    color: "#222",
+    marginBottom: 4,
+  },
+
+  cardText: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: "#777",
+  },
+
+  sectionTitle: {
+    fontSize: 21,
+    fontWeight: "800",
+    color: "#222",
+    marginTop: 15,
+    marginBottom: 12,
+  },
+
+  categoryGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+  },
+
+  category: {
+    width: "48%",
+    minHeight: 52,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E6EAE7",
+  },
+
+  categoryText: {
+    flex: 1,
+    marginLeft: 8,
+    color: "#333",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+
+  adminButton: {
+    marginTop: 12,
+    backgroundColor: "#333",
+    borderRadius: 12,
+    padding: 15,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  adminText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
   },
 });

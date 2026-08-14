@@ -1,16 +1,20 @@
 import { useState } from "react";
 import {
-  View,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
+  View,
 } from "react-native";
+import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
-import { router } from "expo-router";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 
 const API_URL =
   "https://catholic-readings-and-choir-resource-app.onrender.com";
@@ -18,11 +22,17 @@ const API_URL =
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const login = async () => {
-    if (!email.trim() || !password.trim()) {
-      Alert.alert("Missing Fields", "Enter your email and password.");
+  async function login() {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!normalizedEmail || !password) {
+      Alert.alert(
+        "Missing Information",
+        "Please enter your email address and password."
+      );
       return;
     }
 
@@ -32,20 +42,58 @@ export default function LoginScreen() {
       const response = await axios.post(
         `${API_URL}/api/auth/login`,
         {
-          email: email.trim().toLowerCase(),
+          email: normalizedEmail,
           password,
         },
         {
           headers: {
             "Content-Type": "application/json",
           },
+          timeout: 20000,
         }
       );
 
-      const { access_token, refresh_token } = response.data;
+      const {
+        access_token,
+        refresh_token,
+        user,
+      } = response.data ?? {};
 
-      await AsyncStorage.setItem("access_token", access_token);
-      await AsyncStorage.setItem("refresh_token", refresh_token);
+      if (!access_token) {
+        throw new Error(
+          "The server did not return an access token."
+        );
+      }
+
+      await AsyncStorage.setItem(
+        "access_token",
+        access_token
+      );
+
+      if (refresh_token) {
+        await AsyncStorage.setItem(
+          "refresh_token",
+          refresh_token
+        );
+      } else {
+        await AsyncStorage.removeItem(
+          "refresh_token"
+        );
+      }
+
+      if (user) {
+        await AsyncStorage.setItem(
+          "user",
+          JSON.stringify(user)
+        );
+
+        if (user.role) {
+          await AsyncStorage.setItem(
+            "user_role",
+            String(user.role)
+          );
+        }
+      }
 
       axios.defaults.headers.common[
         "Authorization"
@@ -53,133 +101,389 @@ export default function LoginScreen() {
 
       router.replace("/(tabs)");
     } catch (error: any) {
-      let message = "Unable to login.";
+      console.log(
+        "Login error:",
+        error?.response?.data || error
+      );
 
-      if (error.response?.data?.detail) {
-        message = error.response.data.detail;
+      let message =
+        "Unable to sign in. Please try again.";
+
+      if (error?.response?.data?.detail) {
+        if (Array.isArray(error.response.data.detail)) {
+          message = error.response.data.detail
+            .map((item: any) =>
+              item?.msg
+                ? String(item.msg)
+                : String(item)
+            )
+            .join("\n");
+        } else {
+          message = String(
+            error.response.data.detail
+          );
+        }
+      } else if (
+        error?.code === "ECONNABORTED"
+      ) {
+        message =
+          "The server took too long to respond.";
+      } else if (!error?.response) {
+        message =
+          "Could not connect to the server. Check your internet connection.";
       }
 
       Alert.alert("Login Failed", message);
     } finally {
       setLoading(false);
     }
-  };
+  }
+
+  function openRegister() {
+    router.push("/(auth)/register" as any);
+  }
+
+  function openForgotPassword() {
+    router.push("/(auth)/forgot-password" as any);
+  }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>
-        Catholic Readings & Choir Resources
-      </Text>
-
-      <Text style={styles.subtitle}>
-        Welcome Back
-      </Text>
-
-      <TextInput
-        placeholder="Email Address"
-        keyboardType="email-address"
-        autoCapitalize="none"
-        autoCorrect={false}
-        value={email}
-        onChangeText={setEmail}
-        style={styles.input}
-      />
-
-      <TextInput
-        placeholder="Password"
-        secureTextEntry
-        autoCapitalize="none"
-        value={password}
-        onChangeText={setPassword}
-        style={styles.input}
-      />
-
-      <TouchableOpacity
-        style={styles.button}
-        onPress={login}
-        disabled={loading}
+    <KeyboardAvoidingView
+      style={styles.screen}
+      behavior={
+        Platform.OS === "ios" ? "padding" : undefined
+      }
+    >
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>
-            Login
+        <View style={styles.logoContainer}>
+          <View style={styles.logo}>
+            <MaterialCommunityIcons
+              name="church"
+              size={34}
+              color="#fff"
+            />
+          </View>
+
+          <Text style={styles.brand}>
+            Catholic Readings
           </Text>
-        )}
-      </TouchableOpacity>
 
-      <TouchableOpacity
-        onPress={() => router.push("/register")}
-      >
-        <Text style={styles.link}>
-          Don't have an account? Register
-        </Text>
-      </TouchableOpacity>
+          <Text style={styles.brandSub}>
+            & Choir Resources
+          </Text>
+        </View>
 
-      <TouchableOpacity
-        onPress={() => router.push("/forgot-password")}
-      >
-        <Text style={styles.link}>
-          Forgot Password?
+        <View style={styles.formCard}>
+          <Text style={styles.title}>
+            Welcome Back
+          </Text>
+
+          <Text style={styles.subtitle}>
+            Sign in to continue
+          </Text>
+
+          <Text style={styles.label}>
+            Email Address
+          </Text>
+
+          <View style={styles.inputWrapper}>
+            <Ionicons
+              name="mail-outline"
+              size={20}
+              color="#777"
+            />
+
+            <TextInput
+              style={styles.input}
+              placeholder="Enter your email"
+              placeholderTextColor="#999"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="email"
+              textContentType="emailAddress"
+              value={email}
+              onChangeText={setEmail}
+              editable={!loading}
+              returnKeyType="next"
+            />
+          </View>
+
+          <Text style={styles.label}>
+            Password
+          </Text>
+
+          <View style={styles.inputWrapper}>
+            <Ionicons
+              name="lock-closed-outline"
+              size={20}
+              color="#777"
+            />
+
+            <TextInput
+              style={styles.input}
+              placeholder="Enter your password"
+              placeholderTextColor="#999"
+              secureTextEntry={!showPassword}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="password"
+              textContentType="password"
+              value={password}
+              onChangeText={setPassword}
+              editable={!loading}
+              onSubmitEditing={login}
+              returnKeyType="done"
+            />
+
+            <Pressable
+              onPress={() =>
+                setShowPassword((value) => !value)
+              }
+              hitSlop={10}
+            >
+              <Ionicons
+                name={
+                  showPassword
+                    ? "eye-off-outline"
+                    : "eye-outline"
+                }
+                size={21}
+                color="#777"
+              />
+            </Pressable>
+          </View>
+
+          <Pressable
+            onPress={openForgotPassword}
+            style={styles.forgotButton}
+          >
+            <Text style={styles.forgotText}>
+              Forgot Password?
+            </Text>
+          </Pressable>
+
+          <Pressable
+            style={[
+              styles.loginButton,
+              loading && styles.loginButtonDisabled,
+            ]}
+            onPress={login}
+            disabled={loading}
+          >
+            {loading ? (
+              <View style={styles.buttonContent}>
+                <ActivityIndicator color="#fff" />
+                <Text style={styles.loginText}>
+                  Signing in...
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.loginText}>
+                Login
+              </Text>
+            )}
+          </Pressable>
+
+          <View style={styles.dividerRow}>
+            <View style={styles.divider} />
+            <Text style={styles.dividerText}>
+              OR
+            </Text>
+            <View style={styles.divider} />
+          </View>
+
+          <Pressable
+            style={styles.registerButton}
+            onPress={openRegister}
+            disabled={loading}
+          >
+            <Text style={styles.registerText}>
+              Create an Account
+            </Text>
+          </Pressable>
+        </View>
+
+        <Text style={styles.footer}>
+          By signing in, you agree to use the app
+          responsibly and respectfully.
         </Text>
-      </TouchableOpacity>
-    </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
+    backgroundColor: "#F7F9F7",
+  },
+
+  container: {
+    flexGrow: 1,
     justifyContent: "center",
-    padding: 24,
-    backgroundColor: "#ffffff",
+    padding: 22,
+  },
+
+  logoContainer: {
+    alignItems: "center",
+    marginBottom: 26,
+  },
+
+  logo: {
+    width: 72,
+    height: 72,
+    borderRadius: 22,
+    backgroundColor: "#0B6623",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+
+  brand: {
+    fontSize: 25,
+    fontWeight: "800",
+    color: "#0B6623",
+  },
+
+  brandSub: {
+    fontSize: 16,
+    color: "#666",
+    marginTop: 2,
+  },
+
+  formCard: {
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#E5EAE6",
   },
 
   title: {
-    fontSize: 28,
-    fontWeight: "700",
+    fontSize: 27,
+    fontWeight: "800",
+    color: "#222",
     textAlign: "center",
-    color: "#0B6623",
-    marginBottom: 6,
   },
 
   subtitle: {
-    fontSize: 18,
+    fontSize: 14,
+    color: "#777",
     textAlign: "center",
-    marginBottom: 30,
-    color: "#666",
+    marginTop: 5,
+    marginBottom: 25,
+  },
+
+  label: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#333",
+    marginBottom: 7,
+    marginTop: 5,
+  },
+
+  inputWrapper: {
+    minHeight: 54,
+    borderWidth: 1,
+    borderColor: "#D9DED9",
+    borderRadius: 13,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
   },
 
   input: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 12,
-    paddingHorizontal: 15,
-    paddingVertical: 14,
-    marginBottom: 16,
-    backgroundColor: "#fff",
+    flex: 1,
+    marginLeft: 10,
+    marginRight: 8,
     fontSize: 16,
+    color: "#222",
+    paddingVertical: 13,
   },
 
-  button: {
-    backgroundColor: "#0B6623",
-    paddingVertical: 15,
-    borderRadius: 12,
-    alignItems: "center",
+  forgotButton: {
+    alignSelf: "flex-end",
     marginTop: 10,
+    marginBottom: 5,
   },
 
-  buttonText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 17,
-  },
-
-  link: {
-    marginTop: 18,
-    textAlign: "center",
+  forgotText: {
     color: "#0B6623",
-    fontWeight: "600",
-    fontSize: 15,
+    fontWeight: "700",
+    fontSize: 14,
+  },
+
+  loginButton: {
+    backgroundColor: "#0B6623",
+    minHeight: 54,
+    borderRadius: 13,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 18,
+  },
+
+  loginButtonDisabled: {
+    opacity: 0.75,
+  },
+
+  buttonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  loginText: {
+    color: "#fff",
+    fontSize: 17,
+    fontWeight: "800",
+  },
+
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 20,
+  },
+
+  divider: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "#E5E5E5",
+  },
+
+  dividerText: {
+    marginHorizontal: 12,
+    color: "#999",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
+  registerButton: {
+    minHeight: 52,
+    borderRadius: 13,
+    borderWidth: 1.5,
+    borderColor: "#0B6623",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  registerText: {
+    color: "#0B6623",
+    fontSize: 16,
+    fontWeight: "800",
+  },
+
+  footer: {
+    textAlign: "center",
+    color: "#999",
+    fontSize: 11,
+    lineHeight: 17,
+    marginTop: 18,
+    paddingHorizontal: 10,
   },
 });

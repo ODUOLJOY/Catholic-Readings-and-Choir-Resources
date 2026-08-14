@@ -22,6 +22,12 @@ interface DownloadItem {
   file_type: string;
   file_url: string;
   downloaded_at: string;
+
+  // Optional expanded resource information
+  category?: string;
+  description?: string;
+  language?: string;
+  season?: string;
 }
 
 export default function Downloads() {
@@ -37,18 +43,25 @@ export default function Downloads() {
     try {
       setLoading(true);
 
-      const token = await AsyncStorage.getItem("access_token");
+      const token =
+        await AsyncStorage.getItem("access_token");
 
       const response = await axios.get(
         `${API_URL}/api/downloads`,
         {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: token
+            ? {
+                Authorization: `Bearer ${token}`,
+              }
+            : {},
         }
       );
 
-      setDownloads(response.data);
+      const data = Array.isArray(response.data)
+        ? response.data
+        : response.data?.items || [];
+
+      setDownloads(data);
     } catch (error) {
       Alert.alert(
         "Error",
@@ -66,14 +79,66 @@ export default function Downloads() {
   }
 
   async function openResource(url: string) {
-    const supported = await Linking.canOpenURL(url);
-
-    if (!supported) {
-      Alert.alert("Cannot open file.");
+    if (!url) {
+      Alert.alert(
+        "Unavailable",
+        "This resource has no file URL."
+      );
       return;
     }
 
-    await Linking.openURL(url);
+    try {
+      const supported =
+        await Linking.canOpenURL(url);
+
+      if (!supported) {
+        Alert.alert(
+          "Cannot Open",
+          "This file cannot be opened on this device."
+        );
+        return;
+      }
+
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert(
+        "Error",
+        "Unable to open this resource."
+      );
+    }
+  }
+
+  function getIcon(fileType: string) {
+    const type =
+      fileType?.toLowerCase() || "";
+
+    if (type.includes("audio")) return "🎵";
+    if (type.includes("video")) return "🎬";
+    if (type.includes("pdf")) return "📄";
+    if (type.includes("image")) return "🖼️";
+    if (type.includes("sheet")) return "🎼";
+    if (type.includes("lyrics")) return "📝";
+
+    return "📁";
+  }
+
+  function formatDate(date: string) {
+    if (!date) return "Unknown date";
+
+    const parsed = new Date(date);
+
+    if (Number.isNaN(parsed.getTime())) {
+      return date;
+    }
+
+    return parsed.toLocaleDateString(
+      undefined,
+      {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      }
+    );
   }
 
   function renderItem({
@@ -83,20 +148,55 @@ export default function Downloads() {
   }) {
     return (
       <View style={styles.card}>
-        <Text style={styles.title}>
-          {item.title}
-        </Text>
+        <View style={styles.topRow}>
+          <Text style={styles.icon}>
+            {getIcon(item.file_type)}
+          </Text>
 
-        <Text style={styles.type}>
-          {item.file_type.toUpperCase()}
-        </Text>
+          <View style={styles.titleContainer}>
+            <Text style={styles.title}>
+              {item.title}
+            </Text>
+
+            {item.category ? (
+              <Text style={styles.category}>
+                {item.category}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+
+        {item.description ? (
+          <Text
+            style={styles.description}
+            numberOfLines={3}
+          >
+            {item.description}
+          </Text>
+        ) : null}
+
+        <View style={styles.tags}>
+          <Text style={styles.tag}>
+            {item.file_type?.toUpperCase() ||
+              "FILE"}
+          </Text>
+
+          {item.language ? (
+            <Text style={styles.tag}>
+              {item.language}
+            </Text>
+          ) : null}
+
+          {item.season ? (
+            <Text style={styles.tag}>
+              {item.season}
+            </Text>
+          ) : null}
+        </View>
 
         <Text style={styles.date}>
-          Downloaded:
-          {" "}
-          {new Date(
-            item.downloaded_at
-          ).toLocaleDateString()}
+          Downloaded:{" "}
+          {formatDate(item.downloaded_at)}
         </Text>
 
         <TouchableOpacity
@@ -106,7 +206,7 @@ export default function Downloads() {
           }
         >
           <Text style={styles.buttonText}>
-            Open
+            Open Resource
           </Text>
         </TouchableOpacity>
       </View>
@@ -120,6 +220,10 @@ export default function Downloads() {
           size="large"
           color="#0B6623"
         />
+
+        <Text style={styles.loadingText}>
+          Loading downloads...
+        </Text>
       </View>
     );
   }
@@ -130,22 +234,54 @@ export default function Downloads() {
         Offline Downloads
       </Text>
 
+      <Text style={styles.subtitle}>
+        Your saved Catholic readings and
+        choir resources
+      </Text>
+
+      <View style={styles.countBox}>
+        <Text style={styles.countNumber}>
+          {downloads.length}
+        </Text>
+
+        <Text style={styles.countLabel}>
+          Saved Resources
+        </Text>
+      </View>
+
       <FlatList
         data={downloads}
         keyExtractor={(item) =>
           item.id.toString()
         }
         renderItem={renderItem}
+        contentContainerStyle={
+          downloads.length === 0
+            ? styles.emptyContainer
+            : styles.list
+        }
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={refresh}
+            colors={["#0B6623"]}
           />
         }
         ListEmptyComponent={
-          <Text style={styles.empty}>
-            No downloaded resources found.
-          </Text>
+          <View style={styles.emptyBox}>
+            <Text style={styles.emptyIcon}>
+              📥
+            </Text>
+
+            <Text style={styles.empty}>
+              No downloaded resources
+            </Text>
+
+            <Text style={styles.emptyHint}>
+              Resources that you download will
+              appear here for easy access.
+            </Text>
+          </View>
         }
       />
     </View>
@@ -156,50 +292,129 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff",
-    padding: 15,
+    paddingHorizontal: 15,
+    paddingTop: 18,
   },
 
   loading: {
     flex: 1,
+    backgroundColor: "#fff",
     justifyContent: "center",
     alignItems: "center",
+  },
+
+  loadingText: {
+    marginTop: 10,
+    color: "#666",
   },
 
   header: {
     fontSize: 28,
     fontWeight: "bold",
     color: "#0B6623",
-    marginBottom: 20,
+  },
+
+  subtitle: {
+    color: "#666",
+    marginTop: 5,
+    marginBottom: 18,
+  },
+
+  countBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#eaf4ed",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 18,
+  },
+
+  countNumber: {
+    fontSize: 25,
+    fontWeight: "bold",
+    color: "#0B6623",
+    marginRight: 10,
+  },
+
+  countLabel: {
+    color: "#555",
+    fontWeight: "600",
+  },
+
+  list: {
+    paddingBottom: 30,
   },
 
   card: {
     backgroundColor: "#fafafa",
-    borderRadius: 12,
-    padding: 15,
+    borderRadius: 14,
+    padding: 16,
     marginBottom: 15,
+    borderWidth: 1,
+    borderColor: "#eee",
     elevation: 2,
+  },
+
+  topRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  icon: {
+    fontSize: 30,
+    marginRight: 12,
+  },
+
+  titleContainer: {
+    flex: 1,
   },
 
   title: {
     fontSize: 18,
     fontWeight: "700",
-    marginBottom: 5,
+    color: "#222",
   },
 
-  type: {
+  category: {
     color: "#0B6623",
     fontWeight: "600",
+    marginTop: 4,
+  },
+
+  description: {
+    color: "#666",
+    lineHeight: 20,
+    marginTop: 12,
+  },
+
+  tags: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginTop: 10,
+  },
+
+  tag: {
+    backgroundColor: "#e9f3ec",
+    color: "#0B6623",
+    fontSize: 11,
+    fontWeight: "700",
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 15,
+    marginRight: 6,
     marginBottom: 5,
   },
 
   date: {
-    color: "#666",
-    marginBottom: 15,
+    color: "#777",
+    marginTop: 8,
+    marginBottom: 14,
+    fontSize: 13,
   },
 
   button: {
     backgroundColor: "#0B6623",
-    padding: 12,
+    padding: 13,
     borderRadius: 10,
     alignItems: "center",
   },
@@ -207,13 +422,35 @@ const styles = StyleSheet.create({
   buttonText: {
     color: "#fff",
     fontWeight: "700",
-    fontSize: 16,
+    fontSize: 15,
+  },
+
+  emptyContainer: {
+    flexGrow: 1,
+  },
+
+  emptyBox: {
+    alignItems: "center",
+    paddingHorizontal: 30,
+    marginTop: 70,
+  },
+
+  emptyIcon: {
+    fontSize: 50,
+    marginBottom: 15,
   },
 
   empty: {
     textAlign: "center",
-    marginTop: 60,
-    color: "#888",
-    fontSize: 16,
+    color: "#777",
+    fontSize: 17,
+    fontWeight: "600",
+  },
+
+  emptyHint: {
+    textAlign: "center",
+    color: "#aaa",
+    marginTop: 8,
+    lineHeight: 20,
   },
 });

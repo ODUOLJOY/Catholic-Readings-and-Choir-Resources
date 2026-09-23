@@ -11,14 +11,11 @@ import {
   View,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
 import {
   Ionicons,
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
-
-const API_URL =
-  "https://catholic-readings-and-choir-resource-app.onrender.com";
+import { api } from "@/lib/api";
 
 interface Saint {
   id: number;
@@ -83,8 +80,8 @@ export default function SaintsScreen() {
 
       const token = await getToken();
 
-      const response = await axios.get(
-        `${API_URL}/api/saints`,
+      const response = await api.get(
+        "/api/saints/",
         {
           headers: token
             ? {
@@ -192,8 +189,8 @@ export default function SaintsScreen() {
         return;
       }
 
-      await axios.post(
-        `${API_URL}/api/saints`,
+      await api.post(
+        "/api/saints/",
         {
           name: name.trim(),
           feast_date: feastDate.trim(),
@@ -265,8 +262,8 @@ export default function SaintsScreen() {
                 return;
               }
 
-              await axios.delete(
-                `${API_URL}/api/saints/${id}`,
+              await api.delete(
+                `/api/saints/${id}`,
                 {
                   headers: {
                     Authorization: `Bearer ${token}`,

@@ -67,8 +67,8 @@ def download_resource(
 
     return {
         "message": "Download recorded successfully.",
-        "file_name": resource.original_name,
-        "file_url": resource.file_path,
+        "file_name": resource.file_url.rsplit("/", 1)[-1],
+        "file_url": resource.file_url,
     }
 
 

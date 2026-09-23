@@ -129,11 +129,11 @@ def search_readings(
             Reading.is_published == True,
             or_(
                 Reading.first_reading.ilike(f"%{q}%"),
-                Reading.psalm.ilike(f"%{q}%"),
+                Reading.responsorial_psalm.ilike(f"%{q}%"),
                 Reading.second_reading.ilike(f"%{q}%"),
                 Reading.gospel.ilike(f"%{q}%"),
                 Reading.feast.ilike(f"%{q}%"),
-                Reading.saint.ilike(f"%{q}%"),
+                Reading.saint_of_day.ilike(f"%{q}%"),
                 Reading.reflection.ilike(f"%{q}%"),
             ),
         )
@@ -150,15 +150,15 @@ def search_readings(
 
 @router.post("/")
 def create_reading(
-    reading: Reading,
+    payload: dict,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
     exists = (
         db.query(Reading)
         .filter(
-            Reading.reading_date == reading.reading_date,
-            Reading.language == reading.language,
+            Reading.reading_date == payload.get("reading_date"),
+            Reading.language == payload.get("language", "English"),
         )
         .first()
     )
@@ -169,6 +169,7 @@ def create_reading(
             detail="Reading already exists."
         )
 
+    reading = Reading(**payload)
     db.add(reading)
     db.commit()
     db.refresh(reading)
@@ -179,7 +180,7 @@ def create_reading(
 @router.put("/{reading_id}")
 def update_reading(
     reading_id: int,
-    updated: Reading,
+    payload: dict,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
@@ -195,8 +196,8 @@ def update_reading(
             detail="Reading not found."
         )
 
-    for key, value in updated.__dict__.items():
-        if key != "_sa_instance_state":
+    for key, value in payload.items():
+        if hasattr(Reading, key) and key != "id":
             setattr(reading, key, value)
 
     db.commit()

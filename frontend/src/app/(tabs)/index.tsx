@@ -148,6 +148,36 @@ export default function Home() {
         />
       </Pressable>
 
+      {/* SUBSCRIPTION */}
+      <Pressable
+        style={styles.subscriptionCard}
+        onPress={() => router.push("/(tabs)/payment")}
+      >
+        <View style={styles.subscriptionIcon}>
+          <MaterialCommunityIcons
+            name="cellphone-check"
+            size={28}
+            color="#fff"
+          />
+        </View>
+
+        <View style={styles.cardContent}>
+          <Text style={styles.subscriptionTitle}>
+            Monthly Subscription
+          </Text>
+
+          <Text style={styles.subscriptionText}>
+            Support the app with KES 10 via M-Pesa.
+          </Text>
+        </View>
+
+        <Ionicons
+          name="chevron-forward"
+          size={24}
+          color="#fff"
+        />
+      </Pressable>
+
       {/* CATEGORIES */}
       <Text style={styles.sectionTitle}>
         Choir Categories
@@ -282,6 +312,38 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 1,
     borderColor: "#E6EAE7",
+  },
+
+  subscriptionCard: {
+    backgroundColor: "#0B6623",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 13,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  subscriptionIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "#2C8445",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 13,
+  },
+
+  subscriptionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#fff",
+    marginBottom: 4,
+  },
+
+  subscriptionText: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: "#E8F4EB",
   },
 
   iconCircle: {

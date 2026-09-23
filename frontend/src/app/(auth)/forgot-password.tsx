@@ -10,12 +10,9 @@ import {
   TextInput,
   View,
 } from "react-native";
-import axios from "axios";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-
-const API_URL =
-  "https://catholic-readings-and-choir-resource-app.onrender.com";
+import { api } from "@/lib/api";
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState("");
@@ -31,11 +28,9 @@ export default function ForgotPasswordScreen() {
     setLoading(true);
 
     try {
-      await axios.post(
-        `${API_URL}/api/auth/forgot-password`,
-        { email },
-        { timeout: 15000 }
-      );
+      await api.post("/api/auth/forgot-password", null, {
+        params: { email: email.trim().toLowerCase() },
+      });
 
       setSent(true);
       Alert.alert(

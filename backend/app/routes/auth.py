@@ -12,6 +12,7 @@ from app.schemas.auth import (
 )
 from app.schemas.user import UserResponse
 from app.services.auth_service import AuthService
+from app.routes.auth_dependency import get_current_user
 from app.auth.security import (
     create_access_token,
     create_refresh_token,
@@ -110,7 +111,7 @@ def login(
     response_model=UserResponse,
 )
 def current_user(
-    user: User = Depends(AuthService.get_current_user),
+    user: User = Depends(get_current_user),
 ):
     return user
 

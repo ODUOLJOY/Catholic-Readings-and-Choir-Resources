@@ -10,15 +10,12 @@ import {
   View,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
 import { router } from "expo-router";
 import {
   Ionicons,
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
-
-const API_URL =
-  "https://catholic-readings-and-choir-resource-app.onrender.com";
+import { api } from "@/lib/api";
 
 interface DashboardStats {
   users: number;
@@ -64,8 +61,8 @@ export default function AdminDashboard() {
         return;
       }
 
-      const response = await axios.get(
-        `${API_URL}/api/admin/dashboard`,
+      const response = await api.get(
+        "/api/admin/dashboard",
         {
           headers: {
             Authorization: `Bearer ${token}`,

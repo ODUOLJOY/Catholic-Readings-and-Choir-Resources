@@ -13,12 +13,9 @@ import {
 } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { getList, saveList, StorageKeys } from "@/lib/storage";
-
-const API_URL =
-  "https://catholic-readings-and-choir-resource-app.onrender.com";
+import { api } from "@/lib/api";
 
 const categories = [
   "Entrance",
@@ -161,8 +158,7 @@ export default function UploadScreen() {
       /*
        * Send to backend when authenticated.
        */
-      if (token) {
-        if (file) {
+      if (token && file) {
           const formData = new FormData();
 
           formData.append(
@@ -170,20 +166,12 @@ export default function UploadScreen() {
             payload.title
           );
           formData.append(
-            "content",
+            "description",
             payload.content
-          );
-          formData.append(
-            "reference",
-            payload.reference
           );
           formData.append(
             "category",
             payload.category
-          );
-          formData.append(
-            "season",
-            payload.season
           );
           formData.append(
             "language",
@@ -201,44 +189,18 @@ export default function UploadScreen() {
             } as any
           );
 
-          await axios.post(
-            `${API_URL}/api/uploads`,
+          await api.post(
+            "/api/uploads/",
             formData,
             {
-              headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type":
-                  "multipart/form-data",
-              },
+              headers: { "Content-Type": "multipart/form-data" },
               timeout: 30000,
             }
           );
-        } else {
-          await axios.post(
-            `${API_URL}/api/readings`,
-            {
-              title: payload.title,
-              content: payload.content,
-              reference: payload.reference,
-              category: payload.category,
-              season: payload.season,
-              language: payload.language,
-            },
-            {
-              headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type":
-                  "application/json",
-              },
-              timeout: 20000,
-            }
+          Alert.alert(
+            "Submitted for approval",
+            "Your resource was uploaded and is waiting for administrator approval."
           );
-        }
-
-        Alert.alert(
-          "Submitted",
-          "Your resource has been submitted for administrator approval."
-        );
       } else {
         Alert.alert(
           "Saved Locally",

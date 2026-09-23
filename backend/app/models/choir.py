@@ -47,7 +47,7 @@ class ChoirResource(Base):
         nullable=True,
     )
 
-    uploader = relationship("User")
+    uploader = relationship("User", back_populates="choir_resources")
 
     # Ratings and Comments
     rating = Column(Integer, nullable=True)  # 1-5 stars

@@ -14,12 +14,9 @@ import {
   Ionicons,
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
-import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
-
-const API_URL =
-  "https://catholic-readings-and-choir-resource-app.onrender.com";
+import { api } from "@/lib/api";
 
 interface SearchResult {
   id?: number | string;
@@ -86,29 +83,19 @@ export default function ExploreScreen() {
       setLoading(true);
       setSearched(true);
 
-      const token =
-        await AsyncStorage.getItem("access_token");
+      const response = await api.get("/api/readings/search/", {
+        params: { q: query.trim() },
+      });
 
-      const response = await axios.get(
-        `${API_URL}/api/search`,
-        {
-          params: {
-            q: query.trim(),
-          },
-          headers: token
-            ? {
-                Authorization: `Bearer ${token}`,
-              }
-            : {},
-          timeout: 15000,
-        }
+      const data = (Array.isArray(response.data) ? response.data : []).map(
+        (reading: any) => ({
+          id: reading.id,
+          title: reading.feast || reading.saint_of_day || "Daily Reading",
+          type: "Reading",
+          description: reading.reflection || reading.gospel,
+          reference: reading.first_reading_reference,
+        })
       );
-
-      const data = Array.isArray(response.data)
-        ? response.data
-        : response.data?.results ||
-          response.data?.items ||
-          [];
 
       setResults(data);
     } catch (error: any) {

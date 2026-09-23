@@ -41,3 +41,36 @@ services:
 
       - key: FRONTEND_URL
         value: https://catholic-readings-and-choir-resource-app.vercel.app
+
+      - key: MPESA_ENVIRONMENT
+        value: production
+
+      - key: MPESA_CONSUMER_KEY
+        sync: false
+
+      - key: MPESA_CONSUMER_SECRET
+        sync: false
+
+      - key: MPESA_PASSKEY
+        sync: false
+
+      - key: MPESA_SHORTCODE
+        sync: false
+
+      - key: MPESA_CALLBACK_URL
+        value: https://catholic-readings-and-choir-resource-app.onrender.com/api/payments/mpesa/callback
+
+      - key: MPESA_ACCOUNT_REFERENCE
+        value: CatholicReadings
+
+      - key: MPESA_TRANSACTION_DESCRIPTION
+        value: Catholic Readings Subscription
+
+      - key: MPESA_TRANSACTION_TYPE
+        value: CustomerPayBillOnline
+
+      - key: MPESA_MONTHLY_AMOUNT
+        value: "10"
+
+      - key: MPESA_RECIPIENT_NUMBER
+        value: "0748153302"

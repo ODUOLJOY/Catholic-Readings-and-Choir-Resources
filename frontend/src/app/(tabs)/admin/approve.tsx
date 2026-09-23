@@ -9,14 +9,12 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-
-const API_URL =
-  "https://catholic-readings-and-choir-resource-app.onrender.com";
+import { api } from "@/lib/api";
 
 interface PendingReading {
+  kind: "reading";
   id: number;
   reading_date?: string;
   feast?: string;
@@ -29,8 +27,19 @@ interface PendingReading {
   published?: boolean;
 }
 
+interface PendingResource {
+  kind: "resource";
+  id: number;
+  title: string;
+  category?: string;
+  description?: string;
+  file_type?: string;
+}
+
+type PendingItem = PendingReading | PendingResource;
+
 export default function ApproveScreen() {
-  const [pending, setPending] = useState<PendingReading[]>([]);
+  const [pending, setPending] = useState<PendingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [processingId, setProcessingId] = useState<number | null>(null);
@@ -55,21 +64,17 @@ export default function ApproveScreen() {
         throw new Error("Not authenticated");
       }
 
-      const response = await axios.get(
-        `${API_URL}/api/admin/pending`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          timeout: 15000,
-        }
-      );
+      const [readingResponse, resourceResponse] = await Promise.all([
+        api.get("/api/admin/pending"),
+        api.get("/api/admin/pending-resources"),
+      ]);
 
-      const data = Array.isArray(response.data)
-        ? response.data
-        : response.data?.items || [];
+      const readings = (Array.isArray(readingResponse.data) ? readingResponse.data : [])
+        .map((item: Omit<PendingReading, "kind">) => ({ ...item, kind: "reading" as const }));
+      const resources = (Array.isArray(resourceResponse.data) ? resourceResponse.data : [])
+        .map((item: Omit<PendingResource, "kind">) => ({ ...item, kind: "resource" as const }));
 
-      setPending(data);
+      setPending([...readings, ...resources]);
     } catch (error: any) {
       console.log(
         "Pending readings error:",
@@ -100,9 +105,9 @@ export default function ApproveScreen() {
     }
   }
 
-  async function approve(id: number) {
+  async function approve(item: PendingItem) {
     try {
-      setProcessingId(id);
+      setProcessingId(item.id);
 
       const token = await getToken();
 
@@ -114,8 +119,10 @@ export default function ApproveScreen() {
         return;
       }
 
-      await axios.put(
-        `${API_URL}/api/admin/approve/${id}`,
+      await api.put(
+        item.kind === "reading"
+          ? `/api/admin/approve/${item.id}`
+          : `/api/admin/approve-resource/${item.id}`,
         {},
         {
           headers: {
@@ -126,7 +133,7 @@ export default function ApproveScreen() {
       );
 
       setPending((current) =>
-        current.filter((item) => item.id !== id)
+        current.filter((currentItem) => currentItem !== item)
       );
 
       Alert.alert(
@@ -149,7 +156,7 @@ export default function ApproveScreen() {
     }
   }
 
-  async function reject(id: number) {
+  async function reject(item: PendingItem) {
     Alert.alert(
       "Reject Reading",
       "Are you sure you want to delete this pending reading?",
@@ -163,7 +170,7 @@ export default function ApproveScreen() {
           style: "destructive",
           onPress: async () => {
             try {
-              setProcessingId(id);
+              setProcessingId(item.id);
 
               const token = await getToken();
 
@@ -175,8 +182,10 @@ export default function ApproveScreen() {
                 return;
               }
 
-              await axios.delete(
-                `${API_URL}/api/admin/readings/${id}`,
+              await api.delete(
+                item.kind === "reading"
+                  ? `/api/admin/readings/${item.id}`
+                  : `/api/admin/resources/${item.id}`,
                 {
                   headers: {
                     Authorization: `Bearer ${token}`,
@@ -186,9 +195,7 @@ export default function ApproveScreen() {
               );
 
               setPending((current) =>
-                current.filter(
-                  (item) => item.id !== id
-                )
+                  current.filter((currentItem) => currentItem !== item)
               );
 
               Alert.alert(
@@ -213,7 +220,7 @@ export default function ApproveScreen() {
   function renderItem({
     item,
   }: {
-    item: PendingReading;
+    item: PendingItem;
   }) {
     const processing =
       processingId === item.id;
@@ -231,12 +238,12 @@ export default function ApproveScreen() {
 
           <View style={styles.heading}>
             <Text style={styles.feast}>
-              {item.feast ||
-                item.saint_of_day ||
-                "Pending Reading"}
+              {item.kind === "resource"
+                ? item.title
+                : item.feast || item.saint_of_day || "Pending Reading"}
             </Text>
 
-            {item.reading_date ? (
+            {item.kind === "reading" && item.reading_date ? (
               <Text style={styles.date}>
                 {item.reading_date}
               </Text>
@@ -245,27 +252,31 @@ export default function ApproveScreen() {
         </View>
 
         <View style={styles.metaRow}>
-          {item.liturgical_year ? (
+          {item.kind === "resource" && item.category ? (
+            <Text style={styles.tag}>{item.category}</Text>
+          ) : null}
+
+          {item.kind === "reading" && item.liturgical_year ? (
             <Text style={styles.tag}>
               Year {item.liturgical_year}
             </Text>
           ) : null}
 
-          {item.liturgical_season ? (
+          {item.kind === "reading" && item.liturgical_season ? (
             <Text style={styles.tag}>
               {item.liturgical_season}
             </Text>
           ) : null}
         </View>
 
-        {item.first_reading_reference ? (
+        {item.kind === "reading" && item.first_reading_reference ? (
           <Text style={styles.reference}>
             First Reading:{" "}
             {item.first_reading_reference}
           </Text>
         ) : null}
 
-        {item.gospel_reference ? (
+        {item.kind === "reading" && item.gospel_reference ? (
           <Text style={styles.reference}>
             Gospel: {item.gospel_reference}
           </Text>
@@ -279,7 +290,7 @@ export default function ApproveScreen() {
                 styles.disabledButton,
             ]}
             disabled={processing}
-            onPress={() => approve(item.id)}
+            onPress={() => approve(item)}
           >
             {processing ? (
               <ActivityIndicator color="#fff" />
@@ -305,7 +316,7 @@ export default function ApproveScreen() {
                 styles.disabledButton,
             ]}
             disabled={processing}
-            onPress={() => reject(item.id)}
+            onPress={() => reject(item)}
           >
             <Ionicons
               name="close-circle-outline"

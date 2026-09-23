@@ -5,10 +5,17 @@ from sqlalchemy import (
     Integer,
     String,
 )
+from enum import Enum
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.database import Base
+
+
+class UserRole(str, Enum):
+    USER = "user"
+    ADMIN = "admin"
+    SUPER_ADMIN = "super_admin"
 
 
 class User(Base):
@@ -128,4 +135,10 @@ class User(Base):
         "Notification",
         back_populates="user",
         cascade="all, delete",
+    )
+
+    bookmarked_readings = relationship(
+        "Reading",
+        secondary="favorites",
+        viewonly=True,
     )

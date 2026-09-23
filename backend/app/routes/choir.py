@@ -38,7 +38,8 @@ def get_resources(
     db: Session = Depends(get_db),
 ):
     query = db.query(ChoirResource).filter(
-        ChoirResource.is_approved == True
+        ChoirResource.is_approved == True,
+        ChoirResource.is_published == True,
     )
 
     if category:
@@ -119,12 +120,11 @@ async def upload_resource(
         description=description,
         category=category,
         language=language,
-        file_name=filename,
-        original_name=file.filename,
-        file_path=filepath,
+        file_url=f"/uploads/choir/{filename}",
         file_type=extension,
         uploaded_by=current_user.id,
-        is_approved=True,
+        is_approved=False,
+        is_published=False,
     )
 
     db.add(resource)
@@ -188,8 +188,10 @@ def delete_resource(
             detail="Resource not found."
         )
 
-    if os.path.exists(resource.file_path):
-        os.remove(resource.file_path)
+    file_path = resource.file_url.split("/media/", 1)[-1]
+    file_path = os.path.join("media", file_path)
+    if os.path.exists(file_path):
+        os.remove(file_path)
 
     db.delete(resource)
     db.commit()
@@ -218,6 +220,7 @@ def approve_resource(
         )
 
     resource.is_approved = True
+    resource.is_published = True
 
     db.commit()
 

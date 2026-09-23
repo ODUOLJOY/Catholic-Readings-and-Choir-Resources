@@ -9,15 +9,13 @@ import {
   View,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { api } from "@/lib/api";
 import { router } from "expo-router";
 import {
   Ionicons,
   MaterialCommunityIcons,
   FontAwesome5,
 } from "@expo/vector-icons";
-
-const API_URL =
-  "https://catholic-readings-and-choir-resource-app.onrender.com";
 
 interface User {
   id?: number;
@@ -54,25 +52,15 @@ export default function Profile() {
       }
 
       try {
-        const response = await fetch(
-          `${API_URL}/api/auth/me`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
+        const response = await api.get("/api/auth/me");
+        const data = response.data;
+
+        setUser(data);
+
+        await AsyncStorage.setItem(
+          "user",
+          JSON.stringify(data)
         );
-
-        if (response.ok) {
-          const data = await response.json();
-
-          setUser(data);
-
-          await AsyncStorage.setItem(
-            "user",
-            JSON.stringify(data)
-          );
-        }
       } catch {
         // Keep locally saved user if API is unavailable.
       }
@@ -277,6 +265,19 @@ export default function Profile() {
               "Parish management will be available here."
             )
           }
+        />
+
+        <ProfileRow
+          icon={
+            <MaterialCommunityIcons
+              name="credit-card-outline"
+              size={23}
+              color="#0B6623"
+            />
+          }
+          title="Subscription"
+          subtitle="Pay KES 10 monthly via M-Pesa"
+          onPress={() => router.push("/(tabs)/payment")}
         />
       </View>
 

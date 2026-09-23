@@ -7,6 +7,7 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Request,
     UploadFile,
 )
 from sqlalchemy.orm import Session
@@ -14,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.choir import ChoirResource
 from app.models.user import User
-from app.routes.auth_dependency import require_admin
+from app.routes.auth_dependency import get_current_user, require_admin
 
 router = APIRouter(
     prefix="/api/uploads",
@@ -70,13 +71,14 @@ def get_destination(filename: str):
 
 @router.post("/")
 async def upload_resource(
+    request: Request,
     title: str = Form(...),
     category: str = Form(...),
     description: str = Form(None),
     language: str = Form("English"),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_user),
 ):
     folder, max_size = get_destination(file.filename)
 
@@ -102,12 +104,12 @@ async def upload_resource(
         description=description,
         category=category,
         language=language,
-        filename=filename,
-        file_path=str(filepath),
+        file_url=f"{str(request.base_url).rstrip('/')}/media/{folder.name}/{filename}",
         file_type=extension,
         file_size=len(contents),
         uploaded_by=current_user.id,
-        approved=True,
+        is_approved=False,
+        is_published=False,
     )
 
     db.add(resource)
@@ -130,6 +132,10 @@ def list_uploads(
 ):
     return (
         db.query(ChoirResource)
+        .filter(
+            ChoirResource.is_approved == True,
+            ChoirResource.is_published == True,
+        )
         .order_by(ChoirResource.created_at.desc())
         .all()
     )
@@ -157,7 +163,8 @@ def delete_upload(
             detail="Resource not found.",
         )
 
-    file = Path(resource.file_path)
+    file_name = resource.file_url.rsplit("/", 1)[-1]
+    file = Path("media") / resource.file_url.split("/media/", 1)[-1].rsplit("/", 1)[0] / file_name
 
     if file.exists():
         file.unlink()

@@ -13,11 +13,8 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-
-const API_URL =
-  "https://catholic-readings-and-choir-resource-app.onrender.com";
+import { api } from "@/lib/api";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
@@ -39,8 +36,8 @@ export default function LoginScreen() {
     try {
       setLoading(true);
 
-      const response = await axios.post(
-        `${API_URL}/api/auth/login`,
+      const response = await api.post(
+        "/api/auth/login",
         {
           email: normalizedEmail,
           password,
@@ -53,11 +50,7 @@ export default function LoginScreen() {
         }
       );
 
-      const {
-        access_token,
-        refresh_token,
-        user,
-      } = response.data ?? {};
+      const { access_token, refresh_token } = response.data ?? {};
 
       if (!access_token) {
         throw new Error(
@@ -69,6 +62,9 @@ export default function LoginScreen() {
         "access_token",
         access_token
       );
+
+      const userResponse = await api.get("/api/auth/me");
+      const user = userResponse.data;
 
       if (refresh_token) {
         await AsyncStorage.setItem(
@@ -94,10 +90,6 @@ export default function LoginScreen() {
           );
         }
       }
-
-      axios.defaults.headers.common[
-        "Authorization"
-      ] = `Bearer ${access_token}`;
 
       router.replace("/(tabs)");
     } catch (error: any) {

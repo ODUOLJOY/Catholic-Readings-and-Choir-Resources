@@ -13,10 +13,7 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
-
-const API_URL =
-  "https://catholic-readings-and-choir-resource-app.onrender.com";
+import { api } from "@/lib/api";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
@@ -32,8 +29,8 @@ export default function LoginScreen() {
     try {
       setLoading(true);
 
-      const response = await axios.post(
-        `${API_URL}/api/auth/login`,
+      const response = await api.post(
+        "/api/auth/login",
         {
           email: email.trim().toLowerCase(),
           password,
@@ -51,10 +48,6 @@ export default function LoginScreen() {
         ["access_token", access_token],
         ["refresh_token", refresh_token],
       ]);
-
-      axios.defaults.headers.common[
-        "Authorization"
-      ] = `Bearer ${access_token}`;
 
       Alert.alert("Success", "Login successful.");
 

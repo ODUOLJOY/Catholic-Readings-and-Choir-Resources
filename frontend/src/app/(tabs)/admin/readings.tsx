@@ -12,14 +12,11 @@ import {
   View,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
 import {
   Ionicons,
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
-
-const API_URL =
-  "https://catholic-readings-and-choir-resource-app.onrender.com";
+import { api } from "@/lib/api";
 
 const seasons = [
   "Advent",
@@ -95,8 +92,8 @@ export default function AdminReadings() {
         return;
       }
 
-      const response = await axios.post(
-        `${API_URL}/api/readings`,
+      const response = await api.post(
+        "/api/readings/",
         {
           reading_date: readingDate,
           language,

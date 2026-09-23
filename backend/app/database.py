@@ -38,6 +38,7 @@ def init_db():
     import app.models.user
     import app.models.parish
     import app.models.readings
+    import app.models.payment
     import app.models.saint
     import app.models.choir
     import app.models.download

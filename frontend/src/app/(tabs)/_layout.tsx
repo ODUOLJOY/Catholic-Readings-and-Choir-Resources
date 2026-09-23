@@ -1,17 +1,18 @@
 import { Tabs } from "expo-router";
-import {
-  Ionicons,
-  MaterialCommunityIcons,
-  FontAwesome5,
-} from "@expo/vector-icons";
+import { Ionicons, FontAwesome5 } from "@expo/vector-icons";
 
 export default function TabsLayout() {
+  const visibleTabs = new Set(["index", "profile", "admin"]);
+
   return (
     <Tabs
-      screenOptions={{
+      screenOptions={({ route }) => ({
         headerShown: false,
+        href: visibleTabs.has(route.name) ? undefined : null,
+
         tabBarActiveTintColor: "#0B6623",
         tabBarInactiveTintColor: "#777",
+
         tabBarStyle: {
           height: 68,
           paddingBottom: 8,
@@ -20,11 +21,12 @@ export default function TabsLayout() {
           borderTopWidth: 1,
           borderTopColor: "#e5e5e5",
         },
+
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: "600",
         },
-      }}
+      })}
     >
       {/* HOME */}
       <Tabs.Screen
@@ -34,51 +36,6 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons
               name="home-outline"
-              color={color}
-              size={size}
-            />
-          ),
-        }}
-      />
-
-      {/* DAILY READINGS */}
-      <Tabs.Screen
-        name="readings"
-        options={{
-          title: "Readings",
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons
-              name="book-open-page-variant-outline"
-              color={color}
-              size={size}
-            />
-          ),
-        }}
-      />
-
-      {/* CHOIR RESOURCES */}
-      <Tabs.Screen
-        name="choir"
-        options={{
-          title: "Choir",
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons
-              name="music-box-multiple"
-              color={color}
-              size={size}
-            />
-          ),
-        }}
-      />
-
-      {/* DOWNLOADS */}
-      <Tabs.Screen
-        name="downloads"
-        options={{
-          title: "Downloads",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons
-              name="download-outline"
               color={color}
               size={size}
             />
@@ -101,15 +58,21 @@ export default function TabsLayout() {
         }}
       />
 
-      {/* ADMIN SCREENS
-          These are registered with the router but hidden
-          from the normal bottom navigation. */}
+      {/* ADMIN */}
       <Tabs.Screen
         name="admin"
         options={{
-          href: null,
+          title: "Admin",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons
+              name="shield-checkmark-outline"
+              color={color}
+              size={size}
+            />
+          ),
         }}
       />
+
     </Tabs>
   );
 }

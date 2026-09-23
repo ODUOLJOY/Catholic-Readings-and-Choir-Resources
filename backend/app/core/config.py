@@ -27,6 +27,19 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
 
+    # M-Pesa payments
+    MPESA_ENVIRONMENT: str = "sandbox"
+    MPESA_CONSUMER_KEY: str = ""
+    MPESA_CONSUMER_SECRET: str = ""
+    MPESA_PASSKEY: str = ""
+    MPESA_SHORTCODE: str = ""
+    MPESA_CALLBACK_URL: str = ""
+    MPESA_ACCOUNT_REFERENCE: str = "CatholicReadings"
+    MPESA_TRANSACTION_DESCRIPTION: str = "Catholic Readings Subscription"
+    MPESA_TRANSACTION_TYPE: str = "CustomerPayBillOnline"
+    MPESA_MONTHLY_AMOUNT: int = 10
+    MPESA_RECIPIENT_NUMBER: str = "0748153302"
+
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 

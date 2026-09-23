@@ -12,11 +12,7 @@ import {
   View,
   Linking,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
-
-const API_URL =
-  "https://catholic-readings-and-choir-resource-app.onrender.com";
+import { api } from "@/lib/api";
 
 interface ChoirResource {
   id: number;
@@ -181,19 +177,7 @@ export default function Choir() {
     try {
       setLoading(true);
 
-      const token =
-        await AsyncStorage.getItem("access_token");
-
-      const response = await axios.get(
-        `${API_URL}/api/choir`,
-        {
-          headers: token
-            ? {
-                Authorization: `Bearer ${token}`,
-              }
-            : {},
-        }
-      );
+      const response = await api.get("/api/choir/");
 
       setResources(
         Array.isArray(response.data)

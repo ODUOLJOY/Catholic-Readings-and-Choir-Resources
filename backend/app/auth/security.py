@@ -88,3 +88,6 @@ def decode_token(
 
     except JWTError:
         return None
+
+
+decode_access_token = decode_token

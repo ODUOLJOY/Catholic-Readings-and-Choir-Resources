@@ -6,6 +6,7 @@ import shutil
 
 from app.db.database import get_db
 from app.models.readings import Reading
+from app.models.choir import ChoirResource
 from app.models.user import User
 from app.auth.security import decode_token
 from app.core.dependencies import get_current_user
@@ -46,7 +47,10 @@ def dashboard(
         "readings": db.query(Reading).filter(
             Reading.published == True
         ).count(),
-        "choir_resources": 0,  # TODO: implement when ChoirResource model is created
+        "choir_resources": db.query(ChoirResource).filter(
+            ChoirResource.is_approved == True,
+            ChoirResource.is_published == True,
+        ).count(),
         "pending_uploads": db.query(Reading).filter(
             Reading.approved == False
         ).count(),
@@ -172,6 +176,51 @@ def pending_readings(
     )
 
 
+@router.get("/pending-resources")
+def pending_resources(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_admin(current_user)
+    return (
+        db.query(ChoirResource)
+        .filter(ChoirResource.is_approved == False)
+        .order_by(ChoirResource.created_at.desc())
+        .all()
+    )
+
+
+@router.put("/approve-resource/{resource_id}")
+def approve_resource(
+    resource_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_admin(current_user)
+    resource = db.query(ChoirResource).filter(ChoirResource.id == resource_id).first()
+    if not resource:
+        raise HTTPException(404, "Resource not found.")
+    resource.is_approved = True
+    resource.is_published = True
+    db.commit()
+    return {"message": "Resource approved successfully."}
+
+
+@router.delete("/resources/{resource_id}")
+def reject_resource(
+    resource_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_admin(current_user)
+    resource = db.query(ChoirResource).filter(ChoirResource.id == resource_id).first()
+    if not resource:
+        raise HTTPException(404, "Resource not found.")
+    db.delete(resource)
+    db.commit()
+    return {"message": "Resource rejected successfully."}
+
+
 @router.put("/approve/{reading_id}")
 def approve_reading(
     reading_id: int,
@@ -261,4 +310,3 @@ async def upload_file(
         "filename": filename,
         "url": f"/uploads/{filename}",
     }
-}

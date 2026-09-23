@@ -10,18 +10,20 @@ import {
   View,
 } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-
-const API_URL =
-  "https://catholic-readings-and-choir-resource-app.onrender.com";
+import { api } from "@/lib/api";
 
 interface Reading {
   id: number;
-  title?: string;
-  content?: string;
-  reference?: string;
-  reading_type?: string;
-  date?: string;
+  feast?: string;
+  saint_of_day?: string;
+  first_reading_reference: string;
+  first_reading: string;
+  responsorial_psalm_reference?: string;
+  responsorial_psalm?: string;
+  second_reading_reference?: string;
+  second_reading?: string;
+  gospel_reference: string;
+  gospel: string;
 }
 
 const categories = [
@@ -50,12 +52,18 @@ export default function Readings() {
     } else {
       setFiltered(
         readings.filter(
-          (reading) =>
-            reading.reading_type
-              ?.toLowerCase()
-              .includes(
-                selectedCategory.toLowerCase()
-              )
+          (reading) => {
+            const category = selectedCategory.toLowerCase();
+            return category === "first reading"
+              ? Boolean(reading.first_reading)
+              : category === "psalm"
+              ? Boolean(reading.responsorial_psalm)
+              : category === "second reading"
+              ? Boolean(reading.second_reading)
+              : category === "gospel"
+              ? Boolean(reading.gospel)
+              : false;
+          }
         )
       );
     }
@@ -65,35 +73,8 @@ export default function Readings() {
     try {
       setLoading(true);
 
-      const token =
-        await AsyncStorage.getItem("access_token");
-
-      const response = await fetch(
-        `${API_URL}/readings`,
-        {
-          headers: token
-            ? {
-                Authorization: `Bearer ${token}`,
-              }
-            : {},
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(
-          `HTTP ${response.status}`
-        );
-      }
-
-      const data = await response.json();
-
-      const result = Array.isArray(data)
-        ? data
-        : data?.readings ||
-          data?.items ||
-          [];
-
-      setReadings(result);
+      const response = await api.get("/api/readings/today");
+      setReadings([response.data]);
     } catch (error) {
       console.log(
         "Readings error:",
@@ -117,9 +98,8 @@ export default function Readings() {
     await loadReadings();
   }
 
-  function getIcon(type?: string) {
-    const value =
-      type?.toLowerCase() || "";
+  function getIcon(type: string) {
+    const value = type.toLowerCase();
 
     if (value.includes("gospel")) {
       return "book-open-page-variant";
@@ -137,43 +117,33 @@ export default function Readings() {
   }: {
     item: Reading;
   }) {
+    const entries = [
+      ["First Reading", item.first_reading_reference, item.first_reading],
+      ["Psalm", item.responsorial_psalm_reference, item.responsorial_psalm],
+      ["Second Reading", item.second_reading_reference, item.second_reading],
+      ["Gospel", item.gospel_reference, item.gospel],
+    ].filter((entry): entry is [string, string, string] => Boolean(entry[2]));
+
     return (
       <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <View style={styles.iconContainer}>
-            <MaterialCommunityIcons
-              name={getIcon(
-                item.reading_type
-              )}
-              size={25}
-              color="#0B6623"
-            />
+        {entries.map(([type, reference, content]) => (
+          <View key={type} style={styles.readingSection}>
+            <View style={styles.cardHeader}>
+              <View style={styles.iconContainer}>
+                <MaterialCommunityIcons
+                  name={getIcon(type)}
+                  size={25}
+                  color="#0B6623"
+                />
+              </View>
+              <View style={styles.headerText}>
+                <Text style={styles.type}>{type}</Text>
+                <Text style={styles.reference}>{reference}</Text>
+              </View>
+            </View>
+            <Text style={styles.content}>{content}</Text>
           </View>
-
-          <View style={styles.headerText}>
-            <Text style={styles.type}>
-              {item.reading_type ||
-                "Reading"}
-            </Text>
-
-            {item.reference ? (
-              <Text style={styles.reference}>
-                {item.reference}
-              </Text>
-            ) : null}
-          </View>
-        </View>
-
-        {item.title ? (
-          <Text style={styles.title}>
-            {item.title}
-          </Text>
-        ) : null}
-
-        <Text style={styles.content}>
-          {item.content ||
-            "No reading content available."}
-        </Text>
+        ))}
       </View>
     );
   }
@@ -503,4 +473,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 7,
   },
+    readingSection: {
+      marginBottom: 14,
+    },
 });

@@ -110,15 +110,15 @@ def search_saints(
 
 @router.post("/")
 def create_saint(
-    saint: Saint,
+    payload: dict,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
     exists = (
         db.query(Saint)
         .filter(
-            Saint.name == saint.name,
-            Saint.feast_date == saint.feast_date,
+            Saint.name == payload.get("name"),
+            Saint.feast_date == payload.get("feast_date"),
         )
         .first()
     )
@@ -129,6 +129,11 @@ def create_saint(
             detail="Saint already exists."
         )
 
+    saint = Saint(**payload)
+    if saint.month is None:
+        saint.month = saint.feast_date.month
+    if saint.day is None:
+        saint.day = saint.feast_date.day
     db.add(saint)
     db.commit()
     db.refresh(saint)
@@ -139,7 +144,7 @@ def create_saint(
 @router.put("/{saint_id}")
 def update_saint(
     saint_id: int,
-    updated: Saint,
+    payload: dict,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
@@ -155,8 +160,8 @@ def update_saint(
             detail="Saint not found."
         )
 
-    for key, value in updated.__dict__.items():
-        if key != "_sa_instance_state":
+    for key, value in payload.items():
+        if hasattr(Saint, key) and key != "id":
             setattr(saint, key, value)
 
     db.commit()

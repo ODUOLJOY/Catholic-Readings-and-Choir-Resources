@@ -11,12 +11,9 @@ import {
   View,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-
-const API_URL =
-  "https://catholic-readings-and-choir-resource-app.onrender.com";
+import { api } from "@/lib/api";
 
 export default function RegisterScreen() {
   const [email, setEmail] = useState("");
@@ -47,8 +44,8 @@ export default function RegisterScreen() {
     setLoading(true);
 
     try {
-      const response = await axios.post(
-        `${API_URL}/api/auth/register`,
+      const response = await api.post(
+        "/api/auth/register",
         {
           email,
           password,
@@ -58,19 +55,11 @@ export default function RegisterScreen() {
       );
 
       await AsyncStorage.setItem(
-        "access_token",
-        response.data.access_token
-      );
-      await AsyncStorage.setItem(
-        "refresh_token",
-        response.data.refresh_token || ""
-      );
-      await AsyncStorage.setItem(
         "user",
-        JSON.stringify(response.data.user)
+        JSON.stringify(response.data)
       );
 
-      router.replace("/(tabs)");
+      router.replace("/(auth)/login");
     } catch (error: any) {
       let message =
         error?.response?.data?.detail ||

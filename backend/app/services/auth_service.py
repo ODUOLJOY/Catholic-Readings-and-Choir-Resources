@@ -112,7 +112,7 @@ def authenticate_user(
 
     if not verify_password(
         password,
-        user.password_hash,
+        user.hashed_password,
     ):
         return None
 
@@ -152,9 +152,9 @@ def create_user(
     user = User(
         full_name=full_name,
         email=email.lower(),
-        password_hash=hash_password(password),
+        hashed_password=hash_password(password),
         parish_id=parish_id,
-        role="USER",
+        role="user",
         is_active=True,
         is_verified=False,
     )
@@ -164,6 +164,41 @@ def create_user(
     db.refresh(user)
 
     return user
+
+
+class AuthService:
+    """Compatibility facade for legacy route imports."""
+
+    @staticmethod
+    def create_user(*args, **kwargs):
+        return create_user(*args, **kwargs)
+
+    @staticmethod
+    def authenticate_user(*args, **kwargs):
+        return authenticate_user(*args, **kwargs)
+
+    @staticmethod
+    def reset_password(*args, **kwargs):
+        return reset_password(*args, **kwargs)
+
+    @staticmethod
+    def verify_email(*args, **kwargs):
+        return verify_email(*args, **kwargs)
+
+    @staticmethod
+    def now() -> datetime:
+        return datetime.utcnow()
+
+    @staticmethod
+    def create_password_reset_token(user: User) -> str:
+        return generate_reset_token(user)
+
+    @staticmethod
+    def verify_refresh_token(token: str) -> dict:
+        payload = verify_token(token)
+        if payload.get("type") != "refresh":
+            raise HTTPException(status_code=401, detail="Invalid refresh token.")
+        return payload
 
 
 def get_current_user(

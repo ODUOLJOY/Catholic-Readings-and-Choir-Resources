@@ -75,7 +75,7 @@ class Reading(Base):
         nullable=True,
     )
 
-    uploader = relationship("User")
+    uploader = relationship("User", back_populates="readings")
 
     # Dates
     created_at = Column(

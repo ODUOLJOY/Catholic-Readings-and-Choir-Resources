@@ -10,11 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
-
-const API_URL =
-  "https://catholic-readings-and-choir-resource-app.onrender.com";
+import { api } from "@/lib/api";
 
 interface DownloadItem {
   id: number;
@@ -43,19 +39,7 @@ export default function Downloads() {
     try {
       setLoading(true);
 
-      const token =
-        await AsyncStorage.getItem("access_token");
-
-      const response = await axios.get(
-        `${API_URL}/api/downloads`,
-        {
-          headers: token
-            ? {
-                Authorization: `Bearer ${token}`,
-              }
-            : {},
-        }
-      );
+      const response = await api.get("/api/downloads/");
 
       const data = Array.isArray(response.data)
         ? response.data

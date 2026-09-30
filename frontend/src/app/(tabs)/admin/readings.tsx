@@ -153,8 +153,6 @@ export default function AdminReadings() {
         }
       );
 
-      await saveLocalCopy(response.data);
-
       Alert.alert(
         "Success",
         published
@@ -164,107 +162,14 @@ export default function AdminReadings() {
 
       clearForm();
     } catch (error: any) {
-      console.log(
-        "Save reading error:",
-        error?.response?.data || error
+      Alert.alert(
+        "Save Failed",
+        error?.response?.data?.detail ||
+          "Unable to save the reading. Your form data is still available for retry."
       );
-
-      // Local fallback keeps admin work available if
-      // the backend is temporarily unreachable.
-      try {
-        await saveLocalFallback();
-        Alert.alert(
-          "Saved Locally",
-          "The backend could not be reached, so the reading was saved on this device."
-        );
-        clearForm();
-      } catch {
-        const message =
-          error?.response?.data?.detail ||
-          "Unable to save the reading.";
-
-        Alert.alert(
-          "Save Failed",
-          String(message)
-        );
-      }
     } finally {
       setSaving(false);
     }
-  }
-
-  async function saveLocalCopy(data: any) {
-    const existing = JSON.parse(
-      (await AsyncStorage.getItem("readings")) ||
-        "[]"
-    );
-
-    const normalized =
-      data && typeof data === "object"
-        ? data
-        : buildLocalReading();
-
-    existing.unshift({
-      ...normalized,
-      local_id:
-        normalized.id ??
-        `local-${Date.now()}`,
-    });
-
-    await AsyncStorage.setItem(
-      "readings",
-      JSON.stringify(existing)
-    );
-  }
-
-  async function saveLocalFallback() {
-    const existing = JSON.parse(
-      (await AsyncStorage.getItem("readings")) ||
-        "[]"
-    );
-
-    existing.unshift({
-      ...buildLocalReading(),
-      local_id: `local-${Date.now()}`,
-    });
-
-    await AsyncStorage.setItem(
-      "readings",
-      JSON.stringify(existing)
-    );
-  }
-
-  function buildLocalReading() {
-    return {
-      id: Date.now(),
-      title: title.trim(),
-      reading_date: readingDate.trim(),
-      language,
-      liturgical_year: liturgicalYear,
-      liturgical_season: season,
-      feast: feast.trim(),
-      saint_of_day: saint.trim(),
-      first_reading_reference:
-        firstReference.trim(),
-      first_reading: firstReading.trim(),
-      responsorial_psalm_reference:
-        psalmReference.trim(),
-      responsorial_psalm: psalm.trim(),
-      responsorial_response:
-        psalmResponse.trim(),
-      second_reading_reference:
-        secondReference.trim(),
-      second_reading: secondReading.trim(),
-      gospel_acclamation:
-        gospelAcclamation.trim(),
-      gospel_reference:
-        gospelReference.trim(),
-      gospel: gospel.trim(),
-      reflection: reflection.trim(),
-      prayer: prayer.trim(),
-      published,
-      approved: published,
-    };
   }
 
   function clearForm() {

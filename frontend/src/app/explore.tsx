@@ -15,11 +15,12 @@ import {
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { router } from "expo-router";
+import { Href, router } from "expo-router";
 import { api } from "@/lib/api";
 
 interface SearchResult {
   id?: number | string;
+  reading_date?: string;
   title: string;
   type?: string;
   description?: string;
@@ -34,6 +35,12 @@ const quickActions = [
     description: "Today's Catholic Scripture",
     icon: "book-open-page-variant",
     route: "/readings",
+  },
+  {
+    title: "Saints",
+    description: "Saints and feast days",
+    icon: "account-star",
+    route: "/saints",
   },
   {
     title: "Liturgical Calendar",
@@ -172,6 +179,14 @@ export default function ExploreScreen() {
       <TouchableOpacity
         style={styles.result}
         activeOpacity={0.8}
+        onPress={() => {
+          if (item.reading_date) {
+            router.push({
+              pathname: "/reading-detail" as any,
+              params: { date: item.reading_date },
+            });
+          }
+        }}
       >
         <View style={styles.resultIcon}>
           <MaterialCommunityIcons

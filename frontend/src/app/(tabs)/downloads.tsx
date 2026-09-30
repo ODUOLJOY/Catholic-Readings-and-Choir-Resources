@@ -11,13 +11,22 @@ import {
   View,
 } from "react-native";
 import { api } from "@/lib/api";
+import { getCachedResource, removeCachedResource } from "@/services/offlineStore";
+
+interface DownloadRecord {
+  id: number;
+  resource_id: number;
+  downloaded_at: string;
+}
 
 interface DownloadItem {
   id: number;
+  resource_id: number;
   title: string;
   file_type: string;
   file_url: string;
   downloaded_at: string;
+  local_uri?: string | null;
 
   // Optional expanded resource information
   category?: string;
@@ -41,11 +50,30 @@ export default function Downloads() {
 
       const response = await api.get("/api/downloads/");
 
-      const data = Array.isArray(response.data)
+      const records: DownloadRecord[] = Array.isArray(response.data)
         ? response.data
         : response.data?.items || [];
 
-      setDownloads(data);
+      const hydrated = await Promise.all(
+        records.map(async (record) => {
+          try {
+            const resource = await api.get(
+              `/api/choir/${record.resource_id}`
+            );
+
+            return { ...record, ...resource.data, local_uri: await getCachedResource(record.resource_id) } as DownloadItem;
+          } catch {
+            return {
+              ...record,
+              title: "Unavailable resource",
+              file_type: "file",
+              file_url: "",
+            } as DownloadItem;
+          }
+        })
+      );
+
+      setDownloads(hydrated);
     } catch (error) {
       Alert.alert(
         "Error",
@@ -90,6 +118,26 @@ export default function Downloads() {
         "Unable to open this resource."
       );
     }
+  }
+
+  async function removeDownload(downloadId: number, resourceId: number) {
+    try {
+      await api.delete(`/api/downloads/${downloadId}`);
+      await removeCachedResource(resourceId);
+      setDownloads((current) =>
+        current.filter((item) => item.id !== downloadId)
+      );
+    } catch (error: any) {
+      Alert.alert(
+        "Remove Failed",
+        error?.response?.data?.detail ||
+          "Unable to remove this download."
+      );
+    }
+  }
+
+  async function openDownload(item: DownloadItem) {
+    await openResource(item.local_uri || item.file_url);
   }
 
   function getIcon(fileType: string) {
@@ -186,11 +234,20 @@ export default function Downloads() {
         <TouchableOpacity
           style={styles.button}
           onPress={() =>
-            openResource(item.file_url)
+            openDownload(item)
           }
         >
           <Text style={styles.buttonText}>
             Open Resource
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.removeButton}
+          onPress={() => removeDownload(item.id, item.resource_id)}
+        >
+          <Text style={styles.removeButtonText}>
+            Remove Download
           </Text>
         </TouchableOpacity>
       </View>
@@ -405,6 +462,21 @@ const styles = StyleSheet.create({
 
   buttonText: {
     color: "#fff",
+    fontWeight: "700",
+    fontSize: 15,
+  },
+
+  removeButton: {
+    borderWidth: 1,
+    borderColor: "#C62828",
+    padding: 12,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 8,
+  },
+
+  removeButtonText: {
+    color: "#C62828",
     fontWeight: "700",
     fontSize: 15,
   },

@@ -30,7 +30,7 @@ def today_readings(db: Session = Depends(get_db)):
         db.query(Reading)
         .filter(
             Reading.reading_date == today,
-            Reading.is_published == True,
+            Reading.published == True,
         )
         .first()
     )
@@ -53,7 +53,7 @@ def get_reading_by_date(
         db.query(Reading)
         .filter(
             Reading.reading_date == reading_date,
-            Reading.is_published == True,
+            Reading.published == True,
         )
         .first()
     )
@@ -78,7 +78,7 @@ def all_readings(
     db: Session = Depends(get_db),
 ):
     query = db.query(Reading).filter(
-        Reading.is_published == True
+        Reading.published == True
     )
 
     if language:
@@ -126,7 +126,7 @@ def search_readings(
     results = (
         db.query(Reading)
         .filter(
-            Reading.is_published == True,
+            Reading.published == True,
             or_(
                 Reading.first_reading.ilike(f"%{q}%"),
                 Reading.responsorial_psalm.ilike(f"%{q}%"),
@@ -250,7 +250,7 @@ def publish_reading(
             detail="Reading not found."
         )
 
-    reading.is_published = True
+    reading.published = True
 
     db.commit()
 
@@ -277,7 +277,7 @@ def unpublish_reading(
             detail="Reading not found."
         )
 
-    reading.is_published = False
+    reading.published = False
 
     db.commit()
 

@@ -28,11 +28,19 @@ export default function ForgotPasswordScreen() {
     setLoading(true);
 
     try {
-      await api.post("/api/auth/forgot-password", null, {
+      const response = await api.post("/api/auth/forgot-password", null, {
         params: { email: email.trim().toLowerCase() },
       });
 
-      setSent(true);
+      const resetToken = response.data?.reset_token;
+      if (!resetToken) {
+        throw new Error("The server did not return a reset token.");
+      }
+
+      router.replace({
+        pathname: "/reset-password" as any,
+        params: { token: resetToken },
+      });
       Alert.alert(
         "Success",
         "Password reset instructions sent to your email"
@@ -93,6 +101,7 @@ export default function ForgotPasswordScreen() {
             <>
               <Text style={styles.label}>
                 Email Address
+
               </Text>
               <View style={styles.inputWrapper}>
                 <Ionicons

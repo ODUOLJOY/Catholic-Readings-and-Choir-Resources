@@ -1,5 +1,4 @@
 import {
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,13 +14,6 @@ import {
 export default function Dashboard() {
   function navigate(path: string) {
     router.push(path as any);
-  }
-
-  function comingSoon(feature: string) {
-    Alert.alert(
-      "Coming Soon",
-      `${feature} management will be available here.`
-    );
   }
 
   return (
@@ -79,7 +71,7 @@ export default function Dashboard() {
         title="Manage Readings"
         description="Edit, publish or remove readings"
         onPress={() =>
-          navigate("/(tabs)/admin/readings")
+          navigate("/(tabs)/admin/reading-management")
         }
       />
 
@@ -101,9 +93,7 @@ export default function Dashboard() {
         icon="calendar-outline"
         title="Liturgical Calendar"
         description="Manage seasons, feasts and celebrations"
-        onPress={() =>
-          comingSoon("Liturgical Calendar")
-        }
+        onPress={() => navigate("/calendar")}
       />
 
       {/* CHOIR */}
@@ -116,7 +106,7 @@ export default function Dashboard() {
         title="Manage Choir"
         description="Manage Catholic songs, hymns and resources"
         onPress={() =>
-          navigate("/choir")
+          navigate("/(tabs)/admin/resources")
         }
       />
 
@@ -129,15 +119,6 @@ export default function Dashboard() {
         }
       />
 
-      <AdminCard
-        icon="folder-open-outline"
-        title="Choir Categories"
-        description="Entrance, Kyrie, Gloria, Psalms, Offertory, Communion and more"
-        onPress={() =>
-          comingSoon("Choir Categories")
-        }
-      />
-
       {/* USERS */}
       <Text style={styles.sectionTitle}>
         Users & Parish
@@ -147,50 +128,7 @@ export default function Dashboard() {
         icon="people-outline"
         title="Manage Users"
         description="View users, roles and account status"
-        onPress={() =>
-          comingSoon("User Management")
-        }
-      />
-
-      <AdminCard
-        icon="business-outline"
-        title="Manage Parishes"
-        description="Manage parish accounts and assignments"
-        onPress={() =>
-          comingSoon("Parish Management")
-        }
-      />
-
-      {/* REPORTS */}
-      <Text style={styles.sectionTitle}>
-        Reports & System
-      </Text>
-
-      <AdminCard
-        icon="flag-outline"
-        title="Reports"
-        description="Review reported content and resources"
-        onPress={() =>
-          comingSoon("Reports")
-        }
-      />
-
-      <AdminCard
-        icon="bar-chart-outline"
-        title="Analytics"
-        description="View usage and content statistics"
-        onPress={() =>
-          comingSoon("Analytics")
-        }
-      />
-
-      <AdminCard
-        icon="settings-outline"
-        title="Admin Settings"
-        description="Configure administration settings"
-        onPress={() =>
-          comingSoon("Admin Settings")
-        }
+        onPress={() => navigate("/(tabs)/admin/users")}
       />
 
       {/* BACK */}

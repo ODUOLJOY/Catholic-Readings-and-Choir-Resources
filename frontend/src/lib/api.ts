@@ -17,3 +17,48 @@ api.interceptors.request.use(async (config) => {
 
 	return config;
 });
+
+api.interceptors.response.use(
+	(response) => response,
+	async (error) => {
+		const request = error.config as typeof error.config & {
+			_retry?: boolean;
+		};
+
+		if (
+			error.response?.status !== 401 ||
+			request?._retry ||
+			request?.url?.includes("/api/auth/login") ||
+			request?.url?.includes("/api/auth/refresh")
+		) {
+			return Promise.reject(error);
+		}
+
+		const refreshToken = await AsyncStorage.getItem("refresh_token");
+		if (!refreshToken) {
+			return Promise.reject(error);
+		}
+
+		request._retry = true;
+
+		try {
+			const response = await api.post("/api/auth/refresh", null, {
+				params: { refresh_token: refreshToken },
+			});
+			const accessToken = response.data?.access_token;
+
+			if (!accessToken) {
+				throw new Error("Refresh response did not include an access token.");
+			}
+
+			await AsyncStorage.setItem("access_token", accessToken);
+			request.headers = request.headers ?? {};
+			request.headers.Authorization = `Bearer ${accessToken}`;
+			return api(request);
+		} catch (refreshError) {
+			await AsyncStorage.removeItem("access_token");
+			await AsyncStorage.removeItem("refresh_token");
+			return Promise.reject(refreshError);
+		}
+	}
+);

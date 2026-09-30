@@ -2,7 +2,7 @@ import { Tabs } from "expo-router";
 import { Ionicons, FontAwesome5 } from "@expo/vector-icons";
 
 export default function TabsLayout() {
-  const visibleTabs = new Set(["index", "profile", "admin"]);
+  const visibleTabs = new Set(["index", "profile", "admin", "readings", "payment", "downloads"]);
 
   return (
     <Tabs
@@ -43,6 +43,21 @@ export default function TabsLayout() {
         }}
       />
 
+      {/* ADMIN */}
+      <Tabs.Screen
+        name="admin"
+        options={{
+          title: "Admin",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons
+              name="shield-checkmark-outline"
+              color={color}
+              size={size}
+            />
+          ),
+        }}
+      />
+
       {/* PROFILE */}
       <Tabs.Screen
         name="profile"
@@ -58,14 +73,44 @@ export default function TabsLayout() {
         }}
       />
 
-      {/* ADMIN */}
+      {/* PAYMENTS */}
       <Tabs.Screen
-        name="admin"
+        name="payment"
         options={{
-          title: "Admin",
+          title: "Payments",
           tabBarIcon: ({ color, size }) => (
             <Ionicons
-              name="shield-checkmark-outline"
+              name="card-outline"
+              color={color}
+              size={size}
+            />
+          ),
+        }}
+      />
+
+      {/* READINGS */}
+      <Tabs.Screen
+        name="readings"
+        options={{
+          title: "Readings",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons
+              name="book-outline"
+              color={color}
+              size={size}
+            />
+          ),
+        }}
+      />
+
+      {/* DOWNLOADS */}
+      <Tabs.Screen
+        name="downloads"
+        options={{
+          title: "Downloads",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons
+              name="cloud-download-outline"
               color={color}
               size={size}
             />

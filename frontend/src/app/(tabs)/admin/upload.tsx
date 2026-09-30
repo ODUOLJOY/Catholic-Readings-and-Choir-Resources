@@ -14,7 +14,6 @@ import {
 import * as DocumentPicker from "expo-document-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { getList, saveList, StorageKeys } from "@/lib/storage";
 import { api } from "@/lib/api";
 
 const categories = [
@@ -109,10 +108,10 @@ export default function UploadScreen() {
       return;
     }
 
-    if (!content.trim() && !file) {
+    if (!file) {
       Alert.alert(
-        "Missing Content",
-        "Enter reading content or attach a file."
+        "File Required",
+        "Choose a PDF, audio, video, or image file to upload."
       );
       return;
     }
@@ -123,104 +122,42 @@ export default function UploadScreen() {
       const token =
         await AsyncStorage.getItem("access_token");
 
-      const payload = {
-        title: title.trim(),
-        content: content.trim(),
-        reference: reference.trim(),
-        category,
-        season,
-        language,
-        status: "pending",
-        createdAt: new Date().toISOString(),
-      };
+      if (!token) {
+        Alert.alert(
+          "Authentication Required",
+          "Please log in before uploading a resource."
+        );
+        return;
+      }
 
-      /*
-       * Save a local copy first so the submission
-       * isn't lost if the backend is temporarily offline.
-       */
-      const pending = await getList(
-        StorageKeys.PENDING_READINGS
-      );
+      const formData = new FormData();
+      formData.append("title", title.trim());
+      formData.append("description", content.trim());
+      formData.append("category", category);
+      formData.append("language", language);
+      formData.append("file", {
+        uri: file.uri,
+        name: file.name,
+        type: file.mimeType || "application/octet-stream",
+      } as any);
 
-      pending.unshift({
-        id: Date.now().toString(),
-        ...payload,
-        fileName: file?.name ?? null,
-        fileType: file?.mimeType ?? null,
-        fileUri: file?.uri ?? null,
+      await api.post("/api/uploads/", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 30000,
       });
 
-      await saveList(
-        StorageKeys.PENDING_READINGS,
-        pending
+      Alert.alert(
+        "Submitted for approval",
+        "Your resource was uploaded and is waiting for administrator approval."
       );
-
-      /*
-       * Send to backend when authenticated.
-       */
-      if (token && file) {
-          const formData = new FormData();
-
-          formData.append(
-            "title",
-            payload.title
-          );
-          formData.append(
-            "description",
-            payload.content
-          );
-          formData.append(
-            "category",
-            payload.category
-          );
-          formData.append(
-            "language",
-            payload.language
-          );
-
-          formData.append(
-            "file",
-            {
-              uri: file.uri,
-              name: file.name,
-              type:
-                file.mimeType ||
-                "application/octet-stream",
-            } as any
-          );
-
-          await api.post(
-            "/api/uploads/",
-            formData,
-            {
-              headers: { "Content-Type": "multipart/form-data" },
-              timeout: 30000,
-            }
-          );
-          Alert.alert(
-            "Submitted for approval",
-            "Your resource was uploaded and is waiting for administrator approval."
-          );
-      } else {
-        Alert.alert(
-          "Saved Locally",
-          "Your resource was saved on this device and will require submission when you are authenticated."
-        );
-      }
 
       clearForm();
     } catch (error: any) {
-      console.log(
-        "Upload error:",
-        error?.response?.data || error
-      );
-
       Alert.alert(
-        "Saved for Approval",
-        "The resource was saved locally, but the server could not be reached."
+        "Upload Failed",
+        error?.response?.data?.detail ||
+          "The resource could not be uploaded. Please try again."
       );
-
-      clearForm();
     } finally {
       setUploading(false);
     }

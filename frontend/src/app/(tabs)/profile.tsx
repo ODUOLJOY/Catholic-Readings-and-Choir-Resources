@@ -88,6 +88,7 @@ export default function Profile() {
           style: "destructive",
           onPress: async () => {
             try {
+              await api.post("/api/auth/logout");
               await AsyncStorage.multiRemove([
                 "access_token",
                 "refresh_token",
@@ -104,13 +105,6 @@ export default function Profile() {
           },
         },
       ]
-    );
-  }
-
-  function openSettings() {
-    Alert.alert(
-      "Settings",
-      "Settings will be available here."
     );
   }
 
@@ -153,16 +147,6 @@ export default function Profile() {
           Profile
         </Text>
 
-        <Pressable
-          style={styles.settingsButton}
-          onPress={openSettings}
-        >
-          <Ionicons
-            name="settings-outline"
-            size={23}
-            color="#0B6623"
-          />
-        </Pressable>
       </View>
 
       {/* PROFILE CARD */}
@@ -205,64 +189,11 @@ export default function Profile() {
             />
           }
           title="User Account"
-          subtitle="Manage your account information"
+          subtitle="View your account information"
           onPress={() =>
             Alert.alert(
               "User Account",
-              `Name: ${displayName}\nEmail: ${email}`
-            )
-          }
-        />
-
-        <ProfileRow
-          icon={
-            <Ionicons
-              name="settings-outline"
-              size={22}
-              color="#0B6623"
-            />
-          }
-          title="Settings"
-          subtitle="App preferences and configuration"
-          onPress={openSettings}
-        />
-
-        <ProfileRow
-          icon={
-            <MaterialCommunityIcons
-              name="bell-outline"
-              size={23}
-              color="#0B6623"
-            />
-          }
-          title="Notifications"
-          subtitle="Manage reading and choir notifications"
-          onPress={() =>
-            Alert.alert(
-              "Notifications",
-              "Notification settings will be available here."
-            )
-          }
-        />
-
-        <ProfileRow
-          icon={
-            <MaterialCommunityIcons
-              name="church"
-              size={23}
-              color="#0B6623"
-            />
-          }
-          title="My Parish"
-          subtitle={
-            user?.parish_id
-              ? `Parish ID: ${user.parish_id}`
-              : "No parish selected"
-          }
-          onPress={() =>
-            Alert.alert(
-              "My Parish",
-              "Parish management will be available here."
+              `Name: ${displayName}\nEmail: ${email}\nRole: ${role.toUpperCase()}\n\nProfile management is not yet supported.`
             )
           }
         />

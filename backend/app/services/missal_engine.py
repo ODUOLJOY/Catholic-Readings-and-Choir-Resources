@@ -31,7 +31,7 @@ class MissalEngine:
             self.db.query(Reading)
             .filter(
                 Reading.reading_date == reading_date,
-                Reading.is_published == True,
+                Reading.published == True,
             )
             .first()
         )

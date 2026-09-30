@@ -74,6 +74,12 @@ export default function AdminLogin() {
         role !== "super_admin" &&
         role !== "superadmin"
       ) {
+        await AsyncStorage.multiRemove([
+          "access_token",
+          "refresh_token",
+          "user",
+          "user_role",
+        ]);
         Alert.alert(
           "Access Denied",
           "This account does not have administrator privileges."

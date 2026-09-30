@@ -13,6 +13,7 @@ import {
   Linking,
 } from "react-native";
 import { api } from "@/lib/api";
+import { cacheResource } from "@/services/offlineStore";
 
 interface ChoirResource {
   id: number;
@@ -293,6 +294,20 @@ export default function Choir() {
     }
   }
 
+  async function downloadResource(resource: ChoirResource) {
+    try {
+      await cacheResource(resource);
+      await api.post(`/api/downloads/${resource.id}`);
+      Alert.alert("Downloaded", "This resource is available offline and recorded in your downloads.");
+    } catch (error: any) {
+      Alert.alert(
+        "Download Failed",
+        error?.response?.data?.detail ||
+          "The file could not be downloaded. Check your connection and try again."
+      );
+    }
+  }
+
   function getFileIcon(fileType: string) {
     const type = fileType?.toLowerCase() || "";
 
@@ -390,6 +405,15 @@ export default function Choir() {
         >
           <Text style={styles.buttonText}>
             Open Resource
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.secondaryButton}
+          onPress={() => downloadResource(item)}
+        >
+          <Text style={styles.secondaryButtonText}>
+            Save Download
           </Text>
         </TouchableOpacity>
       </View>
@@ -911,6 +935,20 @@ const styles = StyleSheet.create({
 
   buttonText: {
     color: "#fff",
+    textAlign: "center",
+    fontWeight: "700",
+  },
+
+  secondaryButton: {
+    borderWidth: 1,
+    borderColor: "#0B6623",
+    padding: 12,
+    borderRadius: 10,
+    marginTop: 8,
+  },
+
+  secondaryButtonText: {
+    color: "#0B6623",
     textAlign: "center",
     fontWeight: "700",
   },

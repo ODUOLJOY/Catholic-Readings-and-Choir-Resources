@@ -1,0 +1,42 @@
+[
+  {
+    "date": "2026-01-01",
+    "celebration": "Mary, Mother of God",
+    "rank": "solemnity",
+    "liturgical_color": "white",
+    "liturgical_year": "A",
+    "season": "Christmas Time",
+    "source": "USCCB",
+    "reading_sets": [
+      {
+        "type": "proper",
+        "selection_status": "strictly_proper",
+        "lectionary_number": "18",
+        "first_reading": "Numbers 6:22-27",
+        "psalm": "Psalm 67:2-3, 5, 6, 8",
+        "second_reading": "Galatians 4:4-7",
+        "gospel": "Luke 2:16-21"
+      }
+    ]
+  },
+  {
+    "date": "2026-02-18",
+    "celebration": "Ash Wednesday",
+    "rank": "weekday",
+    "liturgical_color": "violet",
+    "liturgical_year": "A",
+    "season": "Lent",
+    "source": "USCCB",
+    "reading_sets": [
+      {
+        "type": "proper",
+        "selection_status": "strictly_proper",
+        "lectionary_number": "219",
+        "first_reading": "Joel 2:12-18",
+        "psalm": "Psalm 51:3-4, 5-6ab, 12-13, 14, 17",
+        "second_reading": "2 Corinthians 5:20-6:2",
+        "gospel": "Matthew 6:1-6, 16-18"
+      }
+    ]
+  }
+]

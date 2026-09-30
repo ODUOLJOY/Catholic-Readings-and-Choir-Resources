@@ -45,5 +45,7 @@ def init_db():
     import app.models.notification
     import app.models.report
     import app.models.favorite
-
+    import app.models.liturgical
+    
+    # Ensure all tables are created
     Base.metadata.create_all(bind=engine)

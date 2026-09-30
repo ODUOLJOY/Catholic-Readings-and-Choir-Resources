@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { router } from "expo-router";
 import {
   ScrollView,
@@ -5,13 +6,29 @@ import {
   Text,
   Pressable,
   StyleSheet,
+  ActivityIndicator,
 } from "react-native";
 import {
   Ionicons,
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
+import { api } from "@/lib/api";
 
 export default function Home() {
+  const [liturgy, setLiturgy] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get("/api/v1/liturgy/today")
+      .then((res) => {
+        setLiturgy(res.data);
+      })
+      .catch((err) => {
+        console.error("Failed to load liturgy:", err);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
   return (
     <ScrollView
       style={styles.container}
@@ -39,25 +56,33 @@ export default function Home() {
         </View>
       </View>
 
-      {/* HERO */}
-      <View style={styles.hero}>
-        <Text style={styles.heroTitle}>
-          Catholic Readings &
-          {"\n"}
-          Choir Resources
-        </Text>
-
-        <Text style={styles.heroText}>
-          Daily Scripture, liturgical readings,
-          saints and Catholic choir resources
-          all in one place.
-        </Text>
-      </View>
+      {/* TODAY'S CELEBRATION */}
+      {loading ? (
+        <ActivityIndicator size="large" color="#0B6623" />
+      ) : liturgy && (
+        <View style={styles.hero}>
+          <Text style={styles.heroTitle}>{liturgy.calendar.celebration}</Text>
+          <Text style={styles.heroText}>
+            {liturgy.calendar.date} | {liturgy.calendar.color} | {liturgy.calendar.season}
+          </Text>
+          {liturgy.calendar.selected_reading_set && (
+            <View style={styles.readingsSection}>
+              <Text style={styles.sectionTitle}>Readings</Text>
+              <Text style={styles.readingItem}>1st: {liturgy.calendar.selected_reading_set.first_reading}</Text>
+              <Text style={styles.readingItem}>Psalm: {liturgy.calendar.selected_reading_set.psalm}</Text>
+              {liturgy.calendar.selected_reading_set.second_reading && (
+                <Text style={styles.readingItem}>2nd: {liturgy.calendar.selected_reading_set.second_reading}</Text>
+              )}
+              <Text style={styles.readingItem}>Gospel: {liturgy.calendar.selected_reading_set.gospel}</Text>
+            </View>
+          )}
+        </View>
+      )}
 
       {/* DAILY READINGS */}
       <Pressable
         style={styles.mainCard}
-        onPress={() => router.push("/readings")}
+        onPress={() => router.push("/(tabs)/readings")}
       >
         <View style={styles.iconCircle}>
           <MaterialCommunityIcons
@@ -73,8 +98,7 @@ export default function Home() {
           </Text>
 
           <Text style={styles.cardText}>
-            Today's First Reading, Psalm,
-            Second Reading and Gospel.
+            {liturgy?.reading?.feast || "Today's readings"}
           </Text>
         </View>
 
@@ -380,6 +404,17 @@ const styles = StyleSheet.create({
     color: "#222",
     marginTop: 15,
     marginBottom: 12,
+  },
+  readingsSection: {
+    marginTop: 10,
+    backgroundColor: "#F9FAF9",
+    padding: 10,
+    borderRadius: 8,
+  },
+  readingItem: {
+    fontSize: 14,
+    color: "#444",
+    marginBottom: 4,
   },
 
   categoryGrid: {

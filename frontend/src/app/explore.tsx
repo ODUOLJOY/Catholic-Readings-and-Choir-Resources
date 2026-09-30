@@ -34,7 +34,7 @@ const quickActions = [
     title: "Daily Readings",
     description: "Today's Catholic Scripture",
     icon: "book-open-page-variant",
-    route: "/readings",
+    route: "/(tabs)/readings",
   },
   {
     title: "Saints",
@@ -52,25 +52,19 @@ const quickActions = [
     title: "Choir Resources",
     description: "Catholic songs and hymns",
     icon: "music-note-multiple",
-    route: "/choir",
-  },
-  {
-    title: "Favorites",
-    description: "Your saved resources",
-    icon: "star",
-    route: "/favorites",
+    route: "/(tabs)/choir",
   },
   {
     title: "Downloads",
     description: "Offline resources",
     icon: "download",
-    route: "/downloads",
+    route: "/(tabs)/downloads",
   },
   {
     title: "Profile",
     description: "Account and settings",
     icon: "account-circle",
-    route: "/profile",
+    route: "/(tabs)/profile",
   },
 ];
 

@@ -12,8 +12,7 @@ import {
   ScrollView,
 } from "react-native";
 import { router } from "expo-router";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { api } from "@/lib/api";
+import { authService } from "@/services/authService";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
@@ -28,37 +27,14 @@ export default function LoginScreen() {
 
     try {
       setLoading(true);
-
-      const response = await api.post(
-        "/api/auth/login",
-        {
-          email: email.trim().toLowerCase(),
-          password,
-        },
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      const { access_token, refresh_token } = response.data;
-
-      await AsyncStorage.multiSet([
-        ["access_token", access_token],
-        ["refresh_token", refresh_token],
-      ]);
-
+      await authService.login(email, password);
       Alert.alert("Success", "Login successful.");
-
       router.replace("/(tabs)");
     } catch (error: any) {
       let message = "Unable to login.";
-
       if (error.response?.data?.detail) {
         message = error.response.data.detail;
       }
-
       Alert.alert("Login Failed", message);
     } finally {
       setLoading(false);

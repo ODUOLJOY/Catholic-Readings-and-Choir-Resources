@@ -9,77 +9,35 @@ import {
   View,
 } from "react-native";
 import { router } from "expo-router";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   Ionicons,
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
-import { api } from "@/lib/api";
+import { authService } from "@/services/authService";
 
 export default function AdminLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] =
-    useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   async function login() {
-    const normalizedEmail =
-      email.trim().toLowerCase();
-
-    if (!normalizedEmail || !password) {
-      Alert.alert(
-        "Missing Information",
-        "Enter your administrator email and password."
-      );
+    if (!email.trim() || !password) {
+      Alert.alert("Missing Information", "Enter your administrator email and password.");
       return;
     }
 
     try {
       setLoading(true);
+      await authService.login(email, password);
 
-      const response = await api.post(
-        "/api/auth/login",
-        {
-          email: normalizedEmail,
-          password,
-        },
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-          timeout: 20000,
-        }
-      );
-
-      const { access_token, refresh_token } = response.data ?? {};
-
-      if (!access_token) {
-        throw new Error(
-          "No access token returned by the server."
-        );
-      }
-
-      await AsyncStorage.setItem(
-        "access_token",
-        access_token
-      );
-
-      const userResponse = await api.get("/api/auth/me");
-      const user = userResponse.data;
-      const role = String(user?.role ?? "").toLowerCase();
-
+      const role = await authService.getRole();
       if (
         role !== "admin" &&
         role !== "super_admin" &&
         role !== "superadmin"
       ) {
-        await AsyncStorage.multiRemove([
-          "access_token",
-          "refresh_token",
-          "user",
-          "user_role",
-        ]);
+        await authService.logout();
         Alert.alert(
           "Access Denied",
           "This account does not have administrator privileges."
@@ -87,65 +45,9 @@ export default function AdminLogin() {
         return;
       }
 
-      if (refresh_token) {
-        await AsyncStorage.setItem(
-          "refresh_token",
-          refresh_token
-        );
-      }
-
-      if (user) {
-        await AsyncStorage.setItem(
-          "user",
-          JSON.stringify(user)
-        );
-      }
-
-      await AsyncStorage.setItem(
-        "user_role",
-        role
-      );
-
-      router.replace(
-        "/(tabs)/admin/dashboard"
-      );
+      router.replace("/(tabs)/admin/dashboard");
     } catch (error: any) {
-      console.log(
-        "Admin login error:",
-        error?.response?.data || error
-      );
-
-      let message =
-        "Unable to sign in as administrator.";
-
-      if (error?.response?.data?.detail) {
-        if (
-          Array.isArray(
-            error.response.data.detail
-          )
-        ) {
-          message = error.response.data.detail
-            .map((item: any) =>
-              item?.msg
-                ? String(item.msg)
-                : String(item)
-            )
-            .join("\n");
-        } else {
-          message = String(
-            error.response.data.detail
-          );
-        }
-      } else if (!error?.response) {
-        message =
-          "Cannot connect to the server. Check your internet connection.";
-      }
-
-      Alert.alert(
-        "Admin Login Failed",
-        message
-      );
-
+      Alert.alert("Login Failed", error?.response?.data?.detail || "Unable to login.");
     } finally {
       setLoading(false);
     }

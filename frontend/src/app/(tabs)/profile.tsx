@@ -146,7 +146,6 @@ export default function Profile() {
         <Text style={styles.headerTitle}>
           Profile
         </Text>
-
       </View>
 
       {/* PROFILE CARD */}
@@ -362,15 +361,6 @@ const styles = StyleSheet.create({
     fontSize: 29,
     fontWeight: "800",
     color: "#0B6623",
-  },
-
-  settingsButton: {
-    width: 45,
-    height: 45,
-    borderRadius: 23,
-    backgroundColor: "#EAF4ED",
-    alignItems: "center",
-    justifyContent: "center",
   },
 
   profileCard: {

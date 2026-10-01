@@ -261,6 +261,21 @@ export default function Profile() {
             router.push("/downloads")
           }
         />
+
+        <ProfileRow
+          icon={
+            <Ionicons
+              name="bookmark-outline"
+              size={23}
+              color="#0B6623"
+            />
+          }
+          title="Favorites"
+          subtitle="View your saved resources"
+          onPress={() =>
+            router.push("/favorites")
+          }
+        />
       </View>
 
       {/* LOGOUT */}

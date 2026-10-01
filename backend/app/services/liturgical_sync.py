@@ -22,8 +22,8 @@ class LiturgicalSyncService:
             date=target_date,
             liturgical_year=calendar_info["liturgical_year"],
             season=calendar_info["season"],
-            celebration_name="Daily Liturgy", # Placeholder
-            celebration_rank="Weekday", # Placeholder
+            celebration_name=calendar_info["celebration"],
+            celebration_rank=calendar_info["rank"],
             liturgical_color=calendar_info["color"],
         )
         

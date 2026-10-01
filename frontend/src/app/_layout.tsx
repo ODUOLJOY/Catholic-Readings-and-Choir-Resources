@@ -8,7 +8,7 @@ export default function RootLayout() {
         animation: "slide_from_right",
       }}
     >
-      <Stack.Screen name="login" />
+      <Stack.Screen name="(auth)" />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="reading-detail" />
     </Stack>

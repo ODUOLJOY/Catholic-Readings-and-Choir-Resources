@@ -74,6 +74,14 @@ export default function Dashboard() {
           navigate("/(tabs)/admin/reading-management")
         }
       />
+      <AdminCard
+        icon="document-attach-outline"
+        title="Import Readings"
+        description="Bulk import liturgical readings from JSON"
+        onPress={() =>
+          navigate("/(tabs)/admin/readings-import")
+        }
+      />
 
       {/* SAINTS & CALENDAR */}
       <Text style={styles.sectionTitle}>
@@ -108,6 +116,23 @@ export default function Dashboard() {
         onPress={() =>
           navigate("/(tabs)/admin/resources")
         }
+      />
+
+      {/* CATHOLIC DIRECTORY */}
+      <Text style={styles.sectionTitle}>
+        Catholic Directory
+      </Text>
+      <AdminCard
+        icon="map-outline"
+        title="Manage Directory"
+        description="Manage Jurisdictions, Deaneries and Parishes"
+        onPress={() => navigate("/(tabs)/admin/manage-directory")}
+      />
+      <AdminCard
+        icon="people-outline"
+        title="Parish Requests"
+        description="Review pending parish submissions"
+        onPress={() => navigate("/(tabs)/admin/parish-requests")}
       />
 
       <AdminCard

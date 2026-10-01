@@ -9,21 +9,29 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useLocalSearchParams } from "expo-router";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { api } from "@/lib/api";
 
 interface Reading {
   id: number;
-  feast?: string;
-  saint_of_day?: string;
-  first_reading_reference: string;
-  first_reading: string;
-  responsorial_psalm_reference?: string;
-  responsorial_psalm?: string;
-  second_reading_reference?: string;
-  second_reading?: string;
-  gospel_reference: string;
-  gospel: string;
+  date: string;
+  calendar: {
+    celebration: string;
+    rank: string;
+    color: string;
+    season: string;
+  };
+  reading: {
+    first_reading_reference: string;
+    first_reading: string;
+    responsorial_psalm_reference?: string;
+    responsorial_psalm?: string;
+    second_reading_reference?: string;
+    second_reading?: string;
+    gospel_reference: string;
+    gospel: string;
+  };
 }
 
 const categories = [
@@ -35,6 +43,7 @@ const categories = [
 ];
 
 export default function Readings() {
+  const { date } = useLocalSearchParams<{ date: string }>();
   const [readings, setReadings] = useState<Reading[]>([]);
   const [filtered, setFiltered] = useState<Reading[]>([]);
   const [selectedCategory, setSelectedCategory] =
@@ -44,36 +53,14 @@ export default function Readings() {
 
   useEffect(() => {
     loadReadings();
-  }, []);
-
-  useEffect(() => {
-    if (selectedCategory === "All") {
-      setFiltered(readings);
-    } else {
-      setFiltered(
-        readings.filter(
-          (reading) => {
-            const category = selectedCategory.toLowerCase();
-            return category === "first reading"
-              ? Boolean(reading.first_reading)
-              : category === "psalm"
-              ? Boolean(reading.responsorial_psalm)
-              : category === "second reading"
-              ? Boolean(reading.second_reading)
-              : category === "gospel"
-              ? Boolean(reading.gospel)
-              : false;
-          }
-        )
-      );
-    }
-  }, [readings, selectedCategory]);
+  }, [date]);
 
   async function loadReadings() {
     try {
       setLoading(true);
 
-      const response = await api.get("/api/readings/today");
+      const endpoint = date ? `/api/v1/liturgy/date/${date}` : "/api/v1/liturgy/today";
+      const response = await api.get(endpoint);
       setReadings([response.data]);
     } catch (error) {
       console.log(
@@ -85,13 +72,36 @@ export default function Readings() {
 
       Alert.alert(
         "Error",
-        "Unable to load today's readings."
+        "Unable to load readings."
       );
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }
+
+  useEffect(() => {
+    if (selectedCategory === "All") {
+      setFiltered(readings);
+    } else {
+      setFiltered(
+        readings.filter(
+          (reading) => {
+            const category = selectedCategory.toLowerCase();
+            return category === "first reading"
+              ? Boolean(reading.reading.first_reading)
+              : category === "psalm"
+              ? Boolean(reading.reading.responsorial_psalm)
+              : category === "second reading"
+              ? Boolean(reading.reading.second_reading)
+              : category === "gospel"
+              ? Boolean(reading.reading.gospel)
+              : false;
+          }
+        )
+      );
+    }
+  }, [readings, selectedCategory]);
 
   async function refresh() {
     setRefreshing(true);
@@ -118,10 +128,10 @@ export default function Readings() {
     item: Reading;
   }) {
     const entries = [
-      ["First Reading", item.first_reading_reference, item.first_reading],
-      ["Psalm", item.responsorial_psalm_reference, item.responsorial_psalm],
-      ["Second Reading", item.second_reading_reference, item.second_reading],
-      ["Gospel", item.gospel_reference, item.gospel],
+      ["First Reading", item.reading.first_reading_reference, item.reading.first_reading],
+      ["Psalm", item.reading.responsorial_psalm_reference, item.reading.responsorial_psalm],
+      ["Second Reading", item.reading.second_reading_reference, item.reading.second_reading],
+      ["Gospel", item.reading.gospel_reference, item.reading.gospel],
     ].filter((entry): entry is [string, string, string] => Boolean(entry[2]));
 
     return (

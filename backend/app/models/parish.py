@@ -1,6 +1,6 @@
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, ForeignKey
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-
 from app.db.database import Base
 
 
@@ -10,10 +10,11 @@ class Parish(Base):
     id = Column(Integer, primary_key=True, index=True)
 
     name = Column(String(255), nullable=False, unique=True, index=True)
+    code = Column(String(50), unique=True, nullable=False)
 
-    diocese = Column(String(255), nullable=True)
-
-    archdiocese = Column(String(255), nullable=True)
+    deanery_id = Column(Integer, ForeignKey("deaneries.id"), nullable=True)
+    diocese_id = Column(Integer, ForeignKey("dioceses.id"), nullable=True)
+    deanery = relationship("Deanery", back_populates="parishes")
 
     country = Column(String(100), nullable=False, default="Kenya")
 
@@ -38,6 +39,7 @@ class Parish(Base):
     description = Column(Text, nullable=True)
 
     is_active = Column(Boolean, default=True, nullable=False)
+    verification_status = Column(String(50), default="needs_review", nullable=False)
 
     created_at = Column(
         DateTime(timezone=True),
@@ -51,3 +53,15 @@ class Parish(Base):
         onupdate=func.now(),
         nullable=False,
     )
+
+class ParishRequest(Base):
+    __tablename__ = "parish_requests"
+    id = Column(Integer, primary_key=True, index=True)
+    parish_name = Column(String(255), nullable=False)
+    jurisdiction_name = Column(String(255), nullable=True)
+    deanery_name = Column(String(255), nullable=True)
+    town = Column(String(150), nullable=True)
+    details = Column(Text, nullable=True)
+    status = Column(String(50), default="pending", nullable=False) # pending, reviewing, approved, rejected
+    submitted_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

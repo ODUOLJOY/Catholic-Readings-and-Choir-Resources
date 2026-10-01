@@ -15,6 +15,10 @@ from app.routes import (
     saints,
     uploads,
     liturgy,
+    locations,
+    user,
+    favorites,
+    parish_requests,
 )
 
 app = FastAPI(
@@ -53,6 +57,10 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(readings.router)
 app.include_router(liturgy.router)
+app.include_router(locations.router)
+app.include_router(user.router)
+app.include_router(favorites.router, prefix="/api")
+app.include_router(parish_requests.router)
 app.include_router(payments.router, prefix="/api/payments", tags=["Payments"])
 app.include_router(saints.router)
 app.include_router(choir.router)

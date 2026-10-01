@@ -4,6 +4,7 @@ from sqlalchemy import (
     DateTime,
     Integer,
     String,
+    ForeignKey,
 )
 from enum import Enum
 from sqlalchemy.orm import relationship
@@ -47,6 +48,12 @@ class User(Base):
         nullable=True,
     )
 
+    profile_setup_completed = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+    )
+
     language = Column(
         String(20),
         default="English",
@@ -55,6 +62,7 @@ class User(Base):
 
     parish_id = Column(
         Integer,
+        ForeignKey("parishes.id"),
         nullable=True,
     )
 

@@ -22,11 +22,31 @@ def get_liturgy_by_date(target_date: date, db: Session = Depends(get_db)):
     engine = MissalEngine(db)
     return engine.get_readings(target_date)
 
-@router.post("/admin/calendar/sync")
-def import_calendar_data(
-    data: dict, 
+@router.post("/admin/import")
+def import_readings(
+    data: dict,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     require_admin(current_user)
+    
+    # Validate structure (basic)
+    if "date" not in data or "celebration" not in data:
+        raise HTTPException(status_code=400, detail="Missing required fields: date, celebration")
+        
     return LiturgicalSyncService.import_verified_data(db, data)
+
+@router.get("/calendar")
+def get_calendar(
+    start_date: date,
+    end_date: date,
+    db: Session = Depends(get_db)
+):
+    from app.models.liturgical import LiturgicalDay
+    # Return list of calendar days in range
+    days = db.query(LiturgicalDay).filter(
+        LiturgicalDay.date >= start_date,
+        LiturgicalDay.date <= end_date
+    ).all()
+    
+    return days

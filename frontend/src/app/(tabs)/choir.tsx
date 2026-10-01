@@ -14,6 +14,9 @@ import {
 } from "react-native";
 import { api } from "@/lib/api";
 import { cacheResource } from "@/services/offlineStore";
+import { favoriteService, Favorite } from "@/services/favoriteService";
+import { ReportButton } from "@/components/ReportButton";
+import { Ionicons } from "@expo/vector-icons";
 
 interface ChoirResource {
   id: number;
@@ -154,6 +157,7 @@ export default function Choir() {
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [favorites, setFavorites] = useState<Favorite[]>([]);
 
   const [showSeasons, setShowSeasons] = useState(false);
   const [showLanguages, setShowLanguages] = useState(false);
@@ -161,7 +165,34 @@ export default function Choir() {
 
   useEffect(() => {
     loadResources();
+    loadFavorites();
   }, []);
+
+  async function loadFavorites() {
+    try {
+        const favs = await favoriteService.getFavorites();
+        setFavorites(favs);
+    } catch (error) {
+        console.error("Failed to load favorites", error);
+    }
+  }
+
+  async function toggleFavorite(item: ChoirResource) {
+    const isFavorited = favorites.some(f => f.resource_type === 'choir' && f.target_resource_id === item.id);
+    const favorite = favorites.find(f => f.resource_type === 'choir' && f.target_resource_id === item.id);
+    
+    try {
+      if (isFavorited && favorite) {
+        await favoriteService.deleteFavorite(favorite.id);
+        setFavorites(favorites.filter(f => f.id !== favorite.id));
+      } else {
+        const newFav = await favoriteService.createFavorite('choir', item.id);
+        setFavorites([...favorites, newFav]);
+      }
+    } catch (error: any) {
+      Alert.alert("Error", "Could not toggle favorite");
+    }
+  }
 
   useEffect(() => {
     filterResources();
@@ -178,7 +209,9 @@ export default function Choir() {
     try {
       setLoading(true);
 
-      const response = await api.get("/api/choir/");
+      const response = await api.get("/api/choir/", {
+        params: { query: search }
+      });
 
       setResources(
         Array.isArray(response.data)
@@ -341,6 +374,9 @@ export default function Choir() {
               {item.category}
             </Text>
           </View>
+          <TouchableOpacity onPress={() => toggleFavorite(item)}>
+            <Ionicons name={favorites.some(f => f.resource_type === 'choir' && f.target_resource_id === item.id) ? "bookmark" : "bookmark-outline"} size={24} color="#0B6623" />
+          </TouchableOpacity>
         </View>
 
         {item.description ? (
@@ -416,6 +452,7 @@ export default function Choir() {
             Save Download
           </Text>
         </TouchableOpacity>
+        <ReportButton resourceType="choir" resourceId={item.id} />
       </View>
     );
   }

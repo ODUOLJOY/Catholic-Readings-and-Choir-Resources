@@ -8,6 +8,9 @@ from app.db.database import get_db
 from app.models.readings import Reading
 from app.models.choir import ChoirResource
 from app.models.user import User
+from app.models.parish_request import ParishRequest
+from app.models.locations import Diocese, Deanery
+from app.models.parish import Parish
 from app.auth.security import decode_token
 from app.core.dependencies import get_current_user
 
@@ -55,6 +58,7 @@ def dashboard(
             Reading.approved == False
         ).count(),
         "pending_reports": 0,  # TODO: implement when Report model is created
+        "parish_requests": db.query(ParishRequest).filter(ParishRequest.status == "pending").count(),
     }
 
 
@@ -113,9 +117,30 @@ def disable_user(
 
     db.commit()
 
-    return {
-        "message": "User disabled successfully."
-    }
+@router.get("/parish-requests")
+def get_parish_requests(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_admin(current_user)
+    return db.query(ParishRequest).order_by(ParishRequest.created_at.desc()).all()
+
+@router.put("/parish-requests/{request_id}/status")
+def update_parish_request(
+    request_id: int,
+    status: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_admin(current_user)
+    
+    req = db.query(ParishRequest).filter(ParishRequest.id == request_id).first()
+    if not req:
+        raise HTTPException(404, "Request not found.")
+        
+    req.status = status
+    db.commit()
+    return {"message": "Status updated."}
 
 
 @router.put("/users/{user_id}/enable")

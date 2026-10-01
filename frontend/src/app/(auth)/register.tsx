@@ -14,6 +14,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/lib/api";
+import { authService } from "@/services/authService";
 
 export default function RegisterScreen() {
   const [email, setEmail] = useState("");
@@ -47,19 +48,21 @@ export default function RegisterScreen() {
       const response = await api.post(
         "/api/auth/register",
         {
-          email,
+          email: email.trim().toLowerCase(),
           password,
           full_name: fullName,
         },
         { timeout: 15000 }
       );
 
-      await AsyncStorage.setItem(
-        "user",
-        JSON.stringify(response.data)
-      );
-
-      router.replace("/(auth)/login");
+      await authService.login(email.trim().toLowerCase(), password);
+      
+      const user = await authService.getUser();
+      if (user && user.profile_setup_completed) {
+        router.replace("/(tabs)");
+      } else {
+        router.replace("/profile-setup");
+      }
     } catch (error: any) {
       let message =
         error?.response?.data?.detail ||

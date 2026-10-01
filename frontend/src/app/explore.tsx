@@ -174,10 +174,20 @@ export default function ExploreScreen() {
         style={styles.result}
         activeOpacity={0.8}
         onPress={() => {
-          if (item.reading_date) {
+          if (item.type === "Reading" && item.reading_date) {
             router.push({
               pathname: "/reading-detail" as any,
               params: { date: item.reading_date },
+            });
+          } else if (item.type === "Saint") {
+            router.push({
+              pathname: "/(tabs)/admin/saints" as any, // Should be detail screen if exists
+              params: { id: item.id },
+            });
+          } else if (item.type === "Choir") {
+            router.push({
+              pathname: "/(tabs)/choir" as any, // Should be detail screen
+              params: { id: item.id },
             });
           }
         }}

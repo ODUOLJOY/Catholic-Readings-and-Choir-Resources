@@ -1,0 +1,13 @@
+{
+  "arch_nbo": {
+    "name": "Archdiocese of Nairobi",
+    "deaneries": {
+      "d_nbo_central": {
+        "name": "Central Deanery",
+        "parishes": [
+          {"name": "Holy Family Basilica", "code": "p_nbo_hfb"}
+        ]
+      }
+    }
+  }
+}

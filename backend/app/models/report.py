@@ -1,20 +1,18 @@
-from datetime import datetime
-
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
 from sqlalchemy.sql import func
-
 from app.db.database import Base
 
+class ContentReport(Base):
+    __tablename__ = "content_reports"
 
-class Report(Base):
-    __tablename__ = "reports"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
-    resource_id: Mapped[int | None] = mapped_column(ForeignKey("choir_resources.id"))
-    reason: Mapped[str] = mapped_column(String(255), nullable=False)
-    details: Mapped[str | None] = mapped_column(Text)
-    status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    user = relationship("User", back_populates="reports")
+    id = Column(Integer, primary_key=True, index=True)
+    reporter_id = Column(Integer, ForeignKey("users.id"))
+    resource_type = Column(String)  # 'reading', 'saint', 'choir'
+    resource_id = Column(Integer)
+    reason = Column(String)
+    description = Column(String)
+    status = Column(String, default="pending")  # pending, reviewing, resolved, rejected
+    created_at = Column(DateTime, default=func.now())
+    reviewed_at = Column(DateTime, nullable=True)
+    reviewer_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    resolution = Column(String, nullable=True)

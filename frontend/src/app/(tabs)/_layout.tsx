@@ -1,8 +1,21 @@
-import { Tabs } from "expo-router";
+import { Tabs, useRouter } from "expo-router";
 import { Ionicons, FontAwesome5 } from "@expo/vector-icons";
+import { useEffect } from "react";
+import { authService } from "@/services/authService";
 
 export default function TabsLayout() {
-  const visibleTabs = new Set(["index", "profile", "admin", "readings", "payment", "downloads"]);
+  const router = useRouter();
+  const visibleTabs = new Set(["index", "profile", "admin", "choir", "downloads"]);
+
+  useEffect(() => {
+    async function checkSetup() {
+      const user = await authService.getUser();
+      if (user && !user.profile_setup_completed) {
+        router.replace('/profile-setup');
+      }
+    }
+    checkSetup();
+  }, []);
 
   return (
     <Tabs
@@ -43,14 +56,29 @@ export default function TabsLayout() {
         }}
       />
 
-      {/* ADMIN */}
+      {/* DOWNLOADS */}
       <Tabs.Screen
-        name="admin"
+        name="downloads"
         options={{
-          title: "Admin",
+          title: "Downloads",
           tabBarIcon: ({ color, size }) => (
             <Ionicons
-              name="shield-checkmark-outline"
+              name="cloud-download-outline"
+              color={color}
+              size={size}
+            />
+          ),
+        }}
+      />
+
+      {/* CHOIR */}
+      <Tabs.Screen
+        name="choir"
+        options={{
+          title: "Choir",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons
+              name="musical-notes-outline"
               color={color}
               size={size}
             />
@@ -73,51 +101,20 @@ export default function TabsLayout() {
         }}
       />
 
-      {/* PAYMENTS */}
+      {/* ADMIN */}
       <Tabs.Screen
-        name="payment"
+        name="admin"
         options={{
-          title: "Payments",
+          title: "Admin",
           tabBarIcon: ({ color, size }) => (
             <Ionicons
-              name="card-outline"
+              name="shield-checkmark-outline"
               color={color}
               size={size}
             />
           ),
         }}
       />
-
-      {/* READINGS */}
-      <Tabs.Screen
-        name="readings"
-        options={{
-          title: "Readings",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons
-              name="book-outline"
-              color={color}
-              size={size}
-            />
-          ),
-        }}
-      />
-
-      {/* DOWNLOADS */}
-      <Tabs.Screen
-        name="downloads"
-        options={{
-          title: "Downloads",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons
-              name="cloud-download-outline"
-              color={color}
-              size={size}
-            />
-          ),
-        }}
-      />
-
     </Tabs>
   );
 }

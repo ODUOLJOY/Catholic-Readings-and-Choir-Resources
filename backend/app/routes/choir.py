@@ -35,20 +35,27 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 def get_resources(
     category: str | None = None,
     language: str | None = None,
+    query: str | None = None,
     db: Session = Depends(get_db),
 ):
-    query = db.query(ChoirResource).filter(
+    query_obj = db.query(ChoirResource).filter(
         ChoirResource.is_approved == True,
         ChoirResource.is_published == True,
     )
 
     if category:
-        query = query.filter(ChoirResource.category == category)
+        query_obj = query_obj.filter(ChoirResource.category == category)
 
     if language:
-        query = query.filter(ChoirResource.language == language)
+        query_obj = query_obj.filter(ChoirResource.language == language)
+        
+    if query:
+        query_obj = query_obj.filter(
+            ChoirResource.title.ilike(f"%{query}%") |
+            ChoirResource.description.ilike(f"%{query}%")
+        )
 
-    return query.order_by(
+    return query_obj.order_by(
         ChoirResource.created_at.desc()
     ).all()
 

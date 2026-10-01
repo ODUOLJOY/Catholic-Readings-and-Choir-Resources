@@ -29,7 +29,12 @@ export default function LoginScreen() {
       setLoading(true);
       await authService.login(email, password);
       Alert.alert("Success", "Login successful.");
-      router.replace("/(tabs)");
+      const user = await authService.getUser();
+      if (user && user.profile_setup_completed) {
+        router.replace("/(tabs)");
+      } else {
+        router.replace("/profile-setup");
+      }
     } catch (error: any) {
       let message = "Unable to login.";
       if (error.response?.data?.detail) {

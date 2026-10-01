@@ -17,10 +17,19 @@ def get_liturgical_year(target_date: date) -> str:
     Returns Liturgical Year A, B or C.
     The liturgical year begins with the First Sunday of Advent.
     """
-    # Find the start of the current liturgical year (Advent)
-    # The First Sunday of Advent is the Sunday closest to Nov 30th
+    # Year A = 2026/2027 (Advent 2026 starts A)
+    # 2023-2024: Year B
+    # 2024-2025: Year C
+    # 2025-2026: Year A
     
-    # Simple approximation for now - needs refinement for production
+    # Simplified approach: Year starts in Advent
+    year = target_date.year
+    if target_date.month >= 12 or (target_date.month == 11 and target_date.day >= 27):
+        year += 1
+    
+    # 2026 is Year A
+    cycle_map = {0: 'B', 1: 'C', 2: 'A'}
+    return cycle_map[year % 3]
     # A year is A if (target_date.year - 2022) % 3 == 0 (roughly)
     # Actually, we should check against Advent start date.
     
@@ -168,12 +177,45 @@ def get_liturgical_color(target_date: date) -> str:
     return LITURGICAL_COLORS.get(season, "Green")
 
 
+
+# Celebration Registry
+CELEBRATIONS = {
+    (1, 1): {"name": "Solemnity of Mary, Mother of God", "rank": "Solemnity", "color": "White"},
+    (1, 6): {"name": "Epiphany of the Lord", "rank": "Solemnity", "color": "White"},
+    (3, 19): {"name": "St. Joseph, Husband of the Blessed Virgin Mary", "rank": "Solemnity", "color": "White"},
+    (8, 15): {"name": "Assumption of the Blessed Virgin Mary", "rank": "Solemnity", "color": "White"},
+    (11, 1): {"name": "All Saints", "rank": "Solemnity", "color": "White"},
+    (12, 8): {"name": "Immaculate Conception", "rank": "Solemnity", "color": "White"},
+    (12, 25): {"name": "Nativity of the Lord", "rank": "Solemnity", "color": "White"},
+}
+
+def get_celebration(target_date: date):
+    # Check fixed dates
+    if (target_date.month, target_date.day) in CELEBRATIONS:
+        return CELEBRATIONS[(target_date.month, target_date.day)]
+    
+    # Check relative dates
+    easter = easter_sunday(target_date.year)
+    relative_celebrations = {
+        (easter - timedelta(days=46)): {"name": "Ash Wednesday", "rank": "Feria", "color": "Purple"},
+        (easter): {"name": "Easter Sunday", "rank": "Solemnity", "color": "White"},
+        (easter + timedelta(days=49)): {"name": "Pentecost", "rank": "Solemnity", "color": "Red"},
+    }
+    
+    if target_date in relative_celebrations:
+        return relative_celebrations[target_date]
+        
+    return None
+
 def get_calendar_info(target_date: date):
     season = get_liturgical_season(target_date)
-
+    celebration = get_celebration(target_date)
+    
     return {
         "date": target_date.isoformat(),
         "liturgical_year": get_liturgical_year(target_date),
         "season": season,
-        "color": get_liturgical_color(target_date),
+        "color": celebration["color"] if celebration else get_liturgical_color(target_date),
+        "celebration": celebration["name"] if celebration else "Weekday",
+        "rank": celebration["rank"] if celebration else "Weekday",
     }

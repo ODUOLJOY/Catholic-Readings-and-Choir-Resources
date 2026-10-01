@@ -46,6 +46,12 @@ class ChoirResource(Base):
         ForeignKey("users.id"),
         nullable=True,
     )
+    parish_id = Column(
+        Integer,
+        ForeignKey("parishes.id"),
+        nullable=True,
+        index=True,
+    )
 
     uploader = relationship("User", back_populates="choir_resources")
 

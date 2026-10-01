@@ -6,6 +6,7 @@ from app.models.download import Download
 from app.models.choir import ChoirResource
 from app.models.user import User
 from app.routes.auth_dependency import get_current_user
+from app.services.authorization import can_view_choir_resource
 
 router = APIRouter(
     prefix="/api/downloads",
@@ -36,7 +37,8 @@ def download_resource(
         db.query(ChoirResource)
         .filter(
             ChoirResource.id == resource_id,
-            ChoirResource.is_approved == True,
+            ChoirResource.is_approved.is_(True),
+            ChoirResource.is_published.is_(True),
         )
         .first()
     )
@@ -46,6 +48,8 @@ def download_resource(
             status_code=404,
             detail="Resource not found."
         )
+    if not can_view_choir_resource(db, current_user, resource.parish_id):
+        raise HTTPException(status_code=404, detail="Resource not found.")
 
     existing = (
         db.query(Download)

@@ -14,17 +14,19 @@
 | Frontend export | PASS | `expo export --platform web`; 70 routes. | Hosting/deployed build not tested. |
 | Frontend lint | PASS WITH WARNINGS | 0 errors and 52 warnings. | Warnings remain to review. |
 | Backend syntax | PASS | Python compile check. | Not applicable. |
-| Backend automated tests | LIMITED PASS | 17 focused tests passed, including hierarchy, password reset, scoped community authorization, API cross-parish messaging denial, unapproved choir-detail denial, migration fixture upgrade/backfill/downgrade, response serialization, email construction, and mocked M-Pesa callback checks. | No broad role-journey or production tests. |
+| Backend automated tests | LIMITED PASS | 21 focused tests passed, including hierarchy, password reset, scoped community authorization, choir upload/review/file-scope denial, migration preflight/offline SQL/upgrade/backfill/downgrade, response serialization, email construction, and mocked M-Pesa callback checks. | No broad role-journey or production tests. |
 | Configured database | LIMITED PASS | Read-only `SELECT 1` succeeded through the configured SQLAlchemy engine. | No schema inspection or writes; staging/production identity and backup state were not independently verified. |
 | Current Render service | BLOCKED | GET `/health` returned HTTP 503 with “This service has been suspended.” | Hosting provider must restore service; no deployment was attempted. |
 | Current Vercel deployment | BLOCKED | GET `/` returned HTTP 404 `DEPLOYMENT_NOT_FOUND`. | A valid frontend deployment is not currently reachable at the configured URL. |
 | Password reset | LIMITED PASS | Password hash update, token hashing/one-use behavior, missing SMTP handling, and email link composition have tests. | Actual SMTP delivery and native deep linking are unverified; configure SMTP or this route intentionally returns 503. |
 | Community roles/membership | LIMITED PASS | Pending parish affiliation does not authorize access; role request self-approval and cross-parish messaging are denied in focused tests. | Full role approval matrix, administrator lifecycle, staging authorization matrix, and bootstrap are not exercised. |
+| Upload submission/moderation | LOCAL API PASS | Web multipart uploads use a browser-readable file part and Axios-generated boundary; native uploads use the URI descriptor. Pending files are non-static, approval gates file delivery, and cross-parish review/edit/delete/file access is denied in focused tests. | Native picker/device test, hosted persistent storage, malware scanning, and browser interaction with a live backend remain unverified. |
+| Download authorization/offline cache | PARTIAL | Download history creation rejects cross-parish resources; file caching now sends the access token and uses resource file-type metadata. | Expo file transfer and offline opening are not device-tested. |
 | Community announcements/events/suggestions/prayer/groups | IMPLEMENTED LOCALLY / PARTIAL | Scoped API routes and screens exist; in-app notification preferences and verified-member recipient filtering are implemented. | Broad CRUD/role-scope integration tests, attachments, moderation lifecycle, push/email delivery, and full group UX remain outstanding. |
-| Migration | LOCAL FIXTURE PASS / STAGING BLOCKED | Additive migration repeats safely in a SQLite legacy-schema fixture and downgrades without dropping legacy tables. | Actual deployed schema, staging restore, and backup/rollback are not verified. |
+| Migration | LOCAL FIXTURE PASS / STAGING BLOCKED | Community backfill and nullable choir-resource parish-scope revisions pass a legacy SQLite fixture; read-only baseline preflight and PostgreSQL offline SQL generation are tested. | Actual deployed schema, staging restore, and backup/restore rehearsal are not verified. |
 | M-Pesa callback processing | LIMITED PASS (mocked) | Provider STK-query result, callback amount/phone/receipt, and repeated callback behavior are unit-tested. | Daraja sandbox/production provider behavior and callback delivery were not tested. |
 | Backend local smoke test | LIMITED PASS | In-memory SQLite health check returned 200; choir endpoint returned an empty list. | Production dependencies not tested. |
-| Authentication, legacy administration, payments, notifications, downloads, and approved content | NOT VERIFIED END TO END | Prior focused tests plus this pass's 17 backend tests; no full account-through-admin journey. | Not performed against production/staging. |
+| Authentication, legacy administration, payments, notifications, downloads, and approved content | NOT VERIFIED END TO END | Prior focused tests plus this pass's 21 backend tests; no full account-through-admin journey. | Not performed against production/staging. |
 
 ## Feature trace
 
@@ -37,21 +39,22 @@
 | Suggestions | Anonymous submission and scoped review screen | Connected | Submit/list/review | `community_suggestions` | Members submit only in verified scope; reviewers authorized per scope | Connected; broad workflow tests pending |
 | Prayer intentions | Private intention screen | Connected | Create/list/react | `prayer_intentions`, `prayer_reactions` | Private owner; parish/diocese require active membership; public content is public | Connected; focused scope tests pending |
 | Parish/group messaging | Parish conversation UI | Connected | Create/list/send/report/react/delete/mute/block | Conversation/message/member/reaction tables | Active parish/group membership checked per request | Connected and cross-parish GET/POST/DELETE denial tested |
+| Choir resource upload/review | Admin upload and resources UI | Connected | Multipart submit, pending queue, approve/reject/edit/delete, protected file route | New uploads stored outside static mounts; nullable parish scope via additive revision | Super Admin global; parish admin/music director/choir director assigned scope only | Upload, approval, private file, and cross-parish ID-tampering tests pass locally |
 | Notification preferences | Profile settings screen | Connected | Get/update preferences and in-app notification filtering | `community_notification_preferences`, existing notification table | Authenticated user updates only own settings | Connected; external push delivery not configured/tested |
 | Audit log | Admin audit screen | Connected | Scoped audit query | `community_audit_logs` | Super Admin or assigned community admin scopes | Connected; full action matrix pending |
-| Music-role access to choir resources | Role request UI exists | Not wired to legacy choir-resource CRUD | Legacy choir resources and file delivery are global | No parish scope on existing resource rows | Music role does not grant legacy global resource administration | Backend/schema/storage blocked pending reviewed scope migration and private file delivery |
+| Music-role access to choir resources | Upload scope choices and existing Admin resource UI | Connected to scoped upload, pending review, edit, approval/rejection, and file delivery | New rows carry nullable `parish_id`; old rows remain global | Parish Music Director and Choir Director restricted to assigned parish; global resources remain Super Admin-only | Local SQLite/TestClient scope and ID-tampering checks pass; staging/native checks pending |
 | Super Admin provisioning | No password/setup screen; controlled bootstrap command | CLI bootstrap | Existing verified configured account only | Global role assignment | Identity/email check; no source password | Code present; bootstrap execution blocked pending account/migration confirmation |
 | Official directory/content, media attachments, moderation lifecycle | Existing screens/services, partial | Existing APIs, partial | Existing partial features | Existing tables/files | Complete end-to-end checks pending | Backend/data/licensing blocked or not verified |
 
 ## Release blockers
 
 - No full acceptance test from account creation through daily use and administration.
-- No staging comparison or production-schema compatibility check. Startup table creation is now opt-in; an additive Alembic migration is tested only against a local fixture.
+- No staging comparison or production-schema compatibility check. Startup table creation is opt-in; additive Alembic revisions are tested only against local fixtures.
 - The directory model is limited to Diocese/Deanery/Parish; the required broader hierarchy and verified official data are incomplete.
-- Music roles are not yet connected to parish-scoped choir-resource ownership or private file delivery; the existing choir-resource schema is global.
+- Existing choir-resource records remain global, and existing static file URLs are not retroactively private. Newly submitted files use authenticated delivery until/after approval.
 - No verified licensed/approved readings and saints datasets or complete liturgical-calendar edge-case tests.
-- New community routes use scoped assignments and verified parish membership, but legacy admin/content/upload/moderation routes still need a route-by-route authorization audit and comprehensive enforcement tests.
-- Real secure file storage, upload moderation, downloads/offline synchronization, payment callbacks, and push notifications are unverified.
+- Choir upload/moderation scope is locally tested; other legacy admin/content routes still need a route-by-route authorization audit and comprehensive enforcement tests.
+- Hosted durable storage, antivirus/content scanning, downloads/offline synchronization, payment callbacks, and push notifications are unverified.
 - Production environment variables, secrets handling, external service configuration, and deployment workflows have not been validated.
 
 ## External configuration and data still required
@@ -83,9 +86,9 @@ Do not treat sandbox responses, local SQLite checks, static exports, or unverifi
 ## Required release sequence
 
 1. Inventory deployed secrets without printing values; rotate any credentials that were exposed, then install current credentials in the deployment secret manager.
-2. Obtain a production-schema snapshot and backup, restore it into staging, and document a rollback procedure.
-3. Establish an Alembic baseline that matches staging exactly; review additive migrations and test both upgrade and rollback on a restored staging copy before production.
-4. Complete the authorization matrix across parish, deanery, diocese, moderator, and platform roles; new community role requests exist, but legacy administration and choir-resource permissions remain to be integrated.
+2. Obtain a production-schema snapshot and backup, restore it into staging, run `python preflight_migrations.py` from `backend`, inspect `alembic current`/`history`, and rehearse both additive revisions plus backup restoration.
+3. Verify resource row counts, ensure legacy resources remain `parish_id IS NULL`, and review migration SQL against the restored schema. Use backup restoration—not downgrade—as rollback once new data is written.
+4. Complete the remaining authorization matrix across parish, deanery, diocese, moderator, and platform roles; choir-resource scope is locally tested but other legacy administration routes remain.
 5. Load and verify directory and liturgical content only from authorized ecclesial sources; record provenance and licensing before publishing.
 6. Configure SMTP, storage, and push credentials as applicable; verify delivery and restricted-file access with test accounts on staging.
 7. Run Daraja sandbox initiation, success/cancel/failure/duplicate callback and reconciliation tests; obtain Safaricom production approval and credentials before live transactions.

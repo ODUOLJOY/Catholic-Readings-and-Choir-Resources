@@ -11,7 +11,11 @@ import {
   View,
 } from "react-native";
 import { api } from "@/lib/api";
-import { getCachedResource, removeCachedResource } from "@/services/offlineStore";
+import {
+  cacheResource,
+  getCachedResource,
+  removeCachedResource,
+} from "@/services/offlineStore";
 
 interface DownloadRecord {
   id: number;
@@ -137,7 +141,8 @@ export default function Downloads() {
   }
 
   async function openDownload(item: DownloadItem) {
-    await openResource(item.local_uri || item.file_url);
+    const fileUri = item.local_uri || await cacheResource(item);
+    await openResource(fileUri);
   }
 
   function getIcon(fileType: string) {

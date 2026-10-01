@@ -1,22 +1,37 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { File, Paths } from "expo-file-system";
 import { API_URL } from "@/config/api";
+import { api } from "@/lib/api";
 
 const KEY = "OFFLINE_RESOURCE_FILES";
 type CachedResource = { id: number; uri: string; fileUrl: string; title: string };
+type CacheInput = {
+  id: number;
+  title: string;
+  file_url: string;
+  file_type?: string;
+};
 
 async function readCache(): Promise<CachedResource[]> {
   const value = await AsyncStorage.getItem(KEY);
   return value ? JSON.parse(value) : [];
 }
 
-export async function cacheResource(resource: { id: number; title: string; file_url: string }) {
+export async function cacheResource(resource: CacheInput) {
+  await api.get(`/api/choir/${resource.id}`);
   const url = new URL(resource.file_url, API_URL).toString();
-  const extension = resource.file_url.split(".").pop()?.split("?")[0] || "bin";
+  const extension =
+    resource.file_type
+      ? resource.file_type.split("/").pop()?.toLowerCase() || "bin"
+      : resource.file_url.split(".").pop()?.split("?")[0] || "bin";
   const safeTitle = resource.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
   const directory = Paths.document.createDirectory("choir");
   const destination = new File(directory, `${resource.id}-${safeTitle}.${extension}`);
-  const file = await File.downloadFileAsync(url, destination, { idempotent: true });
+  const token = await AsyncStorage.getItem("access_token");
+  const file = await File.downloadFileAsync(url, destination, {
+    idempotent: true,
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
   const cached = (await readCache()).filter((item) => item.id !== resource.id);
   cached.push({ id: resource.id, uri: file.uri, fileUrl: resource.file_url, title: resource.title });
   await AsyncStorage.setItem(KEY, JSON.stringify(cached));

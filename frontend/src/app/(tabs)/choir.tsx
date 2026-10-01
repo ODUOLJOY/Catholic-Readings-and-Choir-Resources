@@ -13,6 +13,7 @@ import {
   Linking,
 } from "react-native";
 import { api } from "@/lib/api";
+import { API_URL } from "@/config/api";
 import { cacheResource } from "@/services/offlineStore";
 import { favoriteService, Favorite } from "@/services/favoriteService";
 import { ReportButton } from "@/components/ReportButton";
@@ -35,6 +36,7 @@ interface ChoirResource {
   tempo?: string;
   duration?: string;
   choir_voice?: string;
+  parish_id?: number | null;
 }
 
 const categories = [
@@ -297,8 +299,8 @@ export default function Choir() {
     await loadResources();
   }
 
-  async function openFile(url: string) {
-    if (!url) {
+  async function openFile(resource: ChoirResource) {
+    if (!resource.file_url) {
       Alert.alert(
         "Unavailable",
         "This resource does not have a file."
@@ -307,8 +309,12 @@ export default function Choir() {
     }
 
     try {
+      const fileUri =
+        resource.parish_id == null
+          ? new URL(resource.file_url, API_URL).toString()
+          : await cacheResource(resource);
       const supported =
-        await Linking.canOpenURL(url);
+        await Linking.canOpenURL(fileUri);
 
       if (!supported) {
         Alert.alert(
@@ -318,7 +324,7 @@ export default function Choir() {
         return;
       }
 
-      await Linking.openURL(url);
+      await Linking.openURL(fileUri);
     } catch {
       Alert.alert(
         "Error",
@@ -436,7 +442,7 @@ export default function Choir() {
         <TouchableOpacity
           style={styles.button}
           onPress={() =>
-            openFile(item.file_url)
+            openFile(item)
           }
         >
           <Text style={styles.buttonText}>

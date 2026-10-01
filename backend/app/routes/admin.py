@@ -17,6 +17,10 @@ from app.auth.security import decode_token
 from app.core.dependencies import get_current_user
 from app.routes.auth_dependency import require_super_admin
 from app.schemas.user import UserAdminResponse
+from app.services.authorization import (
+    can_manage_choir_resource_scope,
+    manageable_choir_parish_ids,
+)
 
 router = APIRouter(
     prefix="/api/admin",
@@ -254,13 +258,13 @@ def pending_resources(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_admin(current_user)
-    return (
-        db.query(ChoirResource)
-        .filter(ChoirResource.is_approved == False)
-        .order_by(ChoirResource.created_at.desc())
-        .all()
-    )
+    pending = db.query(ChoirResource).filter(ChoirResource.is_approved.is_(False))
+    if current_user.role != "super_admin":
+        parish_ids = manageable_choir_parish_ids(db, current_user)
+        if not parish_ids:
+            return []
+        pending = pending.filter(ChoirResource.parish_id.in_(parish_ids))
+    return pending.order_by(ChoirResource.created_at.desc()).all()
 
 
 @router.put("/approve-resource/{resource_id}")
@@ -269,13 +273,24 @@ def approve_resource(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_admin(current_user)
     resource = db.query(ChoirResource).filter(ChoirResource.id == resource_id).first()
     if not resource:
         raise HTTPException(404, "Resource not found.")
+    if not can_manage_choir_resource_scope(db, current_user, resource.parish_id):
+        raise HTTPException(403, "You cannot manage this resource.")
     resource.is_approved = True
     resource.is_published = True
-    _audit_admin_action(db, current_user, "resource.approved", "choir_resource", resource.id)
+    resource.approved_at = datetime.now(timezone.utc)
+    resource.published_at = resource.approved_at
+    _audit_admin_action(
+        db,
+        current_user,
+        "resource.approved",
+        "choir_resource",
+        resource.id,
+        "parish" if resource.parish_id is not None else "global",
+        resource.parish_id,
+    )
     db.commit()
     return {"message": "Resource approved successfully."}
 
@@ -286,13 +301,27 @@ def reject_resource(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_admin(current_user)
     resource = db.query(ChoirResource).filter(ChoirResource.id == resource_id).first()
     if not resource:
         raise HTTPException(404, "Resource not found.")
+    if not can_manage_choir_resource_scope(db, current_user, resource.parish_id):
+        raise HTTPException(403, "You cannot manage this resource.")
+    from app.services.choir_resources import local_resource_file
+
+    file_path = local_resource_file(resource)
     db.delete(resource)
-    _audit_admin_action(db, current_user, "resource.rejected", "choir_resource", resource_id)
+    _audit_admin_action(
+        db,
+        current_user,
+        "resource.rejected",
+        "choir_resource",
+        resource_id,
+        "parish" if resource.parish_id is not None else "global",
+        resource.parish_id,
+    )
     db.commit()
+    if file_path and file_path.exists():
+        file_path.unlink()
     return {"message": "Resource rejected successfully."}
 
 
@@ -395,6 +424,8 @@ def _audit_admin_action(
     action: str,
     target_type: str,
     target_id: int,
+    scope_type: str = "global",
+    scope_id: int | None = None,
 ) -> None:
     db.add(
         CommunityAuditLog(
@@ -403,6 +434,7 @@ def _audit_admin_action(
             target_type=target_type,
             target_id=target_id,
             role=actor.role,
-            scope_type="global",
+            scope_type=scope_type,
+            scope_id=scope_id,
         )
     )

@@ -10,6 +10,13 @@ from app.models.locations import Deanery, Diocese
 from app.models.parish import Parish
 from app.models.user import User
 
+CHOIR_RESOURCE_MANAGER_ROLES = {
+    "parish_admin",
+    "diocesan_admin",
+    "parish_music_director",
+    "choir_director",
+}
+
 
 def user_belongs_to_scope(
     db: Session,
@@ -149,6 +156,88 @@ def can_manage_community_scope(
         {"parish_admin", "diocesan_admin"},
         scope_type,
         scope_id,
+    )
+
+
+def can_manage_choir_resource_scope(
+    db: Session,
+    user: User,
+    parish_id: int | None,
+) -> bool:
+    if user.role == "super_admin":
+        return True
+    return bool(
+        parish_id is not None
+        and scope_exists(db, "parish", parish_id)
+        and has_scoped_role(
+            db,
+            user,
+            CHOIR_RESOURCE_MANAGER_ROLES,
+            "parish",
+            parish_id,
+        )
+    )
+
+
+def manageable_choir_parish_ids(db: Session, user: User) -> list[int]:
+    if user.role == "super_admin":
+        return [
+            parish_id
+            for (parish_id,) in db.query(Parish.id).order_by(Parish.id).all()
+        ]
+
+    assignments = (
+        db.query(RoleAssignment)
+        .filter(
+            RoleAssignment.user_id == user.id,
+            RoleAssignment.is_active.is_(True),
+            RoleAssignment.role.in_(CHOIR_RESOURCE_MANAGER_ROLES),
+        )
+        .all()
+    )
+    parish_ids: set[int] = set()
+    for assignment in assignments:
+        if assignment.scope_type == "global":
+            return [
+                parish_id
+                for (parish_id,) in db.query(Parish.id).order_by(Parish.id).all()
+            ]
+        if assignment.scope_type == "parish" and assignment.scope_id is not None:
+            parish_ids.add(assignment.scope_id)
+        elif assignment.scope_type == "deanery" and assignment.scope_id is not None:
+            parish_ids.update(
+                parish_id
+                for (parish_id,) in db.query(Parish.id).filter(
+                    Parish.deanery_id == assignment.scope_id
+                ).all()
+            )
+        elif assignment.scope_type == "diocese" and assignment.scope_id is not None:
+            parish_ids.update(
+                parish_id
+                for (parish_id,) in db.query(Parish.id).filter(
+                    Parish.diocese_id == assignment.scope_id
+                ).all()
+            )
+    existing_parish_ids = {
+        parish_id
+        for (parish_id,) in db.query(Parish.id).filter(
+            Parish.id.in_(parish_ids)
+        ).all()
+    } if parish_ids else set()
+    return sorted(existing_parish_ids)
+
+
+def can_view_choir_resource(
+    db: Session,
+    user: User | None,
+    parish_id: int | None,
+) -> bool:
+    if parish_id is None:
+        return True
+    if user is None:
+        return False
+    return user_belongs_to_scope(db, user, "parish", parish_id) or (
+        can_manage_choir_resource_scope(db, user, parish_id)
     )
 
 

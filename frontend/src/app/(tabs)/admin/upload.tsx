@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -78,6 +78,33 @@ export default function UploadScreen() {
     );
 
   const [uploading, setUploading] = useState(false);
+  const [parishes, setParishes] = useState<{ id: number; name: string }[]>([]);
+  const [parishId, setParishId] = useState<number | null>(null);
+  const [scopeLoadError, setScopeLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadUploadScopes() {
+      if (!(await AsyncStorage.getItem("access_token"))) {
+        return;
+      }
+      try {
+        const response = await api.get<{ parishes: { id: number; name: string }[] }>(
+          "/api/uploads/scopes"
+        );
+        setParishes(response.data.parishes);
+        if (response.data.parishes.length === 1) {
+          setParishId(response.data.parishes[0].id);
+        }
+      } catch (error: any) {
+        setScopeLoadError(
+          error?.response?.data?.detail ||
+            "Parish scopes could not be loaded; global submissions remain available."
+        );
+      }
+    }
+
+    void loadUploadScopes();
+  }, []);
 
   async function pickFile() {
     try {
@@ -85,7 +112,7 @@ export default function UploadScreen() {
         await DocumentPicker.getDocumentAsync({
           copyToCacheDirectory: true,
           multiple: false,
-          type: "*/*",
+          type: ["application/pdf", "image/*", "audio/*", "video/*"],
         });
 
       if (!result.canceled) {
@@ -132,23 +159,49 @@ export default function UploadScreen() {
 
       const formData = new FormData();
       formData.append("title", title.trim());
-      formData.append("description", content.trim());
+      const description = [
+        content.trim(),
+        reference.trim() ? `Bible reference: ${reference.trim()}` : "",
+        `Liturgical season: ${season}`,
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+      formData.append("description", description);
       formData.append("category", category);
       formData.append("language", language);
-      formData.append("file", {
-        uri: file.uri,
-        name: file.name,
-        type: file.mimeType || "application/octet-stream",
-      } as any);
+      formData.append("global_scope", String(parishId === null));
+      if (parishId !== null) {
+        formData.append("parish_id", String(parishId));
+      }
+      if (Platform.OS === "web") {
+        const selectedFile = await fetch(file.uri).then((response) => {
+          if (!response.ok) {
+            throw new Error("Unable to read the selected file.");
+          }
+          return response.blob();
+        });
+        formData.append("file", selectedFile, file.name);
+      } else {
+        const nativeFormData = formData as FormData & {
+          append(
+            name: string,
+            value: { uri: string; name: string; type: string }
+          ): void;
+        };
+        nativeFormData.append("file", {
+          uri: file.uri,
+          name: file.name,
+          type: file.mimeType || "application/octet-stream",
+        });
+      }
 
       await api.post("/api/uploads/", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-        timeout: 30000,
+        timeout: 600000,
       });
 
       Alert.alert(
         "Submitted for approval",
-        "Your resource was uploaded and is waiting for administrator approval."
+        "Your resource was uploaded and is waiting for an authorized reviewer."
       );
 
       clearForm();
@@ -171,6 +224,7 @@ export default function UploadScreen() {
     setSeason("Ordinary Time");
     setLanguage("English");
     setFile(null);
+    setParishId(null);
   }
 
   return (
@@ -352,9 +406,7 @@ export default function UploadScreen() {
           editable={!uploading}
         />
 
-        <Text style={styles.label}>
-          Optional File
-        </Text>
+        <Text style={styles.label}>File (required)</Text>
 
         <Pressable
           style={styles.fileButton}
@@ -391,6 +443,54 @@ export default function UploadScreen() {
           />
         </Pressable>
 
+        {parishes.length > 0 ? (
+          <>
+            <Text style={styles.label}>Resource Scope</Text>
+            <View style={styles.scopeRow}>
+              <Pressable
+                style={[
+                  styles.languageChip,
+                  parishId === null && styles.chipActive,
+                ]}
+                onPress={() => setParishId(null)}
+                disabled={uploading}
+              >
+                <Text
+                  style={[
+                    styles.chipText,
+                    parishId === null && styles.chipTextActive,
+                  ]}
+                >
+                  Global
+                </Text>
+              </Pressable>
+              {parishes.map((parish) => (
+                <Pressable
+                  key={parish.id}
+                  style={[
+                    styles.languageChip,
+                    parishId === parish.id && styles.chipActive,
+                  ]}
+                  onPress={() => setParishId(parish.id)}
+                  disabled={uploading}
+                >
+                  <Text
+                    style={[
+                      styles.chipText,
+                      parishId === parish.id && styles.chipTextActive,
+                    ]}
+                  >
+                    {parish.name}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </>
+        ) : null}
+        {scopeLoadError ? (
+          <Text style={styles.scopeError}>{scopeLoadError}</Text>
+        ) : null}
+
         <View style={styles.notice}>
           <Ionicons
             name="information-circle-outline"
@@ -399,8 +499,8 @@ export default function UploadScreen() {
           />
 
           <Text style={styles.noticeText}>
-            Submitted resources remain pending until
-            an administrator reviews and approves
+            Submitted files stay private until an
+            authorized parish or platform reviewer approves
             them.
           </Text>
         </View>
@@ -550,6 +650,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     marginBottom: 8,
+  },
+  scopeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 12,
+  },
+  scopeError: {
+    color: "#A32626",
+    fontSize: 13,
+    marginBottom: 12,
   },
 
   languageChip: {

@@ -53,8 +53,13 @@ NEW_TABLES = [
 
 def upgrade() -> None:
     bind = op.get_bind()
+    offline = op.get_context().as_sql
+    if not offline:
+        from app.services.migration_preflight import verify_legacy_schema
+
+        verify_legacy_schema(bind)
     for table in NEW_TABLES:
-        table.create(bind=bind, checkfirst=True)
+        table.create(bind=bind, checkfirst=not offline)
     from sqlalchemy import exists, insert, literal, select
     from app.models.user import User
 

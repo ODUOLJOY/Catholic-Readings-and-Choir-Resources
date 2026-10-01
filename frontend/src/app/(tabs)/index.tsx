@@ -79,10 +79,26 @@ export default function Home() {
         </View>
       )}
 
+      <Pressable
+        style={styles.mainCard}
+        onPress={() => router.push("/community")}
+      >
+        <View style={styles.iconCircle}>
+          <Ionicons name="people-outline" size={28} color="#0B6623" />
+        </View>
+        <View style={styles.cardContent}>
+          <Text style={styles.cardTitle}>Parish Community</Text>
+          <Text style={styles.cardText}>
+            Official announcements, events, prayer intentions, suggestions and member conversation.
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={24} color="#777" />
+      </Pressable>
+
       {/* DAILY READINGS */}
       <Pressable
         style={styles.mainCard}
-        onPress={() => router.push("/(tabs)/readings")}
+        onPress={() => router.push("/readings")}
       >
         <View style={styles.iconCircle}>
           <MaterialCommunityIcons

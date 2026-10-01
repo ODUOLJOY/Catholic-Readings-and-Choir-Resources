@@ -9,10 +9,6 @@ export default function Favorites() {
   const [resources, setResources] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadFavorites();
-  }, []);
-
   async function loadFavorites() {
     setLoading(true);
     try {
@@ -42,6 +38,10 @@ export default function Favorites() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    void Promise.resolve().then(loadFavorites);
+  }, []);
 
   async function removeFavorite(favId: number) {
     try {

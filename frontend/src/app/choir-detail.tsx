@@ -13,10 +13,6 @@ export default function ChoirDetail() {
   const [isFavorited, setIsFavorited] = useState(false);
   const [favoriteId, setFavoriteId] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (id) void load();
-  }, [id]);
-
   async function load() {
     try {
       setLoading(true);
@@ -37,6 +33,10 @@ export default function ChoirDetail() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (id) void Promise.resolve().then(load);
+  }, [id]);
 
   async function toggleFavorite() {
     if (!resource) return;

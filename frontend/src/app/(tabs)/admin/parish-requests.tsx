@@ -6,10 +6,6 @@ export default function ParishRequests() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchRequests();
-  }, []);
-
   const fetchRequests = async () => {
     try {
       const res = await api.get("/api/v1/parish-requests");
@@ -20,6 +16,10 @@ export default function ParishRequests() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    void Promise.resolve().then(fetchRequests);
+  }, []);
 
   const updateStatus = async (id: number, status: string) => {
     try {

@@ -15,10 +15,6 @@ export default function Calendar() {
   const [items, setItems] = useState<CalendarDay[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    void load();
-  }, []);
-
   async function load() {
     try {
       setLoading(true);
@@ -37,6 +33,10 @@ export default function Calendar() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    void Promise.resolve().then(load);
+  }, []);
 
   return (
     <View style={styles.container}>

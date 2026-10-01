@@ -1,13 +1,16 @@
 from sqlalchemy import create_engine
+from sqlalchemy import inspect
 from app.db.database import Base
 import app.models.liturgical
+import app.models.locations
+import app.models.parish
 import app.models.readings
+import app.models.user
 # Import other models if needed
 
 engine = create_engine("sqlite:///:memory:")
 Base.metadata.create_all(bind=engine)
 
-# Inspect tables
-from sqlalchemy import inspect
 inspector = inspect(engine)
-print(inspector.get_table_names())
+tables = set(inspector.get_table_names())
+assert {"users", "dioceses", "deaneries", "parishes", "readings"} <= tables

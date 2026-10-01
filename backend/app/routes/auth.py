@@ -1,4 +1,5 @@
-from datetime import timedelta
+import hashlib
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -7,11 +8,18 @@ from app.db.database import get_db
 from app.models.user import User
 from app.schemas.auth import (
     LoginRequest,
+    ForgotPasswordRequest,
     RegisterRequest,
+    ResetPasswordRequest,
     TokenResponse,
 )
 from app.schemas.user import UserResponse
-from app.services.auth_service import AuthService
+from app.services.auth_service import AuthService, generate_reset_token
+from app.services.email import (
+    EmailDeliveryError,
+    email_delivery_configured,
+    send_password_reset_email,
+)
 from app.routes.auth_dependency import get_current_user
 from app.auth.security import (
     create_access_token,
@@ -22,7 +30,7 @@ router = APIRouter(
     prefix="/api/auth",
     tags=["Authentication"],
 )
-
+logger = logging.getLogger(__name__)
 
 @router.post(
     "/register",
@@ -146,39 +154,48 @@ def logout():
 
 @router.post("/forgot-password")
 def forgot_password(
-    email: str,
+    payload: ForgotPasswordRequest,
     db: Session = Depends(get_db),
 ):
+    if not email_delivery_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Password reset email delivery is not configured.",
+        )
+
     user = (
         db.query(User)
-        .filter(User.email == email.lower())
+        .filter(User.email == str(payload.email).lower())
         .first()
     )
 
-    if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found.",
-        )
-
-    token = AuthService.create_password_reset_token(user)
+    if user and user.is_active:
+        token = generate_reset_token(user)
+        user.password_reset_token = hashlib.sha256(
+            token.encode("utf-8")
+        ).hexdigest()
+        db.commit()
+        try:
+            send_password_reset_email(user.email, token)
+        except EmailDeliveryError:
+            user.password_reset_token = None
+            db.commit()
+            logger.error("Password reset email delivery failed.")
 
     return {
-        "message": "Password reset token generated.",
-        "reset_token": token,
+        "message": "If the account exists and email delivery is available, password reset instructions will be sent.",
     }
 
 
 @router.post("/reset-password")
 def reset_password(
-    token: str,
-    password: str,
+    payload: ResetPasswordRequest,
     db: Session = Depends(get_db),
 ):
     user = AuthService.reset_password(
         db=db,
-        token=token,
-        new_password=password,
+        token=payload.token,
+        new_password=payload.password,
     )
 
     return {

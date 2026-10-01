@@ -42,6 +42,20 @@ def get_admin_stats(
 def get_dioceses(db: Session = Depends(get_db)):
     return db.query(Diocese).all()
 
+
+@router.get("/dioceses/{diocese_id}/deaneries")
+def get_diocese_deaneries(diocese_id: int, db: Session = Depends(get_db)):
+    diocese = db.query(Diocese).filter(Diocese.id == diocese_id).first()
+    if not diocese:
+        raise HTTPException(status_code=404, detail="Diocese not found")
+    return (
+        db.query(Deanery)
+        .filter(Deanery.diocese_id == diocese_id, Deanery.is_active.is_(True))
+        .order_by(Deanery.name)
+        .all()
+    )
+
+
 @router.get("/parishes")
 def get_all_parishes(db: Session = Depends(get_db)):
     return db.query(Parish).all()

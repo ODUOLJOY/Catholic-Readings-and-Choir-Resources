@@ -5,6 +5,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
+from app.models.favorite import Favorite
 from app.models.readings import Reading
 from app.models.user import User
 from app.routes.auth_dependency import (
@@ -288,6 +289,19 @@ def unpublish_reading(
 
 @router.get("/me/bookmarks")
 def my_bookmarks(
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return current_user.bookmarked_readings
+    return (
+        db.query(Reading)
+        .join(
+            Favorite,
+            Favorite.target_resource_id == Reading.id,
+        )
+        .filter(
+            Favorite.user_id == current_user.id,
+            Favorite.resource_type == "reading",
+        )
+        .order_by(Favorite.created_at.desc())
+        .all()
+    )

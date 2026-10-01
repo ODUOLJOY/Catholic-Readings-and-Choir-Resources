@@ -1,5 +1,6 @@
 import base64
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 import requests
@@ -33,6 +34,8 @@ def _base_url() -> str:
 
 
 def _access_token() -> str:
+    if not settings.MPESA_CONSUMER_KEY or not settings.MPESA_CONSUMER_SECRET:
+        raise MpesaError("M-Pesa credentials are not configured.")
     credentials = f"{settings.MPESA_CONSUMER_KEY}:{settings.MPESA_CONSUMER_SECRET}".encode()
     response = requests.get(
         f"{_base_url()}/oauth/v1/generate?grant_type=client_credentials",
@@ -44,6 +47,37 @@ def _access_token() -> str:
     if not token:
         raise MpesaError("M-Pesa did not return an access token.")
     return token
+
+
+def query_stk_status(checkout_request_id: str) -> dict[str, Any]:
+    if not settings.MPESA_SHORTCODE or not settings.MPESA_PASSKEY:
+        raise MpesaError("M-Pesa shortcode and passkey are not configured.")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    password = base64.b64encode(
+        f"{settings.MPESA_SHORTCODE}{settings.MPESA_PASSKEY}{timestamp}".encode()
+    ).decode()
+    payload = {
+        "BusinessShortCode": settings.MPESA_SHORTCODE,
+        "Password": password,
+        "Timestamp": timestamp,
+        "CheckoutRequestID": checkout_request_id,
+    }
+    try:
+        response = requests.post(
+            f"{_base_url()}/mpesa/stkpushquery/v1/query",
+            json=payload,
+            headers={"Authorization": f"Bearer {_access_token()}"},
+            timeout=30,
+        )
+        response.raise_for_status()
+        result = response.json()
+    except requests.RequestException as error:
+        raise MpesaError("Unable to verify the M-Pesa transaction status.") from error
+    except ValueError as error:
+        raise MpesaError("M-Pesa returned an invalid transaction status.") from error
+    if not isinstance(result, dict):
+        raise MpesaError("M-Pesa returned an invalid transaction status.")
+    return result
 
 
 def start_stk_push(db: Session, user_id: int, phone_number: str) -> Payment:
@@ -95,29 +129,70 @@ def start_stk_push(db: Session, user_id: int, phone_number: str) -> Payment:
 
 
 def process_callback(db: Session, callback: dict[str, Any]) -> Payment | None:
+    if not isinstance(callback, dict):
+        raise ValueError("Invalid M-Pesa callback payload.")
     body = callback.get("Body", {})
+    if not isinstance(body, dict):
+        raise ValueError("Invalid M-Pesa callback payload.")
     stk = body.get("stkCallback", {})
+    if not isinstance(stk, dict):
+        raise ValueError("Invalid M-Pesa callback payload.")
     checkout_id = stk.get("CheckoutRequestID")
-    if not checkout_id:
-        return None
+    if not isinstance(checkout_id, str) or not checkout_id:
+        raise ValueError("Missing M-Pesa checkout request ID.")
 
-    payment = db.query(Payment).filter(Payment.checkout_request_id == checkout_id).first()
+    payment = (
+        db.query(Payment)
+        .filter(Payment.checkout_request_id == checkout_id)
+        .with_for_update()
+        .first()
+    )
     if not payment:
         return None
     if payment.status == "completed":
         return payment
 
-    result_code = int(stk.get("ResultCode", 1))
+    try:
+        result_code = int(stk["ResultCode"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError("Invalid M-Pesa callback result code.") from error
+
+    provider_status = query_stk_status(checkout_id)
+    try:
+        verified_result_code = int(provider_status["ResultCode"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise MpesaError("M-Pesa has not confirmed the transaction result.") from error
+    if verified_result_code != result_code:
+        raise MpesaError("M-Pesa callback does not match the confirmed transaction status.")
+
     payment.result_code = result_code
-    payment.result_description = stk.get("ResultDesc")
+    payment.result_description = provider_status.get("ResultDesc") or stk.get("ResultDesc")
     payment.status = "completed" if result_code == 0 else "failed"
 
     if result_code == 0:
+        metadata = stk.get("CallbackMetadata", {})
+        items_list = metadata.get("Item", []) if isinstance(metadata, dict) else []
         items = {
             item.get("Name"): item.get("Value")
-            for item in stk.get("CallbackMetadata", {}).get("Item", [])
-        }
-        payment.mpesa_receipt_number = items.get("MpesaReceiptNumber")
+            for item in items_list
+            if isinstance(item, dict)
+        } if isinstance(items_list, list) else {}
+        try:
+            callback_amount = Decimal(str(items["Amount"]))
+            callback_phone = normalize_phone(str(items["PhoneNumber"]))
+        except (KeyError, TypeError, ValueError, InvalidOperation) as error:
+            raise ValueError("M-Pesa callback is missing valid payment details.") from error
+
+        receipt = items.get("MpesaReceiptNumber")
+        if (
+            callback_amount != Decimal(payment.amount)
+            or callback_phone != normalize_phone(payment.phone_number)
+            or not isinstance(receipt, str)
+            or not receipt.strip()
+        ):
+            raise ValueError("M-Pesa callback payment details do not match the pending payment.")
+
+        payment.mpesa_receipt_number = receipt.strip()
         now = datetime.now(timezone.utc)
         current = (
             db.query(Payment)

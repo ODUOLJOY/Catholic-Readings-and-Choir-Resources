@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from uuid import uuid4
 from pathlib import Path
@@ -11,8 +12,11 @@ from app.models.user import User
 from app.models.parish_request import ParishRequest
 from app.models.locations import Diocese, Deanery
 from app.models.parish import Parish
+from app.models.community import CommunityAuditLog, RoleAssignment
 from app.auth.security import decode_token
 from app.core.dependencies import get_current_user
+from app.routes.auth_dependency import require_super_admin
+from app.schemas.user import UserAdminResponse
 
 router = APIRouter(
     prefix="/api/admin",
@@ -24,10 +28,10 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 
 
 def require_admin(user: User):
-    if user.role not in ["admin", "super_admin"]:
+    if user.role != "super_admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required.",
+            detail="Platform administrator access required.",
         )
     return user
 
@@ -62,7 +66,7 @@ def dashboard(
     }
 
 
-@router.get("/users")
+@router.get("/users", response_model=list[UserAdminResponse])
 def get_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -79,10 +83,13 @@ def change_role(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_admin(current_user)
+    require_super_admin(current_user)
 
-    if role not in ["user", "admin", "super_admin"]:
-        raise HTTPException(400, "Invalid role.")
+    if role != "user":
+        raise HTTPException(
+            400,
+            "Elevated roles must be granted through an approved scoped role request or the secure bootstrap process.",
+        )
 
     user = db.query(User).filter(User.id == user_id).first()
 
@@ -90,6 +97,25 @@ def change_role(
         raise HTTPException(404, "User not found.")
 
     user.role = role
+    user_assignments = db.query(RoleAssignment).filter(
+        RoleAssignment.user_id == user.id,
+        RoleAssignment.is_active.is_(True),
+    ).all()
+    for assignment in user_assignments:
+        assignment.is_active = False
+        assignment.revoked_by = current_user.id
+        assignment.revoked_at = datetime.now(timezone.utc)
+    db.add(
+        CommunityAuditLog(
+            actor_id=current_user.id,
+            action="user.demoted",
+            target_type="user",
+            target_id=user.id,
+            role="user",
+            scope_type="global",
+            reason="Platform administrator demoted user.",
+        )
+    )
 
     db.commit()
     db.refresh(user)
@@ -114,6 +140,15 @@ def disable_user(
         raise HTTPException(404, "User not found.")
 
     user.is_active = False
+    db.add(
+        CommunityAuditLog(
+            actor_id=current_user.id,
+            action="user.suspended",
+            target_type="user",
+            target_id=user.id,
+            scope_type="global",
+        )
+    )
 
     db.commit()
 
@@ -139,6 +174,9 @@ def update_parish_request(
         raise HTTPException(404, "Request not found.")
         
     req.status = status
+    _audit_admin_action(
+        db, current_user, f"parish_request.{status}", "parish_request", req.id
+    )
     db.commit()
     return {"message": "Status updated."}
 
@@ -157,6 +195,15 @@ def enable_user(
         raise HTTPException(404, "User not found.")
 
     user.is_active = True
+    db.add(
+        CommunityAuditLog(
+            actor_id=current_user.id,
+            action="user.reactivated",
+            target_type="user",
+            target_id=user.id,
+            scope_type="global",
+        )
+    )
 
     db.commit()
 
@@ -179,6 +226,7 @@ def delete_user(
         raise HTTPException(404, "User not found.")
 
     db.delete(user)
+    _audit_admin_action(db, current_user, "user.deleted", "user", user.id)
     db.commit()
 
     return {
@@ -227,6 +275,7 @@ def approve_resource(
         raise HTTPException(404, "Resource not found.")
     resource.is_approved = True
     resource.is_published = True
+    _audit_admin_action(db, current_user, "resource.approved", "choir_resource", resource.id)
     db.commit()
     return {"message": "Resource approved successfully."}
 
@@ -242,6 +291,7 @@ def reject_resource(
     if not resource:
         raise HTTPException(404, "Resource not found.")
     db.delete(resource)
+    _audit_admin_action(db, current_user, "resource.rejected", "choir_resource", resource_id)
     db.commit()
     return {"message": "Resource rejected successfully."}
 
@@ -265,6 +315,7 @@ def approve_reading(
 
     reading.approved = True
     reading.published = True
+    _audit_admin_action(db, current_user, "reading.published", "reading", reading.id)
 
     db.commit()
     db.refresh(reading)
@@ -290,6 +341,7 @@ def delete_reading(
         raise HTTPException(404, "Reading not found.")
 
     db.delete(reading)
+    _audit_admin_action(db, current_user, "reading.deleted", "reading", reading.id)
     db.commit()
 
     return {
@@ -335,3 +387,22 @@ async def upload_file(
         "filename": filename,
         "url": f"/uploads/{filename}",
     }
+
+
+def _audit_admin_action(
+    db: Session,
+    actor: User,
+    action: str,
+    target_type: str,
+    target_id: int,
+) -> None:
+    db.add(
+        CommunityAuditLog(
+            actor_id=actor.id,
+            action=action,
+            target_type=target_type,
+            target_id=target_id,
+            role=actor.role,
+            scope_type="global",
+        )
+    )

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.models.parish import ParishRequest
+from app.models.parish_request import ParishRequest
 from app.models.user import User
 from app.routes.auth_dependency import get_current_user
 from app.routes.admin import require_admin
@@ -24,11 +24,11 @@ def create_request(
 ):
     new_request = ParishRequest(
         parish_name=payload.parish_name,
-        jurisdiction_name=payload.jurisdiction_name,
+        diocese_name=payload.jurisdiction_name,
         deanery_name=payload.deanery_name,
-        town=payload.town,
-        details=payload.details,
-        submitted_by_id=current_user.id
+        location=payload.town,
+        additional_info=payload.details,
+        user_id=current_user.id
     )
     db.add(new_request)
     db.commit()

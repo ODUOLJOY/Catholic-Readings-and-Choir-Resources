@@ -7,10 +7,6 @@ export default function ManageParishes() {
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
 
-  useEffect(() => {
-    fetchParishes();
-  }, []);
-
   const fetchParishes = async () => {
     try {
       const res = await api.get("/api/v1/locations/parishes");
@@ -21,6 +17,10 @@ export default function ManageParishes() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    void Promise.resolve().then(fetchParishes);
+  }, []);
 
   return (
     <View style={styles.container}>

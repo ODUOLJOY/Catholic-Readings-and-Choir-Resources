@@ -1,0 +1,47 @@
+from app.models.community import (
+    CommunityAnnouncement,
+    CommunityAuditLog,
+    CommunityConversation,
+    CommunityEvent,
+    CommunityGroup,
+    CommunityMessage,
+    CommunityNotificationPreference,
+    CommunitySuggestion,
+    ConversationMember,
+    GroupMembership,
+    MemberBlock,
+    MessageReaction,
+    ParishMembership,
+    PrayerIntention,
+    PrayerReaction,
+    RoleAssignment,
+    RoleRequest,
+)
+from app.models.locations import Deanery, Diocese
+from app.models.parish import Parish
+from app.models.user import User, UserRole
+
+__all__ = [
+    "CommunityAnnouncement",
+    "CommunityAuditLog",
+    "CommunityConversation",
+    "CommunityEvent",
+    "CommunityGroup",
+    "CommunityMessage",
+    "CommunityNotificationPreference",
+    "CommunitySuggestion",
+    "ConversationMember",
+    "Deanery",
+    "Diocese",
+    "GroupMembership",
+    "MemberBlock",
+    "MessageReaction",
+    "Parish",
+    "ParishMembership",
+    "PrayerIntention",
+    "PrayerReaction",
+    "RoleAssignment",
+    "RoleRequest",
+    "User",
+    "UserRole",
+]

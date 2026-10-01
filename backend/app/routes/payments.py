@@ -71,6 +71,11 @@ def subscription_status(
 
 @router.post("/mpesa/callback")
 async def mpesa_callback(request: Request, db: Session = Depends(get_db)):
-    callback = await request.json()
-    process_callback(db, callback)
+    try:
+        callback = await request.json()
+        process_callback(db, callback)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except MpesaError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
     return {"ResultCode": 0, "ResultDesc": "Accepted"}

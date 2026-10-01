@@ -5,6 +5,7 @@ import { ActivityIndicator } from "react-native";
 import { ReportButton } from "@/components/ReportButton";
 import { favoriteService } from "@/services/favoriteService";
 import { Ionicons } from "@expo/vector-icons";
+import { useLocalSearchParams } from "expo-router";
 
 interface Saint {
   id: number;

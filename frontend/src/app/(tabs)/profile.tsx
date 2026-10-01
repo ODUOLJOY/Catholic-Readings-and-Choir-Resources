@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Text,
   View,
+  Switch,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api } from "@/lib/api";
@@ -24,15 +25,30 @@ interface User {
   full_name?: string;
   role?: string;
   parish_id?: number;
+  parish_membership_status?: string | null;
 }
+
+type CommunityRole = {
+  id: number;
+  role: string;
+  scope_type: string;
+  scope_id: number | null;
+  ministry?: string | null;
+};
+
+type CommunityProfile = {
+  parish_name: string | null;
+  deanery_name: string | null;
+  diocese_name: string | null;
+  parish_membership_status: string | null;
+  roles: CommunityRole[];
+};
 
 export default function Profile() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadProfile();
-  }, []);
+  const [membershipStatus, setMembershipStatus] = useState<string | null>(null);
+  const [community, setCommunity] = useState<CommunityProfile | null>(null);
 
   async function loadProfile() {
     try {
@@ -52,10 +68,15 @@ export default function Profile() {
       }
 
       try {
-        const response = await api.get("/api/auth/me");
+        const [response, communityResponse] = await Promise.all([
+          api.get("/api/auth/me"),
+          api.get("/api/community/me"),
+        ]);
         const data = response.data;
 
         setUser(data);
+        setCommunity(communityResponse.data);
+        setMembershipStatus(communityResponse.data.parish_membership_status ?? null);
 
         await AsyncStorage.setItem(
           "user",
@@ -73,6 +94,10 @@ export default function Profile() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    void Promise.resolve().then(loadProfile);
+  }, []);
 
   async function logout() {
     Alert.alert(
@@ -179,6 +204,19 @@ export default function Profile() {
       </Text>
 
       <View style={styles.section}>
+        <View style={styles.membershipSummary}>
+          <Text style={styles.membershipHeading}>Community membership</Text>
+          <Text style={styles.membershipText}>Parish: {community?.parish_name ?? "Not selected"}</Text>
+          <Text style={styles.membershipText}>Deanery: {community?.deanery_name ?? "Not available"}</Text>
+          <Text style={styles.membershipText}>Diocese: {community?.diocese_name ?? "Not available"}</Text>
+          <Text style={styles.membershipText}>Verification: {membershipStatus ?? "Not requested"}</Text>
+          <Text style={styles.membershipHeading}>Approved roles</Text>
+          {community?.roles.length ? community.roles.map((item) => (
+            <Text key={item.id} style={styles.membershipText}>
+              {item.role.replaceAll("_", " ")} · {item.scope_type}{item.scope_id ? ` #${item.scope_id}` : " (global)"}{item.ministry ? ` · ${item.ministry}` : ""}
+            </Text>
+          )) : <Text style={styles.membershipText}>No approved community roles</Text>}
+        </View>
         <ProfileRow
           icon={
             <Ionicons
@@ -205,6 +243,27 @@ export default function Profile() {
           title="Subscription"
           subtitle="Pay KES 10 monthly via M-Pesa"
           onPress={() => router.push("/(tabs)/payment")}
+        />
+
+        <ProfileRow
+          icon={<Ionicons name="people-outline" size={22} color="#0B6623" />}
+          title="Parish Community"
+          subtitle={`Membership status: ${membershipStatus ?? "not verified"}`}
+          onPress={() => router.push("/community")}
+        />
+
+        <ProfileRow
+          icon={<Ionicons name="ribbon-outline" size={22} color="#0B6623" />}
+          title="Request a Role"
+          subtitle="Request a scoped community or ministry role"
+          onPress={() => router.push("/role-requests")}
+        />
+
+        <ProfileRow
+          icon={<Ionicons name="notifications-outline" size={22} color="#0B6623" />}
+          title="Notification Preferences"
+          subtitle="Choose in-app announcement and event notices"
+          onPress={() => router.push("/notification-preferences")}
         />
       </View>
 
@@ -417,6 +476,25 @@ const styles = StyleSheet.create({
     color: "#0B6623",
     fontSize: 11,
     fontWeight: "800",
+  },
+
+  membershipSummary: {
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+    backgroundColor: "#F7FAF8",
+  },
+
+  membershipHeading: {
+    color: "#183D24",
+    fontWeight: "800",
+    marginBottom: 7,
+  },
+
+  membershipText: {
+    color: "#59665C",
+    fontSize: 13,
+    lineHeight: 20,
   },
 
   sectionTitle: {

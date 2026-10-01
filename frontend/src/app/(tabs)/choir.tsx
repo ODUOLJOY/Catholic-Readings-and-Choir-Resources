@@ -688,7 +688,7 @@ export default function Choir() {
           season !== "All Seasons" ||
           language !== "All Languages" ||
           fileType !== "All Types" ||
-          search.trim()) && (
+          search.trim().length > 0) && (
           <TouchableOpacity
             onPress={() => {
               setCategory("All");

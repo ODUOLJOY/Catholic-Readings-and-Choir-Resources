@@ -1,9 +1,13 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
-from app.database import init_db
+from app.database import get_db, init_db
+from app.core.config import settings
 from app.routes import (
     admin,
     auth,
@@ -19,6 +23,7 @@ from app.routes import (
     user,
     favorites,
     parish_requests,
+    community,
 )
 
 app = FastAPI(
@@ -34,20 +39,15 @@ Path("uploads").mkdir(parents=True, exist_ok=True)
 app.mount("/media", StaticFiles(directory="media"), name="media")
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
-# Create database tables
-init_db()
+# Legacy table creation is restricted to explicit development opt-in. Production
+# schema changes are deployed with reviewed Alembic migrations.
+if settings.AUTO_CREATE_TABLES:
+    init_db()
 
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8081",
-        "http://localhost:19006",
-        "http://127.0.0.1:8081",
-        "http://127.0.0.1:19006",
-        "https://catholic-readings-and-choir-resource-app.vercel.app",
-        "https://catholic-readings-and-choir-resource-app.onrender.com",
-    ],
+    allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -61,6 +61,7 @@ app.include_router(locations.router)
 app.include_router(user.router)
 app.include_router(favorites.router, prefix="/api")
 app.include_router(parish_requests.router)
+app.include_router(community.router)
 app.include_router(payments.router, prefix="/api/payments", tags=["Payments"])
 app.include_router(saints.router)
 app.include_router(choir.router)
@@ -82,7 +83,12 @@ async def root():
 
 
 @app.get("/health", tags=["System"])
-async def health():
+def health(db: Session = Depends(get_db)):
+    try:
+        db.execute(text("SELECT 1"))
+    except SQLAlchemyError as exc:
+        raise HTTPException(status_code=503, detail="Database unavailable") from exc
+
     return {
         "status": "healthy",
         "database": "connected",

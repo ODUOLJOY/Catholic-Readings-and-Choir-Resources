@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -34,7 +34,7 @@ interface Reading {
   };
 }
 
-const categories = [
+const categories: string[] = [
   "All",
   "First Reading",
   "Psalm",
@@ -45,15 +45,30 @@ const categories = [
 export default function Readings() {
   const { date } = useLocalSearchParams<{ date: string }>();
   const [readings, setReadings] = useState<Reading[]>([]);
-  const [filtered, setFiltered] = useState<Reading[]>([]);
   const [selectedCategory, setSelectedCategory] =
     useState("All");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const filtered = useMemo(() => {
+    if (selectedCategory === "All") {
+      return readings;
+    }
 
-  useEffect(() => {
-    loadReadings();
-  }, [date]);
+    return readings.filter((reading) => {
+      switch (selectedCategory.toLowerCase()) {
+        case "first reading":
+          return Boolean(reading.reading.first_reading);
+        case "psalm":
+          return Boolean(reading.reading.responsorial_psalm);
+        case "second reading":
+          return Boolean(reading.reading.second_reading);
+        case "gospel":
+          return Boolean(reading.reading.gospel);
+        default:
+          return false;
+      }
+    });
+  }, [readings, selectedCategory]);
 
   async function loadReadings() {
     try {
@@ -81,27 +96,8 @@ export default function Readings() {
   }
 
   useEffect(() => {
-    if (selectedCategory === "All") {
-      setFiltered(readings);
-    } else {
-      setFiltered(
-        readings.filter(
-          (reading) => {
-            const category = selectedCategory.toLowerCase();
-            return category === "first reading"
-              ? Boolean(reading.reading.first_reading)
-              : category === "psalm"
-              ? Boolean(reading.reading.responsorial_psalm)
-              : category === "second reading"
-              ? Boolean(reading.reading.second_reading)
-              : category === "gospel"
-              ? Boolean(reading.reading.gospel)
-              : false;
-          }
-        )
-      );
-    }
-  }, [readings, selectedCategory]);
+    void Promise.resolve().then(loadReadings);
+  }, [date]);
 
   async function refresh() {
     setRefreshing(true);
@@ -209,7 +205,7 @@ export default function Readings() {
 
         <View style={styles.todayText}>
           <Text style={styles.todayTitle}>
-            Today's Readings
+            Today&apos;s Readings
           </Text>
 
           <Text style={styles.todayDate}>

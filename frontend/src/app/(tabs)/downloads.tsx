@@ -40,10 +40,6 @@ export default function Downloads() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    loadDownloads();
-  }, []);
-
   async function loadDownloads() {
     try {
       setLoading(true);
@@ -84,6 +80,10 @@ export default function Downloads() {
       setRefreshing(false);
     }
   }
+
+  useEffect(() => {
+    void Promise.resolve().then(loadDownloads);
+  }, []);
 
   async function refresh() {
     setRefreshing(true);

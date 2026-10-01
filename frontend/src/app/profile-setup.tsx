@@ -3,20 +3,21 @@ import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-nati
 import { useRouter } from 'expo-router';
 import { api } from '../lib/api';
 
+interface DirectoryOption {
+  id: number;
+  name: string;
+}
+
 export default function ProfileSetup() {
   const router = useRouter();
   const [step, setStep] = useState<'diocese' | 'deanery' | 'parish'>('diocese');
-  const [dioceses, setDioceses] = useState([]);
-  const [deaneries, setDeaneries] = useState([]);
-  const [parishes, setParishes] = useState([]);
-  const [selectedDiocese, setSelectedDiocese] = useState(null);
-  const [selectedDeanery, setSelectedDeanery] = useState(null);
-  const [selectedParish, setSelectedParish] = useState(null);
+  const [dioceses, setDioceses] = useState<DirectoryOption[]>([]);
+  const [deaneries, setDeaneries] = useState<DirectoryOption[]>([]);
+  const [parishes, setParishes] = useState<DirectoryOption[]>([]);
+  const [selectedDiocese, setSelectedDiocese] = useState<DirectoryOption | null>(null);
+  const [selectedDeanery, setSelectedDeanery] = useState<DirectoryOption | null>(null);
+  const [selectedParish, setSelectedParish] = useState<DirectoryOption | null>(null);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchDioceses();
-  }, []);
 
   const fetchDioceses = async () => {
     try {
@@ -29,7 +30,11 @@ export default function ProfileSetup() {
     }
   };
 
-  const selectDiocese = async (diocese) => {
+  useEffect(() => {
+    void Promise.resolve().then(fetchDioceses);
+  }, []);
+
+  const selectDiocese = async (diocese: DirectoryOption) => {
     setSelectedDiocese(diocese);
     setLoading(true);
     try {
@@ -43,7 +48,7 @@ export default function ProfileSetup() {
     }
   };
 
-  const selectDeanery = async (deanery) => {
+  const selectDeanery = async (deanery: DirectoryOption) => {
     setSelectedDeanery(deanery);
     setLoading(true);
     try {
@@ -58,8 +63,14 @@ export default function ProfileSetup() {
   };
 
   const submit = async () => {
+    if (!selectedDiocese || !selectedDeanery || !selectedParish) return;
+
     try {
-      await api.put('/api/v1/users/me/location', { parish_id: selectedParish.id });
+      await api.put('/api/v1/users/me/location', {
+        parish_id: selectedParish.id,
+        deanery_id: selectedDeanery.id,
+        diocese_id: selectedDiocese.id,
+      });
       router.replace('/(tabs)');
     } catch (error) {
       console.error(error);

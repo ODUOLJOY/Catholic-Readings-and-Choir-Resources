@@ -1,32 +1,7 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import declarative_base, sessionmaker
-
 from app.core.config import settings
+from app.db.database import Base, SessionLocal, engine, get_db
 
 DATABASE_URL = settings.DATABASE_URL
-
-engine = create_engine(
-    DATABASE_URL,
-    pool_pre_ping=True,
-    pool_recycle=300,
-    future=True,
-)
-
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine,
-)
-
-Base = declarative_base()
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 def init_db():
@@ -44,9 +19,14 @@ def init_db():
     import app.models.choir
     import app.models.download
     import app.models.notification
+    import app.models.parish_request
     import app.models.report
     import app.models.favorite
     import app.models.liturgical
-    
+    import app.models.community
+
     # Ensure all tables are created
     Base.metadata.create_all(bind=engine)
+
+
+__all__ = ["Base", "DATABASE_URL", "SessionLocal", "engine", "get_db", "init_db"]

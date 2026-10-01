@@ -35,10 +35,10 @@ export default function DirectoryManagement() {
 
       <View style={styles.menu}>
         <Text style={styles.subtitle}>Management</Text>
-        <Text style={styles.menuItem}>-> Manage Deaneries</Text>
-        <Text style={styles.menuItem}>-> Manage Parishes</Text>
-        <Text style={styles.menuItem}>-> Bulk Import</Text>
-        <Text style={styles.menuItem}>-> Parish Requests</Text>
+        <Text style={styles.menuItem}>Manage Deaneries</Text>
+        <Text style={styles.menuItem}>Manage Parishes</Text>
+        <Text style={styles.menuItem}>Bulk Import</Text>
+        <Text style={styles.menuItem}>Parish Requests</Text>
       </View>
 
       <Text style={styles.subtitle}>Jurisdictions</Text>

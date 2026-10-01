@@ -128,8 +128,9 @@ class User(Base):
     )
 
     reports = relationship(
-        "Report",
-        back_populates="user",
+        "ContentReport",
+        back_populates="reporter",
+        foreign_keys="ContentReport.reporter_id",
         cascade="all, delete",
     )
 
@@ -143,10 +144,4 @@ class User(Base):
         "Notification",
         back_populates="user",
         cascade="all, delete",
-    )
-
-    bookmarked_readings = relationship(
-        "Reading",
-        secondary="favorites",
-        viewonly=True,
     )

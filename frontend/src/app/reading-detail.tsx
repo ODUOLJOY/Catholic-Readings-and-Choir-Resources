@@ -15,10 +15,6 @@ export default function ReadingDetail() {
   const [isFavorited, setIsFavorited] = useState(false);
   const [favoriteId, setFavoriteId] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (date) void load();
-  }, [date]);
-
   async function load() {
     try {
       setLoading(true);
@@ -39,6 +35,10 @@ export default function ReadingDetail() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (date) void Promise.resolve().then(load);
+  }, [date]);
 
   async function toggleFavorite() {
     if (!reading) return;

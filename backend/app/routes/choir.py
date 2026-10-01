@@ -67,7 +67,11 @@ def get_resource(
 ):
     resource = (
         db.query(ChoirResource)
-        .filter(ChoirResource.id == resource_id)
+        .filter(
+            ChoirResource.id == resource_id,
+            ChoirResource.is_approved.is_(True),
+            ChoirResource.is_published.is_(True),
+        )
         .first()
     )
 

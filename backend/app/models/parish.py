@@ -53,15 +53,3 @@ class Parish(Base):
         onupdate=func.now(),
         nullable=False,
     )
-
-class ParishRequest(Base):
-    __tablename__ = "parish_requests"
-    id = Column(Integer, primary_key=True, index=True)
-    parish_name = Column(String(255), nullable=False)
-    jurisdiction_name = Column(String(255), nullable=True)
-    deanery_name = Column(String(255), nullable=True)
-    town = Column(String(150), nullable=True)
-    details = Column(Text, nullable=True)
-    status = Column(String(50), default="pending", nullable=False) # pending, reviewing, approved, rejected
-    submitted_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

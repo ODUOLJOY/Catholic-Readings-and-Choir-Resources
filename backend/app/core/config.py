@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     APP_NAME: str = "Catholic Readings & Choir Resources API"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
+    AUTO_CREATE_TABLES: bool = False
+    BOOTSTRAP_SUPER_ADMIN_EMAIL: str = "parmenasoduol1318@gmail.com"
+    SCHEDULED_JOB_TOKEN: str = ""
 
     # ==========================================
     # API
@@ -93,8 +96,11 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: list[str] = [
         "http://localhost:8081",
         "http://localhost:19006",
+        "http://127.0.0.1:8081",
+        "http://127.0.0.1:19006",
         "http://localhost:3000",
         "https://catholic-readings-and-choir-resource-app.onrender.com",
+        "https://catholic-readings-and-choir-resource-app.vercel.app",
     ]
 
     model_config = SettingsConfigDict(

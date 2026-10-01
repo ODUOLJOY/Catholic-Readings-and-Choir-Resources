@@ -35,8 +35,9 @@ export default function ResetPasswordScreen() {
     setLoading(true);
 
     try {
-      await api.post("/api/auth/reset-password", null, {
-        params: { token, password },
+      await api.post("/api/auth/reset-password", {
+        token,
+        password,
       });
 
       Alert.alert(

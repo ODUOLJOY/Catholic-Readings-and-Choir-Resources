@@ -156,6 +156,44 @@ export default function Dashboard() {
         onPress={() => navigate("/(tabs)/admin/users")}
       />
 
+      <Text style={styles.sectionTitle}>Community Administration</Text>
+      <AdminCard
+        icon="ribbon-outline"
+        title="Review Role Requests"
+        description="Review community-role requests within your authorized scope"
+        onPress={() => navigate("/role-requests?mode=review")}
+      />
+      <AdminCard
+        icon="people-outline"
+        title="Administrators"
+        description="View active scoped administrator assignments"
+        onPress={() => navigate("/community-admin?section=administrators")}
+      />
+      <AdminCard
+        icon="people-outline"
+        title="Verify Parish Memberships"
+        description="Approve membership requests for your authorized parish scope"
+        onPress={() => navigate("/community-admin?section=memberships")}
+      />
+      <AdminCard
+        icon="megaphone-outline"
+        title="Community Announcements"
+        description="Create and publish official scoped announcements"
+        onPress={() => navigate("/community")}
+      />
+      <AdminCard
+        icon="chatbox-ellipses-outline"
+        title="Review Suggestions"
+        description="Review private member suggestions within your scope"
+        onPress={() => navigate("/community-admin?section=suggestions")}
+      />
+      <AdminCard
+        icon="shield-checkmark-outline"
+        title="Audit Log"
+        description="View administrative actions available to your scope"
+        onPress={() => navigate("/community-audit")}
+      />
+
       {/* BACK */}
       <TouchableOpacity
         style={styles.backButton}

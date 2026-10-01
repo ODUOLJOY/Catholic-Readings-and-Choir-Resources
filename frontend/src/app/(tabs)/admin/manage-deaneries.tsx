@@ -6,10 +6,6 @@ export default function ManageDeaneries() {
   const [deaneries, setDeaneries] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchDeaneries();
-  }, []);
-
   const fetchDeaneries = async () => {
     try {
       // Need a way to fetch all deaneries, similar to parishes. 
@@ -22,6 +18,10 @@ export default function ManageDeaneries() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    void Promise.resolve().then(fetchDeaneries);
+  }, []);
 
   return (
     <View style={styles.container}>

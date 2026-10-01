@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta
+import hashlib
+import hmac
 from typing import Optional
 
 from fastapi import HTTPException, status
@@ -269,9 +271,20 @@ def reset_password(
             detail="User not found.",
         )
 
-    user.password_hash = hash_password(
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    if not user.password_reset_token or not hmac.compare_digest(
+        user.password_reset_token,
+        token_hash,
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or already used reset token.",
+        )
+
+    user.hashed_password = hash_password(
         new_password
     )
+    user.password_reset_token = None
 
     db.commit()
 

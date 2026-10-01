@@ -19,12 +19,21 @@ services:
 
     envVars:
       - key: PYTHON_VERSION
-        value: 3.12.5
+        value: 3.11.5
 
       - key: DATABASE_URL
         sync: false
 
       - key: SECRET_KEY
+        sync: false
+
+      - key: AUTO_CREATE_TABLES
+        value: "false"
+
+      - key: BOOTSTRAP_SUPER_ADMIN_EMAIL
+        value: parmenasoduol1318@gmail.com
+
+      - key: SCHEDULED_JOB_TOKEN
         sync: false
 
       - key: ALGORITHM

@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.database import Base
 
@@ -16,3 +17,10 @@ class ContentReport(Base):
     reviewed_at = Column(DateTime, nullable=True)
     reviewer_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     resolution = Column(String, nullable=True)
+
+    reporter = relationship(
+        "User",
+        foreign_keys=[reporter_id],
+        back_populates="reports",
+    )
+    reviewer = relationship("User", foreign_keys=[reviewer_id])

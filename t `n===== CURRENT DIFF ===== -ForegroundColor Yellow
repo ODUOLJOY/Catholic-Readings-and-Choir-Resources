@@ -1,0 +1,53 @@
+warning: in the working copy of 'frontend/src/app/(auth)/login.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/app/(tabs)/profile.tsx', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/frontend/src/app/(auth)/login.tsx b/frontend/src/app/(auth)/login.tsx[m
+[1mindex 8405c78..5d789f6 100644[m
+[1m--- a/frontend/src/app/(auth)/login.tsx[m
+[1m+++ b/frontend/src/app/(auth)/login.tsx[m
+[36m@@ -30,7 +30,11 @@[m [mexport default function LoginScreen() {[m
+       await authService.login(email, password);[m
+       Alert.alert("Success", "Login successful.");[m
+       const user = await authService.getUser();[m
+[31m-      if (user && user.profile_setup_completed) {[m
+[32m+[m[32m      const role = await authService.getRole();[m
+[32m+[m
+[32m+[m[32m      if (role === "admin" || role === "super_admin" || role === "superadmin") {[m
+[32m+[m[32m        router.replace("/(tabs)/admin/dashboard");[m
+[32m+[m[32m      } else if (user && user.profile_setup_completed) {[m
+         router.replace("/(tabs)");[m
+       } else {[m
+         router.replace("/profile-setup");[m
+[36m@@ -97,7 +101,7 @@[m [mexport default function LoginScreen() {[m
+         </TouchableOpacity>[m
+ [m
+         <TouchableOpacity[m
+[31m-          onPress={() => router.push("/(auth)/forgot-password")}[m
+[32m+[m[32m          onPress={() => router.push("/forgot-password")}[m
+         >[m
+           <Text style={styles.link}>[m
+             Forgot Password?[m
+[36m@@ -105,7 +109,7 @@[m [mexport default function LoginScreen() {[m
+         </TouchableOpacity>[m
+ [m
+         <TouchableOpacity[m
+[31m-          onPress={() => router.push("/(auth)/register")}[m
+[32m+[m[32m          onPress={() => router.push("/register")}[m
+         >[m
+           <Text style={styles.link}>[m
+             Don't have an account? Register[m
+[1mdiff --git a/frontend/src/app/(tabs)/profile.tsx b/frontend/src/app/(tabs)/profile.tsx[m
+[1mindex 384ad87..1f056ec 100644[m
+[1m--- a/frontend/src/app/(tabs)/profile.tsx[m
+[1m+++ b/frontend/src/app/(tabs)/profile.tsx[m
+[36m@@ -190,10 +190,7 @@[m [mexport default function Profile() {[m
+           title="User Account"[m
+           subtitle="View your account information"[m
+           onPress={() =>[m
+[31m-            Alert.alert([m
+[31m-              "User Account",[m
+[31m-              `Name: ${displayName}\nEmail: ${email}\nRole: ${role.toUpperCase()}\n\nProfile management is not yet supported.`[m
+[31m-            )[m
+[32m+[m[32m            router.push("/profile-setup")[m
+           }[m
+         />[m
+ [m

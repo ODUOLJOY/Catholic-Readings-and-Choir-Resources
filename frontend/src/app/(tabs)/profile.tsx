@@ -190,10 +190,7 @@ export default function Profile() {
           title="User Account"
           subtitle="View your account information"
           onPress={() =>
-            Alert.alert(
-              "User Account",
-              `Name: ${displayName}\nEmail: ${email}\nRole: ${role.toUpperCase()}\n\nProfile management is not yet supported.`
-            )
+            router.push("/profile-setup")
           }
         />
 

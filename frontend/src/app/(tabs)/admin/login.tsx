@@ -168,7 +168,7 @@ export default function AdminLogin() {
         <Pressable
           style={styles.backButton}
           onPress={() =>
-            router.replace("/(auth)/login")
+            router.replace("/login")
           }
           disabled={loading}
         >

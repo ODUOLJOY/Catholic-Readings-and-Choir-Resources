@@ -30,7 +30,11 @@ export default function LoginScreen() {
       await authService.login(email, password);
       Alert.alert("Success", "Login successful.");
       const user = await authService.getUser();
-      if (user && user.profile_setup_completed) {
+      const role = await authService.getRole();
+
+      if (role === "admin" || role === "super_admin" || role === "superadmin") {
+        router.replace("/(tabs)/admin/dashboard");
+      } else if (user && user.profile_setup_completed) {
         router.replace("/(tabs)");
       } else {
         router.replace("/profile-setup");
@@ -97,7 +101,7 @@ export default function LoginScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={() => router.push("/(auth)/forgot-password")}
+          onPress={() => router.push("/forgot-password")}
         >
           <Text style={styles.link}>
             Forgot Password?
@@ -105,7 +109,7 @@ export default function LoginScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={() => router.push("/(auth)/register")}
+          onPress={() => router.push("/register")}
         >
           <Text style={styles.link}>
             Don't have an account? Register

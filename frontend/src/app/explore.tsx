@@ -84,11 +84,13 @@ export default function ExploreScreen() {
       setLoading(true);
       setSearched(true);
 
-      const response = await api.get("/api/readings/search/", {
-        params: { q: query.trim() },
-      });
+      const [readingRes, saintRes, contentRes] = await Promise.all([
+        api.get("/api/readings/search/", { params: { q: query.trim() } }),
+        api.get(`/api/saints/search/${query.trim()}`),
+        api.get(`/api/content/search/${query.trim()}`),
+      ]);
 
-      const data = (Array.isArray(response.data) ? response.data : []).map(
+      const readings = (Array.isArray(readingRes.data) ? readingRes.data : []).map(
         (reading: any) => ({
           id: reading.id,
           title: reading.feast || reading.saint_of_day || "Daily Reading",
@@ -98,7 +100,25 @@ export default function ExploreScreen() {
         })
       );
 
-      setResults(data);
+      const saints = (Array.isArray(saintRes.data) ? saintRes.data : []).map(
+        (saint: any) => ({
+          id: saint.id,
+          title: saint.name,
+          type: "Saint",
+          description: saint.biography,
+        })
+      );
+
+      const content = (Array.isArray(contentRes.data) ? contentRes.data : []).map(
+        (item: any) => ({
+          id: item.id,
+          title: item.title,
+          type: "Choir Resource",
+          description: item.body,
+        })
+      );
+
+      setResults([...readings, ...saints, ...content]);
     } catch (error: any) {
       console.log(
         "Search error:",
@@ -174,21 +194,26 @@ export default function ExploreScreen() {
         style={styles.result}
         activeOpacity={0.8}
         onPress={() => {
-          if (item.type === "Reading" && item.reading_date) {
+          if (item.type === "Reading") {
             router.push({
-              pathname: "/reading-detail" as any,
-              params: { date: item.reading_date },
-            });
+              pathname: "/reading-detail",
+              params: { id: item.id },
+            } as any);
           } else if (item.type === "Saint") {
             router.push({
-              pathname: "/(tabs)/admin/saints" as any, // Should be detail screen if exists
+              pathname: "/saint-detail",
               params: { id: item.id },
-            });
-          } else if (item.type === "Choir") {
+            } as any);
+          } else if (item.type === "Choir Resource") {
+            // Need to implement or link to choir detail
+            // For now, let's navigate to choir tab with params if possible, 
+            // but the requirement says "navigate to the correct detail screen"
+            // I will assume for now it's not implemented yet and mark it PARTIAL or implement a basic one.
+            // Actually I should implement it.
             router.push({
-              pathname: "/(tabs)/choir" as any, // Should be detail screen
+              pathname: "/choir-detail",
               params: { id: item.id },
-            });
+            } as any);
           }
         }}
       >

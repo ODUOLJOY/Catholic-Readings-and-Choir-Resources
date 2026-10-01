@@ -11,7 +11,7 @@ end-to-end journey.
 
 | Check | Result | Evidence / limit |
 | --- | --- | --- |
-| Backend tests | PASS | 29 tests pass, including hierarchy, calendar/readings selection, choir upload/authorization/moderation, and migration fixtures. |
+| Backend tests | PASS | 31 tests pass, including hierarchy, calendar/readings selection, choir upload/authorization/moderation, migration fixtures, and unpublished-content access control. |
 | Backend compile | PASS | `python -m compileall -q app migrations`. |
 | SQLite migration fixture | PASS | Upgrade, backfill, downgrade, and moderation/storage revisions exercised against a legacy fixture. |
 | PostgreSQL migration SQL | PASS (offline) | Alembic-generated SQL is inspected by the migration test; no PostgreSQL server or production schema was changed. |

@@ -43,7 +43,10 @@ def get_content_by_id(
 ):
     content = (
         db.query(Content)
-        .filter(Content.id == content_id)
+        .filter(
+            Content.id == content_id,
+            Content.is_published.is_(True),
+        )
         .first()
     )
 

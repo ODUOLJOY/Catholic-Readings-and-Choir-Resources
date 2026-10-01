@@ -23,7 +23,7 @@ content, or verified production deployment.
 
 ## Verification results
 
-- Backend: **30 tests passed** (`python -m pytest -q`).
+- Backend: **31 tests passed** (`python -m pytest -q`), including a regression check that public content detail hides unpublished drafts.
 - Backend syntax/bytecode compilation: passed (`python -m compileall -q app migrations`).
 - Frontend TypeScript: passed (`npx tsc --noEmit`).
 - Frontend lint: passed with **52 warnings** and no errors; most are existing unused-variable/any-type notices.

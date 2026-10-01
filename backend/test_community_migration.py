@@ -10,6 +10,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     Integer,
+    Index,
     MetaData,
     String,
     Table,
@@ -30,6 +31,7 @@ from app.models.community import ParishMembership
 from app.models.choir import ChoirResource
 from app.models.locations import Deanery, Diocese
 from app.models.parish import Parish
+from app.models.readings import Reading
 from app.models.user import User
 from app.services.migration_preflight import verify_legacy_schema
 
@@ -47,6 +49,18 @@ def test_community_migration_backfills_legacy_parishes_idempotently():
         User.__table__,
     ]
     Base.metadata.create_all(bind=engine, tables=legacy_tables)
+    legacy_metadata = MetaData()
+    Table("users", legacy_metadata, Column("id", Integer, primary_key=True))
+    legacy_reading_table = Reading.__table__.to_metadata(legacy_metadata)
+    for index in list(legacy_reading_table.indexes):
+        if index.name in {"ix_readings_reading_date", "uq_readings_date_language"}:
+            legacy_reading_table.indexes.remove(index)
+    Index(
+        "ix_readings_reading_date",
+        legacy_reading_table.c.reading_date,
+        unique=True,
+    )
+    legacy_reading_table.create(engine)
     legacy_resource_table = Table(
         "choir_resources",
         MetaData(),
@@ -129,11 +143,23 @@ def test_community_migration_backfills_legacy_parishes_idempotently():
     choir_scope_migration = importlib.import_module(
         "migrations.versions.20261001_02_choir_resource_parish"
     )
+    reading_language_migration = importlib.import_module(
+        "migrations.versions.20261002_01_reading_language"
+    )
+    resource_storage_migration = importlib.import_module(
+        "migrations.versions.20261002_02_resource_storage_key"
+    )
+    resource_moderation_migration = importlib.import_module(
+        "migrations.versions.20261002_03_resource_moderation"
+    )
     with engine.begin() as connection:
         with Operations.context(MigrationContext.configure(connection)):
             migration.upgrade()
             migration.upgrade()
             choir_scope_migration.upgrade()
+            reading_language_migration.upgrade()
+            resource_storage_migration.upgrade()
+            resource_moderation_migration.upgrade()
 
     with Session(engine) as db:
         memberships = db.query(ParishMembership).all()
@@ -143,9 +169,36 @@ def test_community_migration_backfills_legacy_parishes_idempotently():
         assert memberships[0].status == "pending"
         legacy_resource = db.query(ChoirResource).one()
         assert legacy_resource.parish_id is None
+        assert legacy_resource.storage_key is None
+        assert legacy_resource.moderation_status == "approved"
+        common_reading = {
+            "reading_date": datetime(2030, 1, 1).date(),
+            "liturgical_year": "A",
+            "liturgical_season": "Christmas",
+            "liturgical_color": "White",
+            "first_reading_reference": "Genesis 1:1",
+            "first_reading": "authorized text",
+            "gospel_reference": "John 1:1",
+            "gospel": "authorized text",
+        }
+        db.add_all([
+            Reading(language="English", **common_reading),
+            Reading(language="Kiswahili", **common_reading),
+        ])
+        db.commit()
+        assert db.query(Reading).filter(
+            Reading.reading_date == common_reading["reading_date"]
+        ).count() == 2
+        db.query(Reading).filter(
+            Reading.reading_date == common_reading["reading_date"]
+        ).delete()
+        db.commit()
 
     with engine.begin() as connection:
         with Operations.context(MigrationContext.configure(connection)):
+            resource_moderation_migration.downgrade()
+            resource_storage_migration.downgrade()
+            reading_language_migration.downgrade()
             choir_scope_migration.downgrade()
             assert "parish_id" not in {
                 column["name"]
@@ -188,10 +241,25 @@ def test_migration_chain_generates_postgresql_offline_sql():
     choir_migration = importlib.import_module(
         "migrations.versions.20261001_02_choir_resource_parish"
     )
+    reading_language_migration = importlib.import_module(
+        "migrations.versions.20261002_01_reading_language"
+    )
+    resource_storage_migration = importlib.import_module(
+        "migrations.versions.20261002_02_resource_storage_key"
+    )
+    resource_moderation_migration = importlib.import_module(
+        "migrations.versions.20261002_03_resource_moderation"
+    )
     with Operations.context(migration_context):
         community_migration.upgrade()
         choir_migration.upgrade()
+        reading_language_migration.upgrade()
+        resource_storage_migration.upgrade()
+        resource_moderation_migration.upgrade()
     sql = output.getvalue()
     assert "CREATE TABLE role_assignments" in sql
     assert "ALTER TABLE choir_resources ADD COLUMN parish_id INTEGER" in sql
     assert "FOREIGN KEY(parish_id) REFERENCES parishes (id)" in sql
+    assert "CREATE UNIQUE INDEX uq_readings_date_language" in sql
+    assert "ADD COLUMN storage_key VARCHAR(1000)" in sql
+    assert "ADD COLUMN moderation_status VARCHAR(30)" in sql

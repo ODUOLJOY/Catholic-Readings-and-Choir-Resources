@@ -1,19 +1,100 @@
 import {
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import { router } from "expo-router";
+import { useCallback, useEffect, useState, type ComponentProps } from "react";
+import { router, type Href } from "expo-router";
 import {
   Ionicons,
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
+import { api } from "@/lib/api";
 
 export default function Dashboard() {
-  function navigate(path: string) {
-    router.push(path as any);
+  const [loading, setLoading] = useState(true);
+  const [platformAdmin, setPlatformAdmin] = useState(false);
+  const [roles, setRoles] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadAccess = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [userResponse, communityResponse] = await Promise.all([
+        api.get("/api/auth/me"),
+        api.get("/api/community/me"),
+      ]);
+      const role = String(userResponse.data?.role ?? "").toLowerCase();
+      setPlatformAdmin(role === "admin" || role === "super_admin");
+      setRoles(
+        Array.isArray(communityResponse.data?.roles)
+          ? communityResponse.data.roles.map((assignment: { role: string }) => assignment.role)
+          : [],
+      );
+    } catch {
+      setError("Unable to verify your administrative access. Check your connection and try again.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void Promise.resolve().then(loadAccess);
+  }, [loadAccess]);
+
+  if (loading) {
+    return (
+      <View style={styles.accessState}>
+        <ActivityIndicator color="#0B6623" />
+        <Text style={styles.accessMessage}>Checking your access…</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.accessState}>
+        <Text style={styles.accessMessage}>{error}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={() => void loadAccess()}>
+          <Text style={styles.retryText}>Retry</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.replace("/login")}>
+          <Text style={styles.backText}>Sign in</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (!platformAdmin) {
+    const canManageCommunity = roles.some((role) =>
+      ["parish_admin", "diocesan_admin", "moderator"].includes(role),
+    );
+    const canManageChoir = roles.some((role) =>
+      ["parish_admin", "diocesan_admin", "parish_music_director", "choir_director"].includes(role),
+    );
+    if (!canManageCommunity && !canManageChoir) {
+      return (
+        <View style={styles.accessState}>
+          <MaterialCommunityIcons name="shield-lock-outline" size={42} color="#0B6623" />
+          <Text style={styles.accessTitle}>Administrative access required</Text>
+          <Text style={styles.accessMessage}>
+            This area is available to platform administrators and approved parish or diocesan officers.
+          </Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => router.replace("/(tabs)")}>
+            <Text style={styles.retryText}>Return to Home</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    return <ScopedDashboard roles={roles} />;
+  }
+
+  function navigate(path: Href) {
+    router.push(path);
   }
 
   return (
@@ -50,10 +131,10 @@ export default function Dashboard() {
 
       <AdminCard
         icon="cloud-upload-outline"
-        title="Upload Reading"
-        description="Add daily readings and liturgical content"
+        title="Create Reading Record"
+        description="Enter verified daily reading text and references"
         onPress={() =>
-          navigate("/(tabs)/admin/upload")
+          navigate("/(tabs)/admin/readings")
         }
       />
 
@@ -117,6 +198,12 @@ export default function Dashboard() {
           navigate("/(tabs)/admin/resources")
         }
       />
+      <AdminCard
+        icon="cloud-upload-outline"
+        title="Submit Choir Resource"
+        description="Upload audio, video, PDF, or sheet music for review"
+        onPress={() => navigate("/(tabs)/admin/upload")}
+      />
 
       {/* CATHOLIC DIRECTORY */}
       <Text style={styles.sectionTitle}>
@@ -133,15 +220,6 @@ export default function Dashboard() {
         title="Parish Requests"
         description="Review pending parish submissions"
         onPress={() => navigate("/(tabs)/admin/parish-requests")}
-      />
-
-      <AdminCard
-        icon="cloud-upload-outline"
-        title="Upload Choir Resource"
-        description="Add audio, lyrics, PDF and video resources"
-        onPress={() =>
-          navigate("/(tabs)/admin/upload")
-        }
       />
 
       {/* USERS */}
@@ -213,13 +291,87 @@ export default function Dashboard() {
   );
 }
 
+function ScopedDashboard({ roles }: { roles: string[] }) {
+  const canManageCommunity = roles.some((role) =>
+    ["parish_admin", "diocesan_admin"].includes(role),
+  );
+  const canReview = roles.some((role) =>
+    ["parish_admin", "diocesan_admin", "moderator"].includes(role),
+  );
+  const canManageChoir = roles.some((role) =>
+    ["parish_admin", "diocesan_admin", "parish_music_director", "choir_director"].includes(role),
+  );
+
+  return (
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.title}>Community Administration</Text>
+          <Text style={styles.subtitle}>Manage only the scopes assigned to your approved role</Text>
+        </View>
+        <MaterialCommunityIcons name="shield-account" size={28} color="#0B6623" />
+      </View>
+      {canReview && (
+        <AdminCard
+          icon="ribbon-outline"
+          title="Review Role Requests"
+          description="Review requests within your authorized scope"
+          onPress={() => router.push("/role-requests?mode=review")}
+        />
+      )}
+      {canManageCommunity && (
+        <>
+          <AdminCard
+            icon="people-outline"
+            title="Verify Parish Memberships"
+            description="Review membership requests in your assigned scope"
+            onPress={() => router.push("/community-admin?section=memberships")}
+          />
+          <AdminCard
+            icon="megaphone-outline"
+            title="Community Announcements"
+            description="Create scoped announcements"
+            onPress={() => router.push("/community")}
+          />
+          <AdminCard
+            icon="shield-checkmark-outline"
+            title="Audit Log"
+            description="Review administrative actions available to your scope"
+            onPress={() => router.push("/community-audit")}
+          />
+        </>
+      )}
+      {canManageChoir && (
+        <>
+          <AdminCard
+            icon="cloud-upload-outline"
+            title="Submit Choir Resource"
+            description="Upload a parish resource for authorized review"
+            onPress={() => router.push("/(tabs)/admin/upload")}
+          />
+          <AdminCard
+            icon="musical-notes-outline"
+            title="Manage Choir Resources"
+            description="Review and manage resources for your parish"
+            onPress={() => router.push("/choir")}
+          />
+        </>
+      )}
+      <TouchableOpacity style={styles.backButton} onPress={() => router.replace("/(tabs)")}>
+        <Ionicons name="arrow-back" size={20} color="#0B6623" />
+        <Text style={styles.backText}>Back to App</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+}
+
 function AdminCard({
   icon,
   title,
   description,
   onPress,
 }: {
-  icon: any;
+  icon: ComponentProps<typeof Ionicons>["name"];
   title: string;
   description: string;
   onPress: () => void;
@@ -257,7 +409,34 @@ function AdminCard({
   );
 }
 
-const styles = StyleSheet.create<any>({
+const styles = StyleSheet.create({
+  accessState: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 28,
+    gap: 12,
+    backgroundColor: "#F7F9F7",
+  },
+  accessTitle: {
+    color: "#17351f",
+    fontSize: 21,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  accessMessage: {
+    color: "#5f6c62",
+    textAlign: "center",
+    lineHeight: 21,
+  },
+  retryButton: {
+    backgroundColor: "#0B6623",
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 9,
+    marginTop: 4,
+  },
+  retryText: { color: "#fff", fontWeight: "700" },
   container: {
     flex: 1,
     backgroundColor: "#F7F9F7",

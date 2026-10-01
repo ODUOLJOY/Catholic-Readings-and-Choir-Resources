@@ -1,6 +1,5 @@
-from pathlib import Path
 import mimetypes
-from uuid import uuid4
+from datetime import datetime, timezone
 
 from fastapi import (
     APIRouter,
@@ -9,18 +8,18 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Request,
     status,
 )
-from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from app.auth.security import decode_access_token
-from app.core.config import settings
 from app.db.database import get_db
 from app.models.user import User
 from app.models.choir import ChoirResource
-from app.models.community import ParishMembership
+from app.models.community import CommunityAuditLog, ParishMembership
 from app.routes.auth_dependency import (
     get_current_user,
     require_admin,
@@ -30,13 +29,16 @@ from app.services.authorization import (
     can_view_choir_resource,
     manageable_choir_parish_ids,
 )
-from app.services.choir_resources import local_resource_file
+from app.services.private_storage import (
+    open_resource_file,
+    remove_resource_file,
+)
+from app.routes.uploads import upload_resource as submit_private_resource
 
 router = APIRouter(
     prefix="/api/choir",
     tags=["Choir Resources"],
 )
-
 optional_bearer = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
 
@@ -160,13 +162,46 @@ def get_resource_file(
     )
     if not resource or not can_view_choir_resource(db, current_user, resource.parish_id):
         raise HTTPException(status_code=404, detail="Resource not found.")
-    filepath = local_resource_file(resource)
-    if filepath is None or not filepath.is_file():
+    try:
+        file_stream = open_resource_file(resource)
+    except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Resource file not found.")
-    return FileResponse(
-        filepath,
-        media_type=mimetypes.guess_type(filepath.name)[0] or "application/octet-stream",
-        filename=filepath.name,
+    extension = resource.file_type.lower()
+    if not extension.isalnum():
+        extension = "bin"
+    filename = f"resource-{resource.id}.{extension}"
+    return StreamingResponse(
+        _file_chunks(file_stream),
+        media_type=mimetypes.guess_type(filename)[0] or "application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _file_chunks(file_stream):
+    try:
+        while chunk := file_stream.read(1024 * 1024):
+            yield chunk
+    finally:
+        file_stream.close()
+
+
+def _audit_resource_review(
+    db: Session,
+    user: User,
+    resource: ChoirResource,
+    action: str,
+    reason: str | None = None,
+) -> None:
+    db.add(
+        CommunityAuditLog(
+            actor_id=user.id,
+            action=action,
+            target_type="choir_resource",
+            target_id=resource.id,
+            scope_type="parish" if resource.parish_id is not None else "global",
+            scope_id=resource.parish_id,
+            reason=reason,
+        )
     )
 
 
@@ -175,6 +210,7 @@ def get_resource_file(
     status_code=status.HTTP_201_CREATED,
 )
 async def upload_resource(
+    request: Request,
     title: str = Form(...),
     category: str = Form(...),
     language: str = Form(...),
@@ -183,70 +219,18 @@ async def upload_resource(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    extension = Path(file.filename or "").suffix.lower().lstrip(".")
-
-    allowed = [
-        "pdf",
-        "mp3",
-        "wav",
-        "ogg",
-        "mp4",
-        "jpg",
-        "jpeg",
-        "png",
-    ]
-
-    if extension not in allowed:
-        raise HTTPException(
-            status_code=400,
-            detail="Unsupported file type."
-        )
-
-    contents = await file.read(500 * 1024 * 1024 + 1)
-    if len(contents) > 500 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="File exceeds maximum allowed size.")
-    private_upload_dir = Path(settings.STORAGE_PATH) / "private_media"
-    staging_dir = private_upload_dir / "staging"
-    staging_dir.mkdir(parents=True, exist_ok=True)
-    staging_file = staging_dir / f"{uuid4().hex}.{extension}"
-    staging_file.write_bytes(contents)
-
-    resource = ChoirResource(
+    return await submit_private_resource(
+        request=request,
         title=title,
-        description=description,
         category=category,
+        description=description,
         language=language,
-        file_url="/api/choir/pending/file",
-        file_type=extension,
-        file_size=len(contents),
-        uploaded_by=current_user.id,
-        is_approved=False,
-        is_published=False,
+        parish_id=None,
+        global_scope=True,
+        file=file,
+        db=db,
+        current_user=current_user,
     )
-
-    destination: Path | None = None
-    try:
-        db.add(resource)
-        db.flush()
-        destination = (
-            private_upload_dir / "resources" / f"{resource.id}.{extension}"
-        )
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        resource.file_url = f"/api/choir/{resource.id}/file"
-        staging_file.replace(destination)
-        db.commit()
-        db.refresh(resource)
-    except Exception:
-        db.rollback()
-        staging_file.unlink(missing_ok=True)
-        if destination is not None:
-            destination.unlink(missing_ok=True)
-        raise
-
-    return {
-        "message": "Choir resource uploaded successfully.",
-        "resource": resource,
-    }
 
 
 @router.put("/{resource_id}")
@@ -277,6 +261,14 @@ def update_resource(
     resource.category = category
     resource.language = language
     resource.description = description
+    resource.is_approved = False
+    resource.is_published = False
+    resource.moderation_status = "pending"
+    resource.reviewed_by = None
+    resource.reviewed_at = None
+    resource.rejection_reason = None
+    resource.approved_at = None
+    resource.published_at = None
 
     db.commit()
     db.refresh(resource)
@@ -305,11 +297,9 @@ def delete_resource(
     if not can_manage_choir_resource_scope(db, current_user, resource.parish_id):
         raise HTTPException(status_code=403, detail="You cannot manage this resource.")
 
-    file_path = local_resource_file(resource)
+    remove_resource_file(resource)
     db.delete(resource)
     db.commit()
-    if file_path and file_path.exists():
-        file_path.unlink()
 
     return {
         "message": "Resource deleted successfully."
@@ -338,6 +328,13 @@ def approve_resource(
 
     resource.is_approved = True
     resource.is_published = True
+    resource.moderation_status = "approved"
+    resource.reviewed_by = current_user.id
+    resource.reviewed_at = datetime.now(timezone.utc)
+    resource.rejection_reason = None
+    resource.approved_at = resource.reviewed_at
+    resource.published_at = resource.reviewed_at
+    _audit_resource_review(db, current_user, resource, "resource.approved")
 
     db.commit()
 
@@ -349,6 +346,7 @@ def approve_resource(
 @router.post("/{resource_id}/reject")
 def reject_resource(
     resource_id: int,
+    reason: str = Form("Rejected by an authorized reviewer."),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -366,11 +364,22 @@ def reject_resource(
     if not can_manage_choir_resource_scope(db, current_user, resource.parish_id):
         raise HTTPException(status_code=403, detail="You cannot manage this resource.")
 
-    file_path = local_resource_file(resource)
-    db.delete(resource)
+    resource.is_approved = False
+    resource.is_published = False
+    resource.moderation_status = "rejected"
+    resource.reviewed_by = current_user.id
+    resource.reviewed_at = datetime.now(timezone.utc)
+    resource.rejection_reason = reason.strip() or "Rejected by an authorized reviewer."
+    resource.approved_at = None
+    resource.published_at = None
+    _audit_resource_review(
+        db,
+        current_user,
+        resource,
+        "resource.rejected",
+        resource.rejection_reason,
+    )
     db.commit()
-    if file_path and file_path.exists():
-        file_path.unlink()
 
     return {
         "message": "Resource rejected."

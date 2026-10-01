@@ -7,6 +7,7 @@ REQUIRED_LEGACY_COLUMNS = {
     "dioceses": {"id"},
     "deaneries": {"id", "diocese_id"},
     "parishes": {"id", "diocese_id", "deanery_id"},
+    "readings": {"id", "reading_date", "language"},
     "choir_resources": {"id"},
 }
 

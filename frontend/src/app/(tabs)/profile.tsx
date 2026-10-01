@@ -7,11 +7,11 @@ import {
   StyleSheet,
   Text,
   View,
-  Switch,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api } from "@/lib/api";
 import { router } from "expo-router";
+import { authService } from "@/services/authService";
 import {
   Ionicons,
   MaterialCommunityIcons,
@@ -113,19 +113,11 @@ export default function Profile() {
           style: "destructive",
           onPress: async () => {
             try {
-              await api.post("/api/auth/logout");
-              await AsyncStorage.multiRemove([
-                "access_token",
-                "refresh_token",
-                "user",
-              ]);
-
+              await authService.logout();
               router.replace("/login");
-            } catch {
-              Alert.alert(
-                "Error",
-                "Unable to log out."
-              );
+            } catch (error) {
+              console.error("Unable to clear the local session.", error);
+              Alert.alert("Error", "Unable to log out on this device.");
             }
           },
         },
@@ -204,7 +196,13 @@ export default function Profile() {
       </Text>
 
       <View style={styles.section}>
-        <View style={styles.membershipSummary}>
+      <ProfileRow
+        icon={<Ionicons name="person-circle-outline" size={22} color="#0B6623" />}
+        title="Account details"
+        subtitle="Edit your name, phone number, and language"
+        onPress={() => router.push("/profile-edit")}
+      />
+      <View style={styles.membershipSummary}>
           <Text style={styles.membershipHeading}>Community membership</Text>
           <Text style={styles.membershipText}>Parish: {community?.parish_name ?? "Not selected"}</Text>
           <Text style={styles.membershipText}>Deanery: {community?.deanery_name ?? "Not available"}</Text>
@@ -225,8 +223,8 @@ export default function Profile() {
               color="#0B6623"
             />
           }
-          title="User Account"
-          subtitle="View your account information"
+          title="Parish and directory"
+          subtitle="Edit your Diocese, Deanery, and Parish"
           onPress={() =>
             router.push("/profile-setup")
           }

@@ -124,6 +124,7 @@ class User(Base):
     choir_resources = relationship(
         "ChoirResource",
         back_populates="uploader",
+        foreign_keys="ChoirResource.uploaded_by",
         cascade="all, delete",
     )
 

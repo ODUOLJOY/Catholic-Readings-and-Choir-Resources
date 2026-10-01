@@ -6,113 +6,29 @@ LITURGICAL_COLORS = {
     "Christmas": "White",
     "Lent": "Purple",
     "Holy Week": "Red",
+    "Triduum": "Red",
     "Easter": "White",
     "Ordinary Time": "Green",
-    "Pentecost": "Red",
 }
 
 
-def get_liturgical_year(target_date: date) -> str:
-    """
-    Returns Liturgical Year A, B or C.
-    The liturgical year begins with the First Sunday of Advent.
-    """
-    # Year A = 2026/2027 (Advent 2026 starts A)
-    # 2023-2024: Year B
-    # 2024-2025: Year C
-    # 2025-2026: Year A
-    
-    # Simplified approach: Year starts in Advent
-    year = target_date.year
-    if target_date.month >= 12 or (target_date.month == 11 and target_date.day >= 27):
-        year += 1
-    
-    # 2026 is Year A
-    cycle_map = {0: 'B', 1: 'C', 2: 'A'}
-    return cycle_map[year % 3]
-    # A year is A if (target_date.year - 2022) % 3 == 0 (roughly)
-    # Actually, we should check against Advent start date.
-    
-    # For now, stick to the cycle logic, but be aware it needs to handle the Advent shift
-    # The liturgical year A, B, C is based on the Advent start date.
-    # The year before the year of our Lord 2023 was A (since 2022 was C, 2023 was A).
-    # Wait, Advent of 2022 starts Year A. So (target_date.year + 1) % 3?
-    # Let's use a standard lookup or robust calculation.
-    # 2025-11-30 is Advent 2025 (Year C). Wait. 
-    # Let's trust the existing logic or refine it to be robust based on known dates.
-    
-    # Let's use a simpler, reliable way:
-    # 2025 is Year C, 2026 is Year A, 2027 is Year B.
-    # (year - 2026) % 3 == 0 -> A.
-    
-    # Liturgical year starts in Advent. 
-    # If target_date is before Advent, it's the *current* liturgical year.
-    # If target_date is in Advent, it's the *new* liturgical year.
-    
-    advent_start = get_advent_start(target_date.year)
-    if target_date < advent_start:
-        # Before Advent, use previous liturgical year cycle
-        year_to_check = target_date.year
-    else:
-        # In Advent, use new liturgical year cycle
-        year_to_check = target_date.year + 1
-        
-    # Standard: 2025-11-30 starts Year C? No, 2024 is B, 2025 is C, 2026 is A.
-    # (2026 - 2026) % 3 = 0 -> A
-    cycle = (year_to_check - 2026) % 3
-    if cycle == 0: return "A"
-    if cycle == 1: return "B"
-    return "C"
-
 def get_advent_start(year: int) -> date:
-    # Sunday closest to Nov 30
-    # Nov 30 is the reference.
-    # Find weekday of Nov 30.
-    nov30 = date(year, 11, 30)
-    weekday = nov30.weekday()
-    # Sunday is 6.
-    # Advent start is the Sunday on or before Nov 30 (which is the Sunday closest).
-    # Actually, it's the Sunday on or before Nov 30? No, it's the Sunday on or before Nov 30 is not necessarily closest.
-    # The rule is: Sunday closest to Nov 30.
-    
-    # If nov30 is Monday (0), Sunday before is Sunday 29.
-    # If nov30 is Tuesday (1), Sunday before is Sunday 28.
-    # ...
-    # If nov30 is Sunday (6), it is Nov 30.
-    
-    days_until_sunday = (6 - weekday) % 7
-    # If sunday is 6, 6-6=0.
-    # Advent is the Sunday closest.
-    
-    # Actually, let's use a simpler, robust formula.
-    # Advent starts on the 4th Sunday before Christmas.
-    christmas = date(year, 12, 25)
-    # The 4th Sunday before Dec 25.
-    # Christmas is Dec 25.
-    # The Sunday before Dec 25 is: 25 - ((25 - 0 (Sunday is not 0?)) 
-    # Let's just find the first Sunday of Advent properly.
-    
-    # 4 weeks = 28 days.
-    # It is the Sunday closest to Nov 30th.
-    
-    days_to_sunday = (6 - nov30.weekday()) % 7
-    # If Sunday is 6, 6-6 = 0.
-    # If Monday is 0, 6-0 = 6 days after (Sunday is Nov 29). 
-    # Wait, the Sunday closest to Nov 30.
-    
-    # Let's refine the Advent start.
-    # Advent start is the Sunday which is closest to Nov 30.
-    # (30 - X) / 7 -> closest Sunday
-    
-    # This is fine for a helper.
-    return nov30 + timedelta(days=days_to_sunday - 7 if days_to_sunday > 3 else days_to_sunday)
+    """Return the Sunday closest to November 30."""
+    reference = date(year, 11, 30)
+    days_to_sunday = (6 - reference.weekday()) % 7
+    if days_to_sunday > 3:
+        days_to_sunday -= 7
+    return reference + timedelta(days=days_to_sunday)
+
+
+def get_liturgical_year(target_date: date) -> str:
+    """Return the Sunday lectionary cycle in effect on a Gregorian date."""
+    year_of_cycle = target_date.year + (target_date >= get_advent_start(target_date.year))
+    return ("A", "B", "C")[(year_of_cycle - 2026) % 3]
 
 
 def easter_sunday(year: int) -> date:
-    """
-    Gregorian Easter calculation.
-    """
-
+    """Return Gregorian Easter Sunday using the Meeus/Jones/Butcher algorithm."""
     a = year % 19
     b = year // 100
     c = year % 100
@@ -125,96 +41,107 @@ def easter_sunday(year: int) -> date:
     k = c % 4
     l = (32 + 2 * e + 2 * i - h - k) % 7
     m = (a + 11 * h + 22 * l) // 451
-
     month = (h + l - 7 * m + 114) // 31
     day = ((h + l - 7 * m + 114) % 31) + 1
-
     return date(year, month, day)
+
+
+def _baptism_of_the_lord(year: int) -> date:
+    epiphany = date(year, 1, 6)
+    if epiphany.weekday() == 6:
+        return epiphany + timedelta(days=1)
+    return epiphany + timedelta(days=(6 - epiphany.weekday()) % 7 or 7)
 
 
 def get_liturgical_season(target_date: date) -> str:
     easter = easter_sunday(target_date.year)
-
     ash_wednesday = easter - timedelta(days=46)
     palm_sunday = easter - timedelta(days=7)
+    holy_thursday = easter - timedelta(days=3)
     pentecost = easter + timedelta(days=49)
-
-    christmas = date(target_date.year, 12, 25)
-
-    advent_start = christmas - timedelta(
-        days=(christmas.weekday() + 22)
-    )
-
-    if ash_wednesday <= target_date < palm_sunday:
-        return "Lent"
-
-    if palm_sunday <= target_date < easter:
-        return "Holy Week"
 
     if easter <= target_date <= pentecost:
         return "Easter"
+    if holy_thursday <= target_date < easter:
+        return "Triduum"
+    if palm_sunday <= target_date < holy_thursday:
+        return "Holy Week"
+    if ash_wednesday <= target_date < palm_sunday:
+        return "Lent"
 
-    if target_date == pentecost:
-        return "Pentecost"
-
-    if advent_start <= target_date < christmas:
+    advent_start = get_advent_start(target_date.year)
+    if target_date >= advent_start and target_date < date(target_date.year, 12, 25):
         return "Advent"
-
-    if (
-        target_date.month == 12
-        and target_date.day >= 25
-    ) or (
-        target_date.month == 1
-        and target_date.day <= 12
-    ):
+    if target_date >= date(target_date.year, 12, 25):
+        return "Christmas"
+    if target_date <= _baptism_of_the_lord(target_date.year):
         return "Christmas"
 
+    previous_advent = get_advent_start(target_date.year - 1)
+    christmas_end = _baptism_of_the_lord(target_date.year)
+    if previous_advent <= target_date <= christmas_end:
+        return "Christmas"
     return "Ordinary Time"
 
 
 def get_liturgical_color(target_date: date) -> str:
+    easter = easter_sunday(target_date.year)
+    if target_date == easter - timedelta(days=3):
+        return "White"
+    if target_date == easter - timedelta(days=2):
+        return "Red"
+    if target_date == easter - timedelta(days=1):
+        return "Purple"
     season = get_liturgical_season(target_date)
+    if season == "Holy Week" and target_date.weekday() == 6:
+        return "Red"
+    if season == "Easter" and target_date == easter + timedelta(days=49):
+        return "Red"
     return LITURGICAL_COLORS.get(season, "Green")
 
 
-
-# Celebration Registry
 CELEBRATIONS = {
     (1, 1): {"name": "Solemnity of Mary, Mother of God", "rank": "Solemnity", "color": "White"},
     (1, 6): {"name": "Epiphany of the Lord", "rank": "Solemnity", "color": "White"},
-    (3, 19): {"name": "St. Joseph, Husband of the Blessed Virgin Mary", "rank": "Solemnity", "color": "White"},
+    (3, 19): {"name": "Saint Joseph, Spouse of the Blessed Virgin Mary", "rank": "Solemnity", "color": "White"},
     (8, 15): {"name": "Assumption of the Blessed Virgin Mary", "rank": "Solemnity", "color": "White"},
+    (9, 30): {"name": "Saint Jerome, Priest and Doctor of the Church", "rank": "Memorial", "color": "White"},
     (11, 1): {"name": "All Saints", "rank": "Solemnity", "color": "White"},
-    (12, 8): {"name": "Immaculate Conception", "rank": "Solemnity", "color": "White"},
+    (12, 8): {"name": "Immaculate Conception of the Blessed Virgin Mary", "rank": "Solemnity", "color": "White"},
     (12, 25): {"name": "Nativity of the Lord", "rank": "Solemnity", "color": "White"},
 }
 
-def get_celebration(target_date: date):
-    # Check fixed dates
-    if (target_date.month, target_date.day) in CELEBRATIONS:
-        return CELEBRATIONS[(target_date.month, target_date.day)]
-    
-    # Check relative dates
+
+def get_celebration(target_date: date) -> dict[str, str] | None:
+    fixed = CELEBRATIONS.get((target_date.month, target_date.day))
+    if fixed:
+        return fixed
+
     easter = easter_sunday(target_date.year)
-    relative_celebrations = {
-        (easter - timedelta(days=46)): {"name": "Ash Wednesday", "rank": "Feria", "color": "Purple"},
-        (easter): {"name": "Easter Sunday", "rank": "Solemnity", "color": "White"},
-        (easter + timedelta(days=49)): {"name": "Pentecost", "rank": "Solemnity", "color": "Red"},
+    relative = {
+        easter - timedelta(days=46): {"name": "Ash Wednesday", "rank": "Feria", "color": "Purple"},
+        easter - timedelta(days=7): {"name": "Palm Sunday of the Passion of the Lord", "rank": "Sunday", "color": "Red"},
+        easter: {"name": "Easter Sunday", "rank": "Solemnity", "color": "White"},
+        easter + timedelta(days=49): {"name": "Pentecost Sunday", "rank": "Solemnity", "color": "Red"},
     }
-    
-    if target_date in relative_celebrations:
-        return relative_celebrations[target_date]
-        
+    if target_date in relative:
+        return relative[target_date]
     return None
 
-def get_calendar_info(target_date: date):
-    season = get_liturgical_season(target_date)
+
+def get_calendar_info(target_date: date) -> dict[str, str]:
     celebration = get_celebration(target_date)
-    
+    if celebration is None and target_date.weekday() == 6:
+        celebration = {
+            "name": f"Sunday in {get_liturgical_season(target_date)}",
+            "rank": "Sunday",
+            "color": get_liturgical_color(target_date),
+        }
+
     return {
         "date": target_date.isoformat(),
         "liturgical_year": get_liturgical_year(target_date),
-        "season": season,
+        "season": get_liturgical_season(target_date),
         "color": celebration["color"] if celebration else get_liturgical_color(target_date),
         "celebration": celebration["name"] if celebration else "Weekday",
         "rank": celebration["rank"] if celebration else "Weekday",

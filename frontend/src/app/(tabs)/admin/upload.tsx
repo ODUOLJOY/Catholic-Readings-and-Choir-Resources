@@ -80,26 +80,39 @@ export default function UploadScreen() {
   const [uploading, setUploading] = useState(false);
   const [parishes, setParishes] = useState<{ id: number; name: string }[]>([]);
   const [parishId, setParishId] = useState<number | null>(null);
+  const [globalScopeAllowed, setGlobalScopeAllowed] = useState(false);
+  const [globalScope, setGlobalScope] = useState(false);
+  const [scopeLoading, setScopeLoading] = useState(true);
   const [scopeLoadError, setScopeLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadUploadScopes() {
       if (!(await AsyncStorage.getItem("access_token"))) {
+        setScopeLoadError("Sign in before submitting a resource.");
+        setScopeLoading(false);
         return;
       }
       try {
-        const response = await api.get<{ parishes: { id: number; name: string }[] }>(
+        const response = await api.get<{
+          parishes: { id: number; name: string }[];
+          global_scope_allowed: boolean;
+        }>(
           "/api/uploads/scopes"
         );
         setParishes(response.data.parishes);
-        if (response.data.parishes.length === 1) {
+        setGlobalScopeAllowed(response.data.global_scope_allowed);
+        if (response.data.global_scope_allowed) {
+          setGlobalScope(true);
+        } else if (response.data.parishes.length === 1) {
           setParishId(response.data.parishes[0].id);
         }
       } catch (error: any) {
         setScopeLoadError(
           error?.response?.data?.detail ||
-            "Parish scopes could not be loaded; global submissions remain available."
+            "Your upload permissions could not be loaded. Retry after checking your connection."
         );
+      } finally {
+        setScopeLoading(false);
       }
     }
 
@@ -143,6 +156,25 @@ export default function UploadScreen() {
       return;
     }
 
+    if (scopeLoading) {
+      Alert.alert("Please wait", "Your authorized upload scopes are still loading.");
+      return;
+    }
+    if (!globalScope && parishId === null) {
+      Alert.alert(
+        "Choose a Resource Scope",
+        "Select one of your authorized parishes before submitting."
+      );
+      return;
+    }
+    if (globalScope && !globalScopeAllowed) {
+      Alert.alert(
+        "Global Upload Not Allowed",
+        "Only platform administrators can submit global resources."
+      );
+      return;
+    }
+
     try {
       setUploading(true);
 
@@ -169,7 +201,7 @@ export default function UploadScreen() {
       formData.append("description", description);
       formData.append("category", category);
       formData.append("language", language);
-      formData.append("global_scope", String(parishId === null));
+      formData.append("global_scope", String(globalScope));
       if (parishId !== null) {
         formData.append("parish_id", String(parishId));
       }
@@ -224,7 +256,12 @@ export default function UploadScreen() {
     setSeason("Ordinary Time");
     setLanguage("English");
     setFile(null);
-    setParishId(null);
+    setGlobalScope(globalScopeAllowed);
+    setParishId(
+      !globalScopeAllowed && parishes.length === 1
+        ? parishes[0].id
+        : null
+    );
   }
 
   return (
@@ -253,11 +290,11 @@ export default function UploadScreen() {
 
           <View style={styles.headerText}>
             <Text style={styles.title}>
-              Submit Reading
+                Submit Choir Resource
             </Text>
 
             <Text style={styles.subtitle}>
-              Submit Catholic content for approval
+              Submit audio, video, PDF or sheet music for approval
             </Text>
           </View>
         </View>
@@ -276,12 +313,12 @@ export default function UploadScreen() {
         />
 
         <Text style={styles.label}>
-          Bible Reference
+          Resource Reference
         </Text>
 
         <TextInput
           style={styles.input}
-          placeholder="e.g. John 6:35-40"
+          placeholder="e.g. composer, source, or Bible reference"
           placeholderTextColor="#999"
           value={reference}
           onChangeText={setReference}
@@ -392,12 +429,12 @@ export default function UploadScreen() {
         </View>
 
         <Text style={styles.label}>
-          Reading Content
+          Resource Notes or Lyrics
         </Text>
 
         <TextInput
           style={styles.textArea}
-          placeholder="Enter the reading content..."
+          placeholder="Add helpful notes or lyrics (optional)..."
           placeholderTextColor="#999"
           multiline
           textAlignVertical="top"
@@ -443,41 +480,49 @@ export default function UploadScreen() {
           />
         </Pressable>
 
-        {parishes.length > 0 ? (
+        {globalScopeAllowed || parishes.length > 0 ? (
           <>
             <Text style={styles.label}>Resource Scope</Text>
             <View style={styles.scopeRow}>
-              <Pressable
-                style={[
-                  styles.languageChip,
-                  parishId === null && styles.chipActive,
-                ]}
-                onPress={() => setParishId(null)}
-                disabled={uploading}
-              >
-                <Text
-                  style={[
-                    styles.chipText,
-                    parishId === null && styles.chipTextActive,
-                  ]}
-                >
-                  Global
-                </Text>
-              </Pressable>
-              {parishes.map((parish) => (
+              {globalScopeAllowed ? (
                 <Pressable
-                  key={parish.id}
                   style={[
                     styles.languageChip,
-                    parishId === parish.id && styles.chipActive,
+                    globalScope && styles.chipActive,
                   ]}
-                  onPress={() => setParishId(parish.id)}
+                  onPress={() => {
+                    setGlobalScope(true);
+                    setParishId(null);
+                  }}
                   disabled={uploading}
                 >
                   <Text
                     style={[
                       styles.chipText,
-                      parishId === parish.id && styles.chipTextActive,
+                      globalScope && styles.chipTextActive,
+                    ]}
+                  >
+                    Global
+                  </Text>
+                </Pressable>
+              ) : null}
+              {parishes.map((parish) => (
+                <Pressable
+                  key={parish.id}
+                  style={[
+                    styles.languageChip,
+                    !globalScope && parishId === parish.id && styles.chipActive,
+                  ]}
+                  onPress={() => {
+                    setGlobalScope(false);
+                    setParishId(parish.id);
+                  }}
+                  disabled={uploading}
+                >
+                  <Text
+                    style={[
+                      styles.chipText,
+                      !globalScope && parishId === parish.id && styles.chipTextActive,
                     ]}
                   >
                     {parish.name}
@@ -489,6 +534,11 @@ export default function UploadScreen() {
         ) : null}
         {scopeLoadError ? (
           <Text style={styles.scopeError}>{scopeLoadError}</Text>
+        ) : null}
+        {!scopeLoading && !globalScopeAllowed && parishes.length === 0 && !scopeLoadError ? (
+          <Text style={styles.scopeError}>
+            No parish upload permissions are assigned to your account.
+          </Text>
         ) : null}
 
         <View style={styles.notice}>
@@ -512,7 +562,7 @@ export default function UploadScreen() {
               styles.submitButtonDisabled,
           ]}
           onPress={upload}
-          disabled={uploading}
+          disabled={uploading || scopeLoading}
         >
           {uploading ? (
             <View style={styles.submitContent}>

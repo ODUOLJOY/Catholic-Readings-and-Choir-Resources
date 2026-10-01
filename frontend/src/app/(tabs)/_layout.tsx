@@ -1,5 +1,5 @@
 import { Tabs, useRouter } from "expo-router";
-import { Ionicons, FontAwesome5 } from "@expo/vector-icons";
+import { FontAwesome5, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useEffect } from "react";
 import { authService } from "@/services/authService";
 
@@ -22,11 +22,10 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarButton: [
           "index",
-          "admin",
-          "profile",
-          "payment",
-          "readings",
           "downloads",
+          "choir",
+          "profile",
+          "admin",
         ].includes(route.name)
           ? undefined
           : () => null,
@@ -56,11 +55,20 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="admin"
+        name="downloads"
         options={{
-          title: "Admin",
+          title: "Downloads",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="shield-checkmark-outline" color={color} size={size} />
+            <Ionicons name="cloud-download-outline" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="choir"
+        options={{
+          title: "Choir",
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="music-note" color={color} size={size} />
           ),
         }}
       />
@@ -74,29 +82,11 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="payment"
+        name="admin"
         options={{
-          title: "Payments",
+          title: "Admin",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="card-outline" color={color} size={size} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="readings"
-        options={{
-          title: "Readings",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="book-outline" color={color} size={size} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="downloads"
-        options={{
-          title: "Downloads",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="cloud-download-outline" color={color} size={size} />
+            <Ionicons name="shield-checkmark-outline" color={color} size={size} />
           ),
         }}
       />

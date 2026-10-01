@@ -24,7 +24,10 @@ router = APIRouter(
 # ==========================
 
 @router.get("/today")
-def today_readings(db: Session = Depends(get_db)):
+def today_readings(
+    language: str = Query("English"),
+    db: Session = Depends(get_db),
+):
     today = date.today()
 
     reading = (
@@ -32,7 +35,9 @@ def today_readings(db: Session = Depends(get_db)):
         .filter(
             Reading.reading_date == today,
             Reading.published == True,
+            Reading.language.ilike(language),
         )
+        .order_by(Reading.id)
         .first()
     )
 
@@ -48,6 +53,7 @@ def today_readings(db: Session = Depends(get_db)):
 @router.get("/{reading_date}")
 def get_reading_by_date(
     reading_date: date,
+    language: str = Query("English"),
     db: Session = Depends(get_db),
 ):
     reading = (
@@ -55,7 +61,9 @@ def get_reading_by_date(
         .filter(
             Reading.reading_date == reading_date,
             Reading.published == True,
+            Reading.language.ilike(language),
         )
+        .order_by(Reading.id)
         .first()
     )
 
@@ -122,12 +130,14 @@ def all_readings(
 @router.get("/search/")
 def search_readings(
     q: str,
+    language: str | None = None,
     db: Session = Depends(get_db),
 ):
+    query = db.query(Reading).filter(Reading.published == True)
+    if language:
+        query = query.filter(Reading.language.ilike(language))
     results = (
-        db.query(Reading)
-        .filter(
-            Reading.published == True,
+        query.filter(
             or_(
                 Reading.first_reading.ilike(f"%{q}%"),
                 Reading.responsorial_psalm.ilike(f"%{q}%"),

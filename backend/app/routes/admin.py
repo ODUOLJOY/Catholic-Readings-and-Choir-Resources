@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from uuid import uuid4
@@ -32,10 +32,10 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 
 
 def require_admin(user: User):
-    if user.role != "super_admin":
+    if user.role not in {"admin", "super_admin"}:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Platform administrator access required.",
+            detail="Administrator access required.",
         )
     return user
 
@@ -258,8 +258,22 @@ def pending_resources(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    pending = db.query(ChoirResource).filter(ChoirResource.is_approved.is_(False))
-    if current_user.role != "super_admin":
+    pending = db.query(ChoirResource).filter(
+        ChoirResource.moderation_status == "pending",
+        ChoirResource.is_approved.is_(False),
+    )
+    if current_user.role == "super_admin":
+        pass
+    elif current_user.role == "admin":
+        parish_ids = manageable_choir_parish_ids(db, current_user)
+        if parish_ids:
+            pending = pending.filter(
+                (ChoirResource.parish_id.is_(None))
+                | ChoirResource.parish_id.in_(parish_ids)
+            )
+        else:
+            pending = pending.filter(ChoirResource.parish_id.is_(None))
+    else:
         parish_ids = manageable_choir_parish_ids(db, current_user)
         if not parish_ids:
             return []
@@ -280,7 +294,11 @@ def approve_resource(
         raise HTTPException(403, "You cannot manage this resource.")
     resource.is_approved = True
     resource.is_published = True
-    resource.approved_at = datetime.now(timezone.utc)
+    resource.moderation_status = "approved"
+    resource.reviewed_by = current_user.id
+    resource.reviewed_at = datetime.now(timezone.utc)
+    resource.rejection_reason = None
+    resource.approved_at = resource.reviewed_at
     resource.published_at = resource.approved_at
     _audit_admin_action(
         db,
@@ -298,6 +316,7 @@ def approve_resource(
 @router.delete("/resources/{resource_id}")
 def reject_resource(
     resource_id: int,
+    reason: str = Query("Rejected by an authorized reviewer.", max_length=1000),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -306,10 +325,14 @@ def reject_resource(
         raise HTTPException(404, "Resource not found.")
     if not can_manage_choir_resource_scope(db, current_user, resource.parish_id):
         raise HTTPException(403, "You cannot manage this resource.")
-    from app.services.choir_resources import local_resource_file
-
-    file_path = local_resource_file(resource)
-    db.delete(resource)
+    resource.is_approved = False
+    resource.is_published = False
+    resource.moderation_status = "rejected"
+    resource.reviewed_by = current_user.id
+    resource.reviewed_at = datetime.now(timezone.utc)
+    resource.rejection_reason = (
+        reason.strip() or "Rejected by an authorized reviewer."
+    )
     _audit_admin_action(
         db,
         current_user,
@@ -318,10 +341,9 @@ def reject_resource(
         resource_id,
         "parish" if resource.parish_id is not None else "global",
         resource.parish_id,
+        resource.rejection_reason,
     )
     db.commit()
-    if file_path and file_path.exists():
-        file_path.unlink()
     return {"message": "Resource rejected successfully."}
 
 
@@ -426,6 +448,7 @@ def _audit_admin_action(
     target_id: int,
     scope_type: str = "global",
     scope_id: int | None = None,
+    reason: str | None = None,
 ) -> None:
     db.add(
         CommunityAuditLog(
@@ -436,5 +459,6 @@ def _audit_admin_action(
             role=actor.role,
             scope_type=scope_type,
             scope_id=scope_id,
+            reason=reason,
         )
     )

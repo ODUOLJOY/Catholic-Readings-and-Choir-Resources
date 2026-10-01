@@ -45,6 +45,8 @@ class UserResponse(UserBase):
     is_verified: bool
     profile_setup_completed: bool
     profile_image: Optional[str] = None
+    phone_number: Optional[str] = None
+    language: str = "English"
     created_at: datetime
     last_login: Optional[datetime] = None
 

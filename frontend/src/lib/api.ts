@@ -27,7 +27,8 @@ api.interceptors.response.use(
 
 		if (
 			error.response?.status !== 401 ||
-			request?._retry ||
+			!request ||
+			request._retry ||
 			request?.url?.includes("/api/auth/login") ||
 			request?.url?.includes("/api/auth/refresh")
 		) {
@@ -36,6 +37,7 @@ api.interceptors.response.use(
 
 		const refreshToken = await AsyncStorage.getItem("refresh_token");
 		if (!refreshToken) {
+			await AsyncStorage.multiRemove(["access_token", "refresh_token", "user", "user_role"]);
 			return Promise.reject(error);
 		}
 
@@ -56,8 +58,18 @@ api.interceptors.response.use(
 			request.headers.Authorization = `Bearer ${accessToken}`;
 			return api(request);
 		} catch (refreshError) {
-			await AsyncStorage.removeItem("access_token");
-			await AsyncStorage.removeItem("refresh_token");
+			if (
+				axios.isAxiosError(refreshError) &&
+				refreshError.response &&
+				[400, 401, 403].includes(refreshError.response.status)
+			) {
+				await AsyncStorage.multiRemove([
+					"access_token",
+					"refresh_token",
+					"user",
+					"user_role",
+				]);
+			}
 			return Promise.reject(refreshError);
 		}
 	}

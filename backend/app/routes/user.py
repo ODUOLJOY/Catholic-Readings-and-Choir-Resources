@@ -23,6 +23,29 @@ class LocationUpdateResponse(UserResponse):
 
 router = APIRouter(prefix="/api/v1/users", tags=["Users"])
 
+@router.get("/me/location")
+def get_user_location(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    parish = db.query(Parish).filter(Parish.id == user.parish_id).first()
+    if parish is None:
+        return {"diocese_id": None, "deanery_id": None, "parish_id": None}
+
+    deanery = db.query(Deanery).filter(
+        Deanery.id == parish.deanery_id,
+        Deanery.diocese_id == parish.diocese_id,
+    ).first()
+    if deanery is None:
+        return {"diocese_id": None, "deanery_id": None, "parish_id": None}
+
+    return {
+        "diocese_id": deanery.diocese_id,
+        "deanery_id": deanery.id,
+        "parish_id": parish.id,
+    }
+
+
 @router.put("/me/location", response_model=LocationUpdateResponse)
 def update_user_location(
     payload: LocationUpdateRequest,

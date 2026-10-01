@@ -2,26 +2,45 @@ import firebase_admin
 from firebase_admin import credentials, messaging
 from pathlib import Path
 
-_initialized = False
+from app.core.config import settings
 
 
 def initialize_firebase():
-    global _initialized
-
-    if _initialized:
-        return
+    try:
+        return firebase_admin.get_app()
+    except ValueError:
+        pass
 
     key_path = Path("firebase-service-account.json")
+    if key_path.is_file():
+        credential = credentials.Certificate(str(key_path))
+    elif settings.FIREBASE_CLIENT_EMAIL and settings.FIREBASE_PRIVATE_KEY:
+        if not settings.FIREBASE_PROJECT_ID:
+            raise RuntimeError(
+                "FIREBASE_PROJECT_ID is required with inline Firebase credentials."
+            )
+        credential = credentials.Certificate(
+            {
+                "type": "service_account",
+                "project_id": settings.FIREBASE_PROJECT_ID,
+                "private_key": settings.FIREBASE_PRIVATE_KEY.replace("\\n", "\n"),
+                "client_email": settings.FIREBASE_CLIENT_EMAIL,
+                "token_uri": "https://oauth2.googleapis.com/token",
+            }
+        )
+    elif settings.FIREBASE_CLIENT_EMAIL or settings.FIREBASE_PRIVATE_KEY:
+        raise RuntimeError(
+            "FIREBASE_CLIENT_EMAIL and FIREBASE_PRIVATE_KEY must be configured together."
+        )
+    else:
+        credential = credentials.ApplicationDefault()
 
-    if not key_path.exists():
-        print("Firebase service account not found.")
-        return
-
-    cred = credentials.Certificate(str(key_path))
-    firebase_admin.initialize_app(cred)
-
-    _initialized = True
-    print("Firebase initialized successfully.")
+    options = {}
+    if settings.FIREBASE_PROJECT_ID:
+        options["projectId"] = settings.FIREBASE_PROJECT_ID
+    if settings.FIREBASE_STORAGE_BUCKET:
+        options["storageBucket"] = settings.FIREBASE_STORAGE_BUCKET
+    return firebase_admin.initialize_app(credential, options=options)
 
 
 def send_push_notification(

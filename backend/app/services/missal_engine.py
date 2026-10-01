@@ -27,48 +27,48 @@ class MissalEngine:
     def sync_today(db: Session):
         return LiturgicalSyncService.sync_date(db, date.today())
 
-    def get_today_readings(self):
-        return self.get_readings(date.today())
+    def get_today_readings(self, language: str = "English"):
+        return self.get_readings(date.today(), language)
 
     def _select_reading_set(self, day):
-        sets = day.reading_sets
+        sets = sorted(day.reading_sets, key=lambda reading_set: reading_set.id or 0)
         if not sets:
             return None
-        
-        # Categorize available sets
-        by_status = {rs.selection_status: rs for rs in sets}
-        
-        rank = day.celebration_rank.lower()
-        
-        if rank in ["solemnity", "feast"]:
-            return by_status.get("strictly_proper") or by_status.get("proper") or sets[0]
-            
-        elif "memorial" in rank:
-            # Memorials use strictly proper if available, otherwise default to daily/weekday
-            if "strictly_proper" in by_status:
-                return by_status["strictly_proper"]
-            return by_status.get("weekday_default") or sets[0]
-            
-        else: # Weekday/Other
-            return by_status.get("weekday_default") or sets[0]
 
-    def get_readings(self, reading_date: date):
+        by_status = {}
+        for reading_set in sets:
+            by_status.setdefault(reading_set.selection_status.lower(), reading_set)
+
+        rank = day.celebration_rank.strip().lower()
+        proper = by_status.get("strictly_proper") or by_status.get("proper")
+        weekday = by_status.get("weekday_default")
+
+        if rank == "solemnity":
+            return proper
+        if rank == "feast":
+            return proper or weekday
+        if "memorial" in rank:
+            if "strictly proper" in rank or "obligatory" in rank:
+                return by_status.get("strictly_proper") or weekday
+            return weekday or by_status.get("common_option") or by_status.get("suggested")
+        return weekday or proper
+
+    def get_readings(self, reading_date: date, language: str = "English"):
         from app.models.liturgical import LiturgicalDay, ReadingSet
 
-        # 1. Try to get verified LiturgicalDay
         day = self.db.query(LiturgicalDay).filter(LiturgicalDay.date == reading_date).first()
-        
-        # 2. Get Reading content (if exists)
+
         reading = (
             self.db.query(Reading)
             .filter(
                 Reading.reading_date == reading_date,
                 Reading.published == True,
+                Reading.language.ilike(language),
             )
+            .order_by(Reading.id)
             .first()
         )
 
-        # 3. Merge calendar info
         calendar_info = get_calendar_info(reading_date)
         
         if day:

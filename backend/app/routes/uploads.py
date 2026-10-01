@@ -1,3 +1,5 @@
+import logging
+import mimetypes
 from pathlib import Path
 from uuid import uuid4
 
@@ -20,28 +22,24 @@ from app.models.parish import Parish
 from app.models.user import User
 from app.routes.auth_dependency import get_current_user
 from app.services.authorization import manageable_choir_parish_ids
+from app.services.private_storage import (
+    open_resource_file,
+    put_private_file,
+    remove_resource_file,
+    resource_storage_key,
+)
 
 router = APIRouter(
     prefix="/api/uploads",
     tags=["Uploads"],
 )
+logger = logging.getLogger(__name__)
 
 # ==============================
 # CONFIGURATION
 # ==============================
 
-UPLOAD_DIR = Path("media")
 PRIVATE_UPLOAD_DIR = Path(settings.STORAGE_PATH) / "private_media"
-
-IMAGE_DIR = UPLOAD_DIR / "images"
-PDF_DIR = UPLOAD_DIR / "pdfs"
-AUDIO_DIR = UPLOAD_DIR / "audio"
-VIDEO_DIR = UPLOAD_DIR / "videos"
-
-IMAGE_DIR.mkdir(parents=True, exist_ok=True)
-PDF_DIR.mkdir(parents=True, exist_ok=True)
-AUDIO_DIR.mkdir(parents=True, exist_ok=True)
-VIDEO_DIR.mkdir(parents=True, exist_ok=True)
 
 MAX_IMAGE = settings.MAX_IMAGE_SIZE
 MAX_PDF = settings.MAX_DOCUMENT_SIZE
@@ -49,7 +47,7 @@ MAX_AUDIO = settings.MAX_AUDIO_SIZE
 MAX_VIDEO = settings.MAX_VIDEO_SIZE
 
 
-def get_destination(filename: str):
+def get_max_size(filename: str) -> int:
     ext = filename.split(".")[-1].lower()
 
     image_types = {item.strip().lower() for item in settings.ALLOWED_IMAGE_TYPES.split(",")}
@@ -60,21 +58,68 @@ def get_destination(filename: str):
     video_types = {item.strip().lower() for item in settings.ALLOWED_VIDEO_TYPES.split(",")}
 
     if ext in image_types:
-        return IMAGE_DIR, MAX_IMAGE
+        return MAX_IMAGE
 
     if ext in document_types:
-        return PDF_DIR, MAX_PDF
+        return MAX_PDF
 
     if ext in audio_types:
-        return AUDIO_DIR, MAX_AUDIO
+        return MAX_AUDIO
 
     if ext in video_types:
-        return VIDEO_DIR, MAX_VIDEO
+        return MAX_VIDEO
 
     raise HTTPException(
         status_code=400,
         detail="Unsupported file type.",
     )
+
+
+EXPECTED_MIME_TYPES = {
+    "jpg": {"image/jpeg", "image/jpg"},
+    "jpeg": {"image/jpeg", "image/jpg"},
+    "png": {"image/png"},
+    "webp": {"image/webp"},
+    "pdf": {"application/pdf"},
+    "mp3": {"audio/mpeg", "audio/mp3"},
+    "wav": {"audio/wav", "audio/x-wav", "audio/wave"},
+    "m4a": {"audio/mp4", "audio/x-m4a"},
+    "aac": {"audio/aac", "audio/aacp", "audio/x-aac"},
+    "mp4": {"video/mp4", "application/mp4"},
+    "mov": {"video/quicktime"},
+    "mkv": {"video/x-matroska", "application/x-matroska"},
+}
+
+
+def _valid_file_header(extension: str, header: bytes) -> bool:
+    if extension == "pdf":
+        return header.startswith(b"%PDF-")
+    if extension in {"jpg", "jpeg"}:
+        return header.startswith(b"\xff\xd8\xff")
+    if extension == "png":
+        return header.startswith(b"\x89PNG\r\n\x1a\n")
+    if extension == "webp":
+        return header.startswith(b"RIFF") and header[8:12] == b"WEBP"
+    if extension == "wav":
+        return header.startswith(b"RIFF") and header[8:12] == b"WAVE"
+    if extension == "mp3":
+        return header.startswith(b"ID3") or (
+            len(header) >= 2 and header[0] == 0xFF and header[1] & 0xE0 == 0xE0
+        )
+    if extension in {"m4a", "mp4", "mov"}:
+        return len(header) >= 8 and header[4:8] == b"ftyp"
+    if extension == "aac":
+        return len(header) >= 2 and header[0] == 0xFF and header[1] & 0xF6 == 0xF0
+    if extension == "mkv":
+        return header.startswith(b"\x1a\x45\xdf\xa3")
+    return False
+
+
+def _validate_content_type(extension: str, content_type: str | None) -> None:
+    declared = (content_type or "").split(";", maxsplit=1)[0].strip().lower()
+    expected = EXPECTED_MIME_TYPES.get(extension, set())
+    if declared and declared not in expected and declared != "application/octet-stream":
+        raise HTTPException(status_code=400, detail="MIME type does not match the file extension.")
 
 
 @router.get("/scopes")
@@ -93,6 +138,7 @@ def upload_scopes(
     )
     return {
         "parishes": [{"id": parish_id, "name": name} for parish_id, name in parishes],
+        "global_scope_allowed": current_user.role in {"admin", "super_admin"},
     }
 
 
@@ -114,12 +160,20 @@ async def upload_resource(
     current_user: User = Depends(get_current_user),
 ):
     filename_suffix = Path(file.filename or "").suffix.lower()
-    _, max_size = get_destination(filename_suffix.lstrip("."))
+    extension = filename_suffix.lstrip(".")
+    max_size = get_max_size(extension)
+    _validate_content_type(extension, file.content_type)
 
     allowed_parishes = manageable_choir_parish_ids(db, current_user)
+    can_submit_global = current_user.role in {"admin", "super_admin"}
     if global_scope and parish_id is not None:
         raise HTTPException(status_code=400, detail="Select only one resource scope.")
-    if parish_id is None and not global_scope and current_user.role != "super_admin":
+    if global_scope and not can_submit_global:
+        raise HTTPException(
+            status_code=403,
+            detail="Only platform administrators can submit global resources.",
+        )
+    if parish_id is None and not global_scope:
         if len(allowed_parishes) == 1:
             parish_id = allowed_parishes[0]
         elif len(allowed_parishes) > 1:
@@ -127,19 +181,23 @@ async def upload_resource(
                 status_code=400,
                 detail="Choose a parish scope before submitting this resource.",
             )
+        else:
+            raise HTTPException(
+                status_code=403,
+                detail="Choose an authorized parish scope or request parish upload access.",
+            )
     if parish_id is not None and parish_id not in allowed_parishes:
         raise HTTPException(
             status_code=403,
             detail="You cannot submit resources to this parish.",
         )
 
-    extension = filename_suffix.lstrip(".")
-    scoped = parish_id is not None
     staging_dir = PRIVATE_UPLOAD_DIR / "staging"
     staging_dir.mkdir(parents=True, exist_ok=True)
     filepath = staging_dir / f"{uuid4().hex}.{extension}"
 
     file_size = 0
+    header = bytearray()
     try:
         with filepath.open("wb") as destination:
             while chunk := await file.read(1024 * 1024):
@@ -149,7 +207,14 @@ async def upload_resource(
                         status_code=400,
                         detail="File exceeds maximum allowed size.",
                     )
+                if len(header) < 16:
+                    header.extend(chunk[:16 - len(header)])
                 destination.write(chunk)
+        if not _valid_file_header(extension, bytes(header)):
+            raise HTTPException(
+                status_code=400,
+                detail="File content does not match the declared file type.",
+            )
     except HTTPException:
         filepath.unlink(missing_ok=True)
         raise
@@ -171,26 +236,29 @@ async def upload_resource(
         is_published=False,
     )
 
-    final_filepath: Path | None = None
+    committed = False
     try:
         db.add(resource)
         db.flush()
-        final_filepath = (
-            PRIVATE_UPLOAD_DIR / "parishes" / str(parish_id)
-            / f"{resource.id}.{extension}"
-            if scoped
-            else PRIVATE_UPLOAD_DIR / "resources" / f"{resource.id}.{extension}"
-        )
-        final_filepath.parent.mkdir(parents=True, exist_ok=True)
+        resource.storage_key = resource_storage_key(resource)
         resource.file_url = f"{str(request.base_url).rstrip('/')}/api/choir/{resource.id}/file"
-        filepath.replace(final_filepath)
+        put_private_file(
+            filepath,
+            resource.storage_key,
+            file.content_type or mimetypes.guess_type(file.filename or "")[0],
+            local_root=PRIVATE_UPLOAD_DIR,
+        )
         db.commit()
+        committed = True
         db.refresh(resource)
-    except (SQLAlchemyError, OSError):
+    except Exception:
         db.rollback()
         filepath.unlink(missing_ok=True)
-        if final_filepath is not None:
-            final_filepath.unlink(missing_ok=True)
+        if resource.storage_key and not committed:
+            try:
+                remove_resource_file(resource)
+            except Exception:
+                logger.exception("Failed to clean up a resource file after upload failure.")
         raise
 
     return {
@@ -246,18 +314,13 @@ def delete_upload(
     if not can_manage_choir_resource_scope(db, current_user, resource.parish_id):
         raise HTTPException(status_code=403, detail="You cannot manage this resource.")
 
-    from app.services.choir_resources import local_resource_file
-
-    file_path = local_resource_file(resource)
-
     try:
+        remove_resource_file(resource)
         db.delete(resource)
         db.commit()
     except SQLAlchemyError:
         db.rollback()
         raise
-    if file_path and file_path.exists():
-        file_path.unlink()
 
     return {
         "message": "Resource deleted successfully."

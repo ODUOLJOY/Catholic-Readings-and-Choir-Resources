@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -11,7 +12,7 @@ class Settings(BaseSettings):
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
     AUTO_CREATE_TABLES: bool = False
-    BOOTSTRAP_SUPER_ADMIN_EMAIL: str = "parmenasoduol1318@gmail.com"
+    BOOTSTRAP_SUPER_ADMIN_EMAIL: str = ""
     SCHEDULED_JOB_TOKEN: str = ""
 
     # ==========================================
@@ -41,7 +42,7 @@ class Settings(BaseSettings):
     MPESA_TRANSACTION_DESCRIPTION: str = "Catholic Readings Subscription"
     MPESA_TRANSACTION_TYPE: str = "CustomerPayBillOnline"
     MPESA_MONTHLY_AMOUNT: int = 10
-    MPESA_RECIPIENT_NUMBER: str = "0748153302"
+    MPESA_RECIPIENT_NUMBER: str = ""
 
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
@@ -84,6 +85,8 @@ class Settings(BaseSettings):
     # Storage
     # ==========================================
     STORAGE_PATH: str = "storage"
+    STORAGE_BACKEND: Literal["local", "firebase"] = "local"
+    FIREBASE_STORAGE_BUCKET: str = ""
 
     # ==========================================
     # Render / Production

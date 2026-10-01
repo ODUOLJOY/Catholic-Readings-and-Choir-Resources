@@ -32,10 +32,21 @@ from app.services.auth_service import (
     verify_password,
 )
 from app.routes.admin import change_role
-from app.routes.auth import ForgotPasswordRequest, forgot_password
+from app.routes.admin import require_admin as require_admin_route
+from app.routes.auth import (
+    ForgotPasswordRequest,
+    ProfileUpdateRequest,
+    forgot_password,
+    update_current_user,
+)
+from app.routes.auth_dependency import require_admin as require_admin_dependency
 from app.services import mpesa
 from app.services import email as email_service
-from app.routes.user import LocationUpdateRequest, update_user_location
+from app.routes.user import (
+    LocationUpdateRequest,
+    get_user_location,
+    update_user_location,
+)
 
 
 @pytest.fixture
@@ -118,6 +129,34 @@ def test_update_location_rejects_mismatched_diocese(db: Session):
     assert error.value.status_code == 400
 
 
+def test_get_user_location_returns_the_parish_parent_hierarchy(db: Session):
+    user, parish, deanery, diocese = create_user_and_parish(db)
+    user.parish_id = parish.id
+    db.commit()
+
+    assert get_user_location(db, user) == {
+        "diocese_id": diocese.id,
+        "deanery_id": deanery.id,
+        "parish_id": parish.id,
+    }
+
+
+def test_get_user_location_returns_empty_hierarchy_without_parish(db: Session):
+    user = User(
+        full_name="Unassigned",
+        email="unassigned-location@example.org",
+        hashed_password="not-a-real-password-hash",
+    )
+    db.add(user)
+    db.commit()
+
+    assert get_user_location(db, user) == {
+        "diocese_id": None,
+        "deanery_id": None,
+        "parish_id": None,
+    }
+
+
 def test_password_reset_updates_the_password_hash(db: Session):
     user = User(
         full_name="Reset User",
@@ -169,6 +208,55 @@ def test_non_super_admin_cannot_change_user_role(db: Session):
     db.refresh(target)
     assert error.value.status_code == 403
     assert target.role == "user"
+
+
+def test_admin_role_has_admin_access_but_not_super_admin_access(db: Session):
+    admin = User(
+        full_name="Administrator",
+        email="administrator-access@example.org",
+        hashed_password="not-a-real-password-hash",
+        role="admin",
+    )
+    user = User(
+        full_name="Regular User",
+        email="regular-access@example.org",
+        hashed_password="not-a-real-password-hash",
+    )
+    db.add_all([admin, user])
+    db.commit()
+
+    assert require_admin_route(admin) is admin
+    assert require_admin_dependency(admin) is admin
+    with pytest.raises(HTTPException) as error:
+        require_admin_route(user)
+    assert error.value.status_code == 403
+
+
+def test_user_can_update_profile_fields_without_changing_role_or_email(db: Session):
+    user = User(
+        full_name="Before",
+        email="profile-edit@example.org",
+        hashed_password="not-a-real-password-hash",
+        role="user",
+    )
+    db.add(user)
+    db.commit()
+
+    updated = update_current_user(
+        ProfileUpdateRequest(
+            full_name="  After  ",
+            phone_number="  +254700000000  ",
+            language="Kiswahili",
+        ),
+        db,
+        user,
+    )
+
+    assert updated.full_name == "After"
+    assert updated.phone_number == "+254700000000"
+    assert updated.language == "Kiswahili"
+    assert updated.email == "profile-edit@example.org"
+    assert updated.role == "user"
 
 
 def test_admin_user_response_excludes_password_hash(db: Session):

@@ -30,6 +30,7 @@ class ChoirResource(Base):
     file_url = Column(String(500), nullable=False)
     file_type = Column(String(50), nullable=False)  # pdf, audio, video, etc.
     file_size = Column(Integer, nullable=True)  # in bytes
+    storage_key = Column(String(1000), nullable=True, index=True)
 
     # Metadata
     composer = Column(String(255), nullable=True)
@@ -39,6 +40,14 @@ class ChoirResource(Base):
     # Status
     is_approved = Column(Boolean, default=False, index=True)
     is_published = Column(Boolean, default=False, index=True)
+    moderation_status = Column(String(30), nullable=False, default="pending", index=True)
+    reviewed_by = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    rejection_reason = Column(Text, nullable=True)
 
     # Upload Info
     uploaded_by = Column(
@@ -53,7 +62,11 @@ class ChoirResource(Base):
         index=True,
     )
 
-    uploader = relationship("User", back_populates="choir_resources")
+    uploader = relationship(
+        "User",
+        back_populates="choir_resources",
+        foreign_keys=[uploaded_by],
+    )
 
     # Ratings and Comments
     rating = Column(Integer, nullable=True)  # 1-5 stars

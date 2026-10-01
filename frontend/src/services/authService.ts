@@ -23,14 +23,19 @@ export const authService = {
   async fetchAndStoreUser() {
     const userResponse = await api.get("/api/auth/me");
     const user = userResponse.data;
-    await AsyncStorage.setItem("user", JSON.stringify(user));
-    await AsyncStorage.setItem("user_role", String(user?.role ?? "").toLowerCase());
+    await this.storeUser(user);
     return user;
+  },
+
+  async storeUser<T extends { role?: unknown }>(user: T) {
+    await AsyncStorage.multiSet([
+      ["user", JSON.stringify(user)],
+      ["user_role", String(user.role ?? "").toLowerCase()],
+    ]);
   },
 
   async logout() {
     await AsyncStorage.multiRemove(["access_token", "refresh_token", "user", "user_role"]);
-    await api.post("/api/auth/logout").catch(() => {});
   },
 
   async getUser() {

@@ -166,6 +166,8 @@ def can_manage_choir_resource_scope(
 ) -> bool:
     if user.role == "super_admin":
         return True
+    if parish_id is None and user.role == "admin":
+        return True
     return bool(
         parish_id is not None
         and scope_exists(db, "parish", parish_id)

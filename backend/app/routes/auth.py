@@ -1,7 +1,10 @@
 import hashlib
 import logging
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
@@ -31,6 +34,13 @@ router = APIRouter(
     tags=["Authentication"],
 )
 logger = logging.getLogger(__name__)
+
+
+class ProfileUpdateRequest(BaseModel):
+    full_name: str | None = Field(default=None, min_length=1, max_length=255)
+    phone_number: str | None = Field(default=None, max_length=30)
+    language: Literal["English", "Kiswahili"] | None = None
+
 
 @router.post(
     "/register",
@@ -121,6 +131,32 @@ def login(
 def current_user(
     user: User = Depends(get_current_user),
 ):
+    return user
+
+
+@router.put("/me", response_model=UserResponse)
+def update_current_user(
+    payload: ProfileUpdateRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    updates = payload.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(status_code=400, detail="Provide at least one profile field to update.")
+
+    if "full_name" in updates:
+        full_name = (updates["full_name"] or "").strip()
+        if not full_name:
+            raise HTTPException(status_code=400, detail="Full name cannot be empty.")
+        user.full_name = full_name
+    if "phone_number" in updates:
+        phone_number = updates["phone_number"]
+        user.phone_number = phone_number.strip() or None if phone_number else None
+    if "language" in updates:
+        user.language = updates["language"]
+
+    db.commit()
+    db.refresh(user)
     return user
 
 

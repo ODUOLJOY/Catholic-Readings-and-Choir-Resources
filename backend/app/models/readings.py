@@ -4,6 +4,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -16,11 +17,14 @@ from app.db.database import Base
 
 class Reading(Base):
     __tablename__ = "readings"
+    __table_args__ = (
+        Index("uq_readings_date_language", "reading_date", "language", unique=True),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
 
     # Date
-    reading_date = Column(Date, nullable=False, unique=True, index=True)
+    reading_date = Column(Date, nullable=False, index=True)
 
     # Languages
     language = Column(String(20), nullable=False, default="English")

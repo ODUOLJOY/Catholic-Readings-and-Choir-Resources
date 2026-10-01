@@ -1,6 +1,5 @@
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
@@ -8,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db, init_db
 from app.core.config import settings
+from app.services.public_files import PublicFiles
 from app.routes import (
     admin,
     auth,
@@ -36,8 +36,16 @@ app = FastAPI(
 
 Path("media").mkdir(parents=True, exist_ok=True)
 Path("uploads").mkdir(parents=True, exist_ok=True)
-app.mount("/media", StaticFiles(directory="media"), name="media")
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+app.mount(
+    "/media",
+    PublicFiles(directory="media", url_prefix="/media"),
+    name="media",
+)
+app.mount(
+    "/uploads",
+    PublicFiles(directory="uploads", url_prefix="/uploads"),
+    name="uploads",
+)
 
 # Legacy table creation is restricted to explicit development opt-in. Production
 # schema changes are deployed with reviewed Alembic migrations.

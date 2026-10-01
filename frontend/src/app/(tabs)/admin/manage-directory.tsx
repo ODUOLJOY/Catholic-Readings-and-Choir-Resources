@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { ScrollView, StyleSheet, Text, View, TextInput, Button, Alert } from "react-native";
-import { api } from "../../../lib/api";
+import { api } from "@/lib/api";
 
 export default function ManageDirectory() {
   const [dioceses, setDioceses] = useState([]);

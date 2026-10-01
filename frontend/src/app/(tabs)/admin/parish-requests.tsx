@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert } from "react-native";
-import { api } from "../../../lib/api";
+import { api } from "@/lib/api";
 
 export default function ParishRequests() {
   const [requests, setRequests] = useState([]);

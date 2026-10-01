@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { View, Text, StyleSheet, Button, Alert, TextInput, ScrollView } from "react-native";
-import { api } from "../../../lib/api";
+import { api } from "@/lib/api";
 
 export default function BulkImport() {
   const [jsonContent, setJsonContent] = useState("");

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, View, ActivityIndicator } from "react-native";
-import { api } from "../../../lib/api";
+import { api } from "@/lib/api";
 
 export default function DirectoryManagement() {
   const [jurisdictions, setJurisdictions] = useState([]);

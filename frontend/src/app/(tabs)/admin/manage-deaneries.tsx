@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, Alert } from "react-native";
-import { api } from "../../lib/api";
+import { api } from "@/lib/api";
 
 export default function ManageDeaneries() {
   const [deaneries, setDeaneries] = useState([]);

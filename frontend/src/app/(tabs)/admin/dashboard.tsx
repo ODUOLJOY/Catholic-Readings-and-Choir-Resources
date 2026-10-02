@@ -1,5 +1,6 @@
 import {
   ActivityIndicator,
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,6 +14,7 @@ import {
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
 import { api } from "@/lib/api";
+import { authService } from "@/services/authService";
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(true);
@@ -41,6 +43,32 @@ export default function Dashboard() {
       setLoading(false);
     }
   }, []);
+
+  async function handleLogout() {
+    Alert.alert(
+      "Log Out",
+      "Are you sure you want to log out?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Log Out",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await authService.logout();
+              router.replace("/login");
+            } catch (error) {
+              console.error("Unable to clear the local session.", error);
+              Alert.alert("Error", "Unable to log out on this device.");
+            }
+          },
+        },
+      ]
+    );
+  }
 
   useEffect(() => {
     void Promise.resolve().then(loadAccess);
@@ -272,6 +300,22 @@ export default function Dashboard() {
         onPress={() => navigate("/community-audit")}
       />
 
+      {/* LOGOUT */}
+      <TouchableOpacity
+        style={styles.logoutButton}
+        onPress={handleLogout}
+      >
+        <Ionicons
+          name="log-out-outline"
+          size={22}
+          color="#C62828"
+        />
+
+        <Text style={styles.logoutText}>
+          Log Out
+        </Text>
+      </TouchableOpacity>
+
       {/* BACK */}
       <TouchableOpacity
         style={styles.backButton}
@@ -301,6 +345,32 @@ function ScopedDashboard({ roles }: { roles: string[] }) {
   const canManageChoir = roles.some((role) =>
     ["parish_admin", "diocesan_admin", "parish_music_director", "choir_director"].includes(role),
   );
+
+  async function handleLogout() {
+    Alert.alert(
+      "Log Out",
+      "Are you sure you want to log out?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Log Out",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await authService.logout();
+              router.replace("/login");
+            } catch (error) {
+              console.error("Unable to clear the local session.", error);
+              Alert.alert("Error", "Unable to log out on this device.");
+            }
+          },
+        },
+      ]
+    );
+  }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -357,6 +427,20 @@ function ScopedDashboard({ roles }: { roles: string[] }) {
           />
         </>
       )}
+      <TouchableOpacity
+        style={styles.logoutButton}
+        onPress={handleLogout}
+      >
+        <Ionicons
+          name="log-out-outline"
+          size={22}
+          color="#C62828"
+        />
+
+        <Text style={styles.logoutText}>
+          Log Out
+        </Text>
+      </TouchableOpacity>
       <TouchableOpacity style={styles.backButton} onPress={() => router.replace("/(tabs)")}>
         <Ionicons name="arrow-back" size={20} color="#0B6623" />
         <Text style={styles.backText}>Back to App</Text>
@@ -538,5 +622,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "800",
     marginLeft: 8,
+  },
+
+  logoutButton: {
+    backgroundColor: "#FDECEC",
+    borderRadius: 12,
+    padding: 15,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginBottom: 20,
+  },
+
+  logoutText: {
+    color: "#C62828",
+    fontSize: 16,
+    fontWeight: "700",
   },
 });

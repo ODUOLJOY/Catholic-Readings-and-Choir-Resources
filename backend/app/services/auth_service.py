@@ -375,9 +375,18 @@ def get_current_user(
 
     payload = verify_token(token)
 
+    subject = payload.get("sub")
+    try:
+        user_pk = int(subject)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid authentication token.",
+        )
+
     user = (
         db.query(User)
-        .filter(User.id == int(payload["sub"]))
+        .filter(User.id == user_pk)
         .first()
     )
 
@@ -385,6 +394,12 @@ def get_current_user(
         raise HTTPException(
             status_code=401,
             detail="User not found.",
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=403,
+            detail="Your account has been disabled.",
         )
 
     return user

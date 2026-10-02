@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.database import get_db
 from app.models.user import User
+from app.models.auth import RefreshSession
 from app.schemas.auth import (
     LoginRequest,
     ForgotPasswordRequest,
@@ -288,8 +289,28 @@ def refresh_token(
             detail="Account disabled.",
         )
 
-    session.revoked_at = now
-    session.last_used_at = now
+    # Claim the session with a single conditional statement so that two
+    # concurrent uses of the same refresh token cannot both rotate. The
+    # database serialises the update; the loser matches no rows and is rejected.
+    claimed = (
+        db.query(RefreshSession)
+        .filter(
+            RefreshSession.jti == jti,
+            RefreshSession.token_hash == _hash_token(refresh_token),
+            RefreshSession.revoked_at.is_(None),
+        )
+        .update(
+            {"revoked_at": now, "last_used_at": now},
+            synchronize_session=False,
+        )
+    )
+    db.commit()
+
+    if claimed != 1:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh session is no longer valid.",
+        )
 
     new_jti = str(uuid.uuid4())
     new_refresh_token = create_refresh_token(

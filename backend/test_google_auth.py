@@ -219,6 +219,26 @@ def test_google_regular_user_is_not_admin(client, monkeypatch):
     assert me.json()["role"] == "user"
 
 
+def test_google_rejects_disabled_account(client, db_session, monkeypatch):
+    enable_google(monkeypatch, identity(email="disabled@example.com"))
+    first = client.post("/api/auth/google", json={"id_token": "x" * 32})
+    assert first.status_code == 200
+
+    user = db_session.query(User).filter(User.email == "disabled@example.com").one()
+    user.is_active = False
+    db_session.commit()
+
+    second = client.post("/api/auth/google", json={"id_token": "y" * 32})
+    assert second.status_code == 403
+
+
+def test_code_exchange_requires_client_secret(monkeypatch):
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", CLIENT_ID)
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_SECRET", "")
+    with pytest.raises(GoogleAuthError):
+        google_auth.exchange_google_code("code", REDIRECT_URI)
+
+
 def test_authorization_url_enforces_redirect_allowlist(client, monkeypatch):
     enable_google(monkeypatch, identity())
 
@@ -229,6 +249,8 @@ def test_authorization_url_enforces_redirect_allowlist(client, monkeypatch):
     assert allowed.status_code == 200
     body = allowed.json()
     assert body["authorization_url"].startswith(settings.GOOGLE_AUTH_URI)
+    assert f"client_id={CLIENT_ID}" in body["authorization_url"]
+    assert "response_type=code" in body["authorization_url"]
     assert body["state"]
 
     denied = client.get(

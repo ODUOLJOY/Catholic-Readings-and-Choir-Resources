@@ -20,4 +20,9 @@ build/
 
 # backend virtual env (if any)
 venv/
+.venv/
 __pycache__/
+
+# local databases
+*.db
+*.sqlite3

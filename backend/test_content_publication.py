@@ -1,4 +1,5 @@
 import pytest
+from datetime import date
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -12,6 +13,7 @@ import app.models.user
 from app.db.database import Base, get_db
 from app.main import app
 from app.models.content import Content
+from app.models.readings import Reading
 
 
 @pytest.fixture
@@ -56,5 +58,40 @@ def test_public_content_detail_hides_unpublished_drafts(db: Session):
         assert published_response.json()["body"] == "Public text"
         assert draft_response.status_code == 404
         assert draft_response.json()["detail"] == "Content not found."
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+def _reading(language: str, published: bool) -> Reading:
+    return Reading(
+        reading_date=date(2030, 1, 1),
+        language=language,
+        liturgical_year="A",
+        liturgical_season="Christmas",
+        liturgical_color="White",
+        first_reading_reference="Genesis 1:1",
+        first_reading="authorized text",
+        gospel_reference="John 1:1",
+        gospel="authorized text",
+        published=published,
+    )
+
+
+def test_public_reading_detail_by_id_hides_unpublished(db: Session):
+    published = _reading("English", True)
+    draft = _reading("Kiswahili", False)
+    db.add_all([published, draft])
+    db.commit()
+
+    app.dependency_overrides[get_db] = lambda: db
+    try:
+        with TestClient(app) as client:
+            published_response = client.get(f"/api/readings/id/{published.id}")
+            draft_response = client.get(f"/api/readings/id/{draft.id}")
+
+        assert published_response.status_code == 200
+        assert published_response.json()["language"] == "English"
+        assert draft_response.status_code == 404
+        assert draft_response.json()["detail"] == "Reading not found."
     finally:
         app.dependency_overrides.pop(get_db, None)

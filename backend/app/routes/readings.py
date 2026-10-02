@@ -50,6 +50,29 @@ def today_readings(
     return reading
 
 
+@router.get("/id/{reading_id}")
+def get_reading_by_id(
+    reading_id: int,
+    db: Session = Depends(get_db),
+):
+    reading = (
+        db.query(Reading)
+        .filter(
+            Reading.id == reading_id,
+            Reading.published == True,
+        )
+        .first()
+    )
+
+    if not reading:
+        raise HTTPException(
+            status_code=404,
+            detail="Reading not found."
+        )
+
+    return reading
+
+
 @router.get("/{reading_date}")
 def get_reading_by_date(
     reading_date: date,

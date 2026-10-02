@@ -56,10 +56,17 @@ export default function Favorites() {
     if (item.type === 'reading') {
       router.push({ pathname: "/reading-detail", params: { date: item.reading_date } });
     } else if (item.type === 'saint') {
-      router.push({ pathname: "/(tabs)/admin/saints", params: { id: item.id } });
+      router.push({ pathname: "/saint-detail", params: { id: item.id } });
     } else if (item.type === 'choir') {
-      router.push({ pathname: "/(tabs)/choir", params: { id: item.id } });
+      router.push({ pathname: "/choir-detail", params: { id: item.id } });
     }
+  }
+
+  function resourceTitle(item: any) {
+    if (item.type === 'reading') {
+      return item.feast || item.saint_of_day || `Readings for ${item.reading_date}`;
+    }
+    return item.title || item.name || "Untitled";
   }
 
   return (
@@ -72,7 +79,7 @@ export default function Favorites() {
           renderItem={({ item }) => (
             <View style={styles.card}>
               <Pressable onPress={() => openResource(item)} style={styles.cardContent}>
-                <Text style={styles.name}>{item.title || item.name}</Text>
+                <Text style={styles.name}>{resourceTitle(item)}</Text>
                 <Text style={styles.type}>{item.type.toUpperCase()}</Text>
               </Pressable>
               <Pressable onPress={() => removeFavorite(item.favorite_id)}>

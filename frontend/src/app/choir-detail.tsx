@@ -17,7 +17,7 @@ export default function ChoirDetail() {
     try {
       setLoading(true);
       const [res, favoritesRes] = await Promise.all([
-        api.get(`/api/v1/choir/${id}`),
+        api.get(`/api/choir/${id}`),
         favoriteService.getFavorites()
       ]);
       setResource(res.data);

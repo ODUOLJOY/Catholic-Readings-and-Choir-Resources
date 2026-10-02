@@ -11,6 +11,7 @@ def init_db():
     Call once during application startup.
     """
     import app.models.user
+    import app.models.auth
     import app.models.locations
     import app.models.parish
     import app.models.readings

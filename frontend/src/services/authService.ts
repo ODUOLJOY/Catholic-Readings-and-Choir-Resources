@@ -35,7 +35,26 @@ export const authService = {
   },
 
   async logout() {
-    await AsyncStorage.multiRemove(["access_token", "refresh_token", "user", "user_role"]);
+    try {
+      const refreshToken = await AsyncStorage.getItem("refresh_token");
+      if (refreshToken) {
+        await api.post("/api/auth/logout", { refresh_token: refreshToken });
+      }
+    } catch (error) {
+      console.warn("Unable to revoke the server session; clearing local session.", error);
+    } finally {
+      await AsyncStorage.multiRemove(["access_token", "refresh_token", "user", "user_role"]);
+    }
+  },
+
+  async logoutAll() {
+    try {
+      await api.post("/api/auth/logout-all");
+    } catch (error) {
+      console.warn("Unable to revoke server sessions; clearing local session.", error);
+    } finally {
+      await AsyncStorage.multiRemove(["access_token", "refresh_token", "user", "user_role"]);
+    }
   },
 
   async getUser() {

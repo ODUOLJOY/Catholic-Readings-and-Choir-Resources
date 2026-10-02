@@ -54,6 +54,9 @@ api.interceptors.response.use(
 			}
 
 			await AsyncStorage.setItem("access_token", accessToken);
+			if (response.data?.refresh_token) {
+				await AsyncStorage.setItem("refresh_token", response.data.refresh_token);
+			}
 			request.headers = request.headers ?? {};
 			request.headers.Authorization = `Bearer ${accessToken}`;
 			return api(request);

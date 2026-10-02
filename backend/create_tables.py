@@ -1,5 +1,6 @@
 from app.db.database import Base, engine
 import app.models.user
+import app.models.auth
 import app.models.parish
 import app.models.parish_request
 import app.models.readings

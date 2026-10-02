@@ -10,6 +10,7 @@ if config.config_file_name:
     fileConfig(config.config_file_name)
 
 # Import models so Alembic can compare the complete declared schema.
+import app.models.auth  # noqa: E402,F401
 import app.models.community  # noqa: E402,F401
 import app.models.content  # noqa: E402,F401
 import app.models.download  # noqa: E402,F401

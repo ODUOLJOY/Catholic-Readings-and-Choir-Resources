@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+import uuid
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -7,11 +8,11 @@ from passlib.context import CryptContext
 from app.core.config import settings
 
 pwd_context = CryptContext(
-    schemes=["bcrypt"],
+    schemes=["argon2", "bcrypt"],
     deprecated="auto",
 )
 
-ALGORITHM = "HS256"
+ALGORITHM = settings.ALGORITHM
 
 
 def hash_password(password: str) -> str:
@@ -41,6 +42,7 @@ def create_access_token(
         {
             "exp": expire,
             "type": "access",
+            "jti": str(uuid.uuid4()),
         }
     )
 
@@ -53,17 +55,17 @@ def create_access_token(
 
 def create_refresh_token(
     data: dict,
+    jti: Optional[str] = None,
 ) -> str:
     to_encode = data.copy()
 
-    expire = datetime.now(timezone.utc) + timedelta(
-        days=settings.REFRESH_TOKEN_EXPIRE_DAYS
-    )
+    expire = refresh_token_expires_at()
 
     to_encode.update(
         {
             "exp": expire,
             "type": "refresh",
+            "jti": jti or str(uuid.uuid4()),
         }
     )
 
@@ -74,8 +76,15 @@ def create_refresh_token(
     )
 
 
+def refresh_token_expires_at() -> datetime:
+    return datetime.now(timezone.utc) + timedelta(
+        days=settings.REFRESH_TOKEN_EXPIRE_DAYS
+    )
+
+
 def decode_token(
     token: str,
+    expected_type: Optional[str] = None
 ):
     try:
         payload = jwt.decode(
@@ -84,10 +93,17 @@ def decode_token(
             algorithms=[ALGORITHM],
         )
 
-        return payload
+        if expected_type and payload.get("type") != expected_type:
+            return None
 
+        return payload
     except JWTError:
         return None
 
 
-decode_access_token = decode_token
+def decode_access_token(token: str, expected_type: Optional[str] = "access"):
+    return decode_token(token, expected_type=expected_type)
+
+
+def decode_refresh_token(token: str):
+    return decode_token(token, expected_type="refresh")

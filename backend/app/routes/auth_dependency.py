@@ -19,7 +19,7 @@ def get_current_user(
     Returns the currently authenticated user.
     """
 
-    payload = decode_access_token(token)
+    payload = decode_access_token(token, expected_type="access")
 
     if payload is None:
         raise HTTPException(
@@ -57,6 +57,18 @@ def get_current_user(
         )
 
     return user
+
+
+def require_moderator(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    if current_user.role not in {"moderator", "admin", "super_admin"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Moderator privileges required.",
+        )
+
+    return current_user
 
 
 def require_admin(

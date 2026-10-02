@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import hashlib
 import hmac
 from typing import Optional
@@ -10,11 +10,70 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.user import User
+from app.models.auth import RefreshSession
+from app.auth.security import hash_password, verify_password
 
 pwd_context = CryptContext(
-    schemes=["bcrypt"],
+    schemes=["argon2", "bcrypt"],
     deprecated="auto",
 )
+
+def create_refresh_session(
+    db: Session,
+    user_id: int,
+    token_hash: str,
+    jti: str,
+    expires_at: datetime,
+    user_agent: Optional[str] = None,
+    ip_address: Optional[str] = None,
+) -> RefreshSession:
+    session = RefreshSession(
+        user_id=user_id,
+        token_hash=token_hash,
+        jti=jti,
+        expires_at=expires_at,
+        user_agent=user_agent,
+        ip_address=ip_address,
+    )
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    return session
+
+def revoke_refresh_session(db: Session, token_hash: str):
+    session = db.query(RefreshSession).filter(RefreshSession.token_hash == token_hash).first()
+    if session:
+        session.revoked_at = datetime.now(timezone.utc)
+        db.commit()
+
+
+def revoke_all_user_sessions(db: Session, user_id: int):
+    db.query(RefreshSession).filter(
+        RefreshSession.user_id == user_id,
+        RefreshSession.revoked_at == None,
+    ).update({"revoked_at": datetime.now(timezone.utc)})
+    db.commit()
+
+
+def get_refresh_session(
+    db: Session, jti: str, token_hash: str
+) -> Optional[RefreshSession]:
+    return (
+        db.query(RefreshSession)
+        .filter(
+            RefreshSession.jti == jti,
+            RefreshSession.token_hash == token_hash,
+        )
+        .first()
+    )
+
+
+def ensure_utc(value: Optional[datetime]) -> Optional[datetime]:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 # =====================================================
@@ -287,6 +346,8 @@ def reset_password(
     user.password_reset_token = None
 
     db.commit()
+
+    revoke_all_user_sessions(db, user.id)
 
 
 # =====================================================

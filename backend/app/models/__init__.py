@@ -1,3 +1,4 @@
+from app.models.auth import RefreshSession
 from app.models.community import (
     CommunityAnnouncement,
     CommunityAuditLog,
@@ -40,6 +41,7 @@ __all__ = [
     "ParishMembership",
     "PrayerIntention",
     "PrayerReaction",
+    "RefreshSession",
     "RoleAssignment",
     "RoleRequest",
     "User",

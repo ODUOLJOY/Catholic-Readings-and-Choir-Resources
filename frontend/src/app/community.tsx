@@ -305,6 +305,9 @@ export default function CommunityScreen() {
         )}
       </Section>
 
+      <Pressable style={styles.secondaryButton} onPress={() => router.push("/messages")}>
+        <Text style={styles.secondaryText}>Private messages</Text>
+      </Pressable>
       <Pressable style={styles.secondaryButton} onPress={() => router.push("/role-requests")}>
         <Text style={styles.secondaryText}>Request a community role</Text>
       </Pressable>

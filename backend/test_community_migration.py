@@ -23,8 +23,11 @@ from sqlalchemy.pool import StaticPool
 
 import app.models.community
 import app.models.choir
+import app.models.favorite
 import app.models.locations
+import app.models.notification
 import app.models.parish
+import app.models.report
 import app.models.user
 from app.db.database import Base
 from app.models.community import ParishMembership
@@ -250,12 +253,20 @@ def test_migration_chain_generates_postgresql_offline_sql():
     resource_moderation_migration = importlib.import_module(
         "migrations.versions.20261002_03_resource_moderation"
     )
+    refresh_session_migration = importlib.import_module(
+        "migrations.versions.20261002_04_add_refresh_sessions"
+    )
+    direct_messaging_migration = importlib.import_module(
+        "migrations.versions.20261002_05_community_direct_messaging"
+    )
     with Operations.context(migration_context):
         community_migration.upgrade()
         choir_migration.upgrade()
         reading_language_migration.upgrade()
         resource_storage_migration.upgrade()
         resource_moderation_migration.upgrade()
+        refresh_session_migration.upgrade()
+        direct_messaging_migration.upgrade()
     sql = output.getvalue()
     assert "CREATE TABLE role_assignments" in sql
     assert "ALTER TABLE choir_resources ADD COLUMN parish_id INTEGER" in sql
@@ -263,3 +274,7 @@ def test_migration_chain_generates_postgresql_offline_sql():
     assert "CREATE UNIQUE INDEX uq_readings_date_language" in sql
     assert "ADD COLUMN storage_key VARCHAR(1000)" in sql
     assert "ADD COLUMN moderation_status VARCHAR(30)" in sql
+    assert "CREATE TABLE refresh_sessions" in sql
+    assert "ADD COLUMN conversation_type VARCHAR(20)" in sql
+    assert "ADD COLUMN last_read_message_id INTEGER" in sql
+    assert "ADD COLUMN direct_key VARCHAR(80)" in sql

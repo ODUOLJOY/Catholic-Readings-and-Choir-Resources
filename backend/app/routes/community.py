@@ -151,6 +151,10 @@ class ConversationCreate(BaseModel):
     scope_id: int = Field(gt=0)
 
 
+class DirectConversationCreate(BaseModel):
+    user_id: int = Field(gt=0)
+
+
 class MessageCreate(BaseModel):
     body: str = Field(min_length=1, max_length=10000)
     reply_to_id: int | None = Field(default=None, gt=0)
@@ -1323,6 +1327,7 @@ def create_conversation(
             _conversation_for_member(db, existing.id, user)
             return existing
     item = CommunityConversation(
+        conversation_type="scope",
         scope_type=payload.scope_type,
         scope_id=payload.scope_id,
         group_id=group_id,
@@ -1352,11 +1357,18 @@ def _conversation_for_member(db: Session, conversation_id: int, user: User):
     ).first()
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found.")
-    _require_member_scope(db, user, conversation.scope_type, conversation.scope_id)
-    membership = db.query(ConversationMember.id).filter(
+    membership = db.query(ConversationMember).filter(
         ConversationMember.conversation_id == conversation.id,
         ConversationMember.user_id == user.id,
     ).first()
+    if conversation.conversation_type == "direct":
+        if membership is None:
+            raise HTTPException(
+                status_code=403,
+                detail="You are not a participant in this conversation.",
+            )
+        return conversation
+    _require_member_scope(db, user, conversation.scope_type, conversation.scope_id)
     if membership is None:
         if conversation.scope_type != "parish":
             raise HTTPException(status_code=404, detail="Conversation not found.")
@@ -1368,6 +1380,217 @@ def _conversation_for_member(db: Session, conversation_id: int, user: User):
         )
         db.commit()
     return conversation
+
+
+def _direct_key(user_id: int, other_id: int) -> str:
+    low, high = sorted((user_id, other_id))
+    return f"{low}:{high}"
+
+
+def _conversation_unread_count(
+    db: Session, conversation_id: int, membership: ConversationMember, user_id: int
+) -> int:
+    query = db.query(CommunityMessage.id).filter(
+        CommunityMessage.conversation_id == conversation_id,
+        CommunityMessage.is_deleted.is_(False),
+        CommunityMessage.sender_id != user_id,
+    )
+    if membership.last_read_message_id is not None:
+        query = query.filter(CommunityMessage.id > membership.last_read_message_id)
+    return query.count()
+
+
+def _conversation_summary(
+    db: Session, conversation: CommunityConversation, user: User
+) -> dict:
+    membership = db.query(ConversationMember).filter(
+        ConversationMember.conversation_id == conversation.id,
+        ConversationMember.user_id == user.id,
+    ).first()
+    last_message = (
+        db.query(CommunityMessage)
+        .filter(
+            CommunityMessage.conversation_id == conversation.id,
+            CommunityMessage.is_deleted.is_(False),
+        )
+        .order_by(CommunityMessage.id.desc())
+        .first()
+    )
+    summary = {
+        "id": conversation.id,
+        "conversation_type": conversation.conversation_type,
+        "scope_type": conversation.scope_type,
+        "scope_id": conversation.scope_id,
+        "group_id": conversation.group_id,
+        "created_by": conversation.created_by,
+        "created_at": conversation.created_at,
+        "unread_count": _conversation_unread_count(
+            db, conversation.id, membership, user.id
+        ) if membership else 0,
+        "is_muted": membership.is_muted if membership else False,
+        "last_message": {
+            "id": last_message.id,
+            "sender_id": last_message.sender_id,
+            "body": last_message.body,
+            "created_at": last_message.created_at,
+        } if last_message else None,
+    }
+    if conversation.conversation_type == "direct":
+        other_id = (
+            db.query(ConversationMember.user_id)
+            .filter(
+                ConversationMember.conversation_id == conversation.id,
+                ConversationMember.user_id != user.id,
+            )
+            .scalar()
+        )
+        other = db.query(User).filter(User.id == other_id).first() if other_id else None
+        summary["participant"] = {
+            "id": other.id,
+            "full_name": other.full_name,
+        } if other else None
+    return summary
+
+
+def _mark_conversation_read(
+    db: Session, conversation_id: int, user: User, up_to_message_id: int | None = None
+) -> None:
+    membership = db.query(ConversationMember).filter(
+        ConversationMember.conversation_id == conversation_id,
+        ConversationMember.user_id == user.id,
+    ).first()
+    if membership is None:
+        return
+    if up_to_message_id is None:
+        up_to_message_id = (
+            db.query(CommunityMessage.id)
+            .filter(CommunityMessage.conversation_id == conversation_id)
+            .order_by(CommunityMessage.id.desc())
+            .limit(1)
+            .scalar()
+        )
+    if up_to_message_id is None:
+        return
+    if (
+        membership.last_read_message_id is None
+        or up_to_message_id > membership.last_read_message_id
+    ):
+        membership.last_read_message_id = up_to_message_id
+        membership.last_read_at = datetime.now(timezone.utc)
+        db.commit()
+
+
+@router.post("/conversations/direct", status_code=201)
+def create_direct_conversation(
+    payload: DirectConversationCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if payload.user_id == user.id:
+        raise HTTPException(
+            status_code=400,
+            detail="You cannot start a conversation with yourself.",
+        )
+    other = db.query(User).filter(
+        User.id == payload.user_id,
+        User.is_active.is_(True),
+    ).first()
+    if other is None:
+        raise HTTPException(status_code=404, detail="User not found.")
+    blocked = db.query(MemberBlock.id).filter(
+        or_(
+            (MemberBlock.blocker_id == user.id) & (MemberBlock.blocked_id == other.id),
+            (MemberBlock.blocker_id == other.id) & (MemberBlock.blocked_id == user.id),
+        )
+    ).first()
+    if blocked:
+        raise HTTPException(
+            status_code=403,
+            detail="Messaging is unavailable due to a member block.",
+        )
+    key = _direct_key(user.id, other.id)
+    conversation = db.query(CommunityConversation).filter(
+        CommunityConversation.direct_key == key,
+        CommunityConversation.is_active.is_(True),
+    ).first()
+    if conversation is None:
+        conversation = CommunityConversation(
+            conversation_type="direct",
+            scope_type=None,
+            scope_id=None,
+            direct_key=key,
+            created_by=user.id,
+        )
+        db.add(conversation)
+        db.flush()
+        for member_id in (user.id, other.id):
+            db.add(
+                ConversationMember(
+                    conversation_id=conversation.id,
+                    user_id=member_id,
+                )
+            )
+        db.commit()
+        db.refresh(conversation)
+    return _conversation_summary(db, conversation, user)
+
+
+@router.get("/members")
+def search_members(
+    q: str | None = Query(default=None, max_length=100),
+    limit: int = Query(default=20, ge=1, le=50),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    active_parish_ids = [
+        row[0]
+        for row in db.query(ParishMembership.parish_id).filter(
+            ParishMembership.user_id == user.id,
+            ParishMembership.status == "active",
+        ).all()
+    ]
+    if not active_parish_ids:
+        return []
+    shared_member_ids = {
+        row[0]
+        for row in db.query(ParishMembership.user_id).filter(
+            ParishMembership.parish_id.in_(active_parish_ids),
+            ParishMembership.status == "active",
+        ).distinct().all()
+    }
+    shared_member_ids.discard(user.id)
+    if not shared_member_ids:
+        return []
+    blocked_ids = {
+        row[0]
+        for row in db.query(MemberBlock.blocked_id).filter(
+            MemberBlock.blocker_id == user.id,
+            MemberBlock.blocked_id.in_(shared_member_ids),
+        ).all()
+    } | {
+        row[0]
+        for row in db.query(MemberBlock.blocker_id).filter(
+            MemberBlock.blocked_id == user.id,
+            MemberBlock.blocker_id.in_(shared_member_ids),
+        ).all()
+    }
+    candidate_ids = shared_member_ids - blocked_ids
+    if not candidate_ids:
+        return []
+    query = db.query(User).filter(
+        User.id.in_(candidate_ids),
+        User.is_active.is_(True),
+    )
+    if q:
+        query = query.filter(User.full_name.ilike(f"%{q}%"))
+    return [
+        {
+            "id": member.id,
+            "full_name": member.full_name,
+            "parish_id": member.parish_id,
+        }
+        for member in query.order_by(User.full_name).limit(limit).all()
+    ]
 
 
 @router.get("/conversations")
@@ -1382,17 +1605,25 @@ def list_conversations(
         .limit(200)
         .all()
     )
-    return [
-        item for item in conversations
-        if user_belongs_to_scope(db, user, item.scope_type, item.scope_id)
-        and (
-            item.scope_type == "parish"
-            or db.query(ConversationMember.id).filter(
+    summaries: list[dict] = []
+    for item in conversations:
+        if item.conversation_type == "direct":
+            is_member = db.query(ConversationMember.id).filter(
                 ConversationMember.conversation_id == item.id,
                 ConversationMember.user_id == user.id,
-            ).first()
-        )
-    ]
+            ).first() is not None
+            if not is_member:
+                continue
+        elif user_belongs_to_scope(db, user, item.scope_type, item.scope_id):
+            if item.scope_type != "parish" and not db.query(ConversationMember.id).filter(
+                ConversationMember.conversation_id == item.id,
+                ConversationMember.user_id == user.id,
+            ).first():
+                continue
+        else:
+            continue
+        summaries.append(_conversation_summary(db, item, user))
+    return summaries
 
 
 @router.get("/conversations/{conversation_id}/messages")
@@ -1410,7 +1641,22 @@ def list_messages(
     )
     if before_id is not None:
         query = query.filter(CommunityMessage.id < before_id)
-    return query.order_by(CommunityMessage.id.desc()).limit(limit).all()
+    messages = query.order_by(CommunityMessage.id.desc()).limit(limit).all()
+    if before_id is None and messages:
+        _mark_conversation_read(db, conversation_id, user, messages[0].id)
+    return messages
+
+
+@router.post("/conversations/{conversation_id}/read")
+def mark_conversation_read(
+    conversation_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    _conversation_for_member(db, conversation_id, user)
+    _mark_conversation_read(db, conversation_id, user)
+    return {"conversation_id": conversation_id, "status": "read"}
+
 
 
 @router.post("/conversations/{conversation_id}/messages", status_code=201)
@@ -1455,8 +1701,11 @@ def create_message(
             User.id == member_id,
             User.is_active.is_(True),
         ).first()
-        if member is not None and user_belongs_to_scope(
-            db, member, conversation.scope_type, conversation.scope_id
+        if member is not None and (
+            conversation.conversation_type == "direct"
+            or user_belongs_to_scope(
+                db, member, conversation.scope_type, conversation.scope_id
+            )
         ):
             _notify_user(
                 db,

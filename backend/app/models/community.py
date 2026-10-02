@@ -275,15 +275,23 @@ class CommunityConversation(Base):
     __tablename__ = "community_conversations"
     __table_args__ = (
         CheckConstraint(
-            "scope_type IN ('parish', 'group')",
+            "(conversation_type = 'direct' AND scope_type IS NULL AND scope_id IS NULL "
+            "AND direct_key IS NOT NULL) OR "
+            "(conversation_type <> 'direct' AND scope_type IN ('parish', 'group') "
+            "AND scope_id IS NOT NULL AND direct_key IS NULL)",
             name="ck_community_conversation_scope",
         ),
+        UniqueConstraint("direct_key", name="uq_community_conversation_direct_key"),
         Index("ix_community_conversations_scope", "scope_type", "scope_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    scope_type: Mapped[str] = mapped_column(String(20), nullable=False)
-    scope_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    conversation_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="scope", server_default="scope"
+    )
+    scope_type: Mapped[str | None] = mapped_column(String(20))
+    scope_id: Mapped[int | None] = mapped_column(Integer)
+    direct_key: Mapped[str | None] = mapped_column(String(80))
     group_id: Mapped[int | None] = mapped_column(ForeignKey("community_groups.id"))
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -302,6 +310,8 @@ class ConversationMember(Base):
     )
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     is_muted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    last_read_message_id: Mapped[int | None] = mapped_column(Integer)
+    last_read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

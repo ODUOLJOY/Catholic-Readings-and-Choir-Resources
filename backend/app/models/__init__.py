@@ -1,4 +1,4 @@
-from app.models.auth import RefreshSession
+from app.models.auth import ExternalIdentity, RefreshSession
 from app.models.community import (
     CommunityAnnouncement,
     CommunityAuditLog,
@@ -34,6 +34,7 @@ __all__ = [
     "ConversationMember",
     "Deanery",
     "Diocese",
+    "ExternalIdentity",
     "GroupMembership",
     "MemberBlock",
     "MessageReaction",

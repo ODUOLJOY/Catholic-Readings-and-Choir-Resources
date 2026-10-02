@@ -48,6 +48,20 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
     # ==========================================
+    # Google Sign-In (OpenID Connect / OAuth 2.0)
+    # ==========================================
+    # All values must be supplied through environment variables. When
+    # GOOGLE_CLIENT_ID is empty the sign-in endpoints fail closed.
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    GOOGLE_REDIRECT_URI: str = ""
+    # Optional comma-separated extra redirect URIs accepted for the
+    # authorization-code flow.
+    GOOGLE_ALLOWED_REDIRECT_URIS: str = ""
+    GOOGLE_AUTH_URI: str = "https://accounts.google.com/o/oauth2/v2/auth"
+    GOOGLE_TOKEN_URI: str = "https://oauth2.googleapis.com/token"
+
+    # ==========================================
     # Email
     # ==========================================
     SMTP_HOST: str = ""

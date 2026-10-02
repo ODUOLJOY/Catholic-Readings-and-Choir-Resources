@@ -259,6 +259,9 @@ def test_migration_chain_generates_postgresql_offline_sql():
     direct_messaging_migration = importlib.import_module(
         "migrations.versions.20261002_05_community_direct_messaging"
     )
+    external_identity_migration = importlib.import_module(
+        "migrations.versions.20261002_06_external_identities"
+    )
     with Operations.context(migration_context):
         community_migration.upgrade()
         choir_migration.upgrade()
@@ -267,6 +270,7 @@ def test_migration_chain_generates_postgresql_offline_sql():
         resource_moderation_migration.upgrade()
         refresh_session_migration.upgrade()
         direct_messaging_migration.upgrade()
+        external_identity_migration.upgrade()
     sql = output.getvalue()
     assert "CREATE TABLE role_assignments" in sql
     assert "ALTER TABLE choir_resources ADD COLUMN parish_id INTEGER" in sql
@@ -278,3 +282,4 @@ def test_migration_chain_generates_postgresql_offline_sql():
     assert "ADD COLUMN conversation_type VARCHAR(20)" in sql
     assert "ADD COLUMN last_read_message_id INTEGER" in sql
     assert "ADD COLUMN direct_key VARCHAR(80)" in sql
+    assert "CREATE TABLE external_identities" in sql

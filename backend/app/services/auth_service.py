@@ -1,22 +1,29 @@
 from datetime import datetime, timedelta, timezone
 import hashlib
 import hmac
+import logging
+import secrets
 from typing import Optional
 
 from fastapi import HTTPException, status
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.user import User
-from app.models.auth import RefreshSession
+from app.models.auth import ExternalIdentity, RefreshSession
 from app.auth.security import hash_password, verify_password
+from app.services.google_auth import PROVIDER_GOOGLE, GoogleIdentity
 
 pwd_context = CryptContext(
     schemes=["argon2", "bcrypt"],
     deprecated="auto",
 )
+
+logger = logging.getLogger(__name__)
 
 def create_refresh_session(
     db: Session,
@@ -227,6 +234,105 @@ def create_user(
     return user
 
 
+def login_with_google_identity(
+    db: Session,
+    identity: GoogleIdentity,
+) -> tuple[User, bool]:
+    """Resolve a verified Google identity to a local user.
+
+    Returns ``(user, created)``. The Google subject is the permanent key; an
+    email is only ever used to *link* to an already-trusted local account and
+    never to create a trusted identity on its own.
+    """
+
+    linked = (
+        db.query(ExternalIdentity)
+        .filter(
+            ExternalIdentity.provider == PROVIDER_GOOGLE,
+            ExternalIdentity.provider_subject == identity.subject,
+        )
+        .first()
+    )
+
+    if linked is not None:
+        user = db.query(User).filter(User.id == linked.user_id).first()
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Linked account no longer exists.",
+            )
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account disabled.",
+            )
+        return user, False
+
+    if not identity.email or not identity.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google did not provide a verified email address.",
+        )
+
+    email = identity.email.lower()
+    user = db.query(User).filter(func.lower(User.email) == email).first()
+    created = False
+
+    if user is not None:
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account disabled.",
+            )
+        # Only link to an existing account whose email ownership is already
+        # proven, or to the operator-managed super administrator. This blocks
+        # takeover of a pre-registered, unverified account that shares the
+        # same email as the Google identity.
+        if not (user.is_verified or user.role == "super_admin"):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "An account with this email already exists. "
+                    "Sign in with your password to link Google sign-in."
+                ),
+            )
+    else:
+        user = User(
+            full_name=identity.name or email.split("@")[0],
+            email=email,
+            hashed_password=hash_password(secrets.token_urlsafe(48)),
+            role="user",
+            is_active=True,
+            is_verified=True,
+            profile_picture=identity.picture,
+        )
+        db.add(user)
+        db.flush()
+        created = True
+
+    db.add(
+        ExternalIdentity(
+            user_id=user.id,
+            provider=PROVIDER_GOOGLE,
+            provider_subject=identity.subject,
+            email_at_link=email,
+        )
+    )
+
+    try:
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        logger.warning("Concurrent Google identity link was prevented.")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This Google account is already linked.",
+        ) from error
+
+    db.refresh(user)
+    return user, created
+
+
 class AuthService:
     """Compatibility facade for legacy route imports."""
 
@@ -318,9 +424,18 @@ def reset_password(
             detail="Invalid reset token.",
         )
 
+    subject = payload.get("sub")
+    try:
+        user_pk = int(subject)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid reset token.",
+        )
+
     user = (
         db.query(User)
-        .filter(User.id == int(payload["sub"]))
+        .filter(User.id == user_pk)
         .first()
     )
 
@@ -373,6 +488,17 @@ def generate_email_verification_token(
     )
 
 
+def issue_email_verification_token(db: Session, user: User) -> str:
+    """Create a one-time email verification token and store only its hash."""
+
+    token = generate_email_verification_token(user)
+    user.email_verification_token = hashlib.sha256(
+        token.encode("utf-8")
+    ).hexdigest()
+    db.commit()
+    return token
+
+
 def verify_email(
     db: Session,
     token: str,
@@ -386,9 +512,18 @@ def verify_email(
             detail="Invalid verification token.",
         )
 
+    subject = payload.get("sub")
+    try:
+        user_pk = int(subject)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid verification token.",
+        )
+
     user = (
         db.query(User)
-        .filter(User.id == int(payload["sub"]))
+        .filter(User.id == user_pk)
         .first()
     )
 
@@ -398,6 +533,17 @@ def verify_email(
             detail="User not found.",
         )
 
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    if not user.email_verification_token or not hmac.compare_digest(
+        user.email_verification_token,
+        token_hash,
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or already used verification token.",
+        )
+
     user.is_verified = True
+    user.email_verification_token = None
 
     db.commit()

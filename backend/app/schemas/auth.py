@@ -49,6 +49,25 @@ class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
 
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr
+
+
+class GoogleIdTokenRequest(BaseModel):
+    id_token: str = Field(min_length=16)
+
+
+class GoogleCodeExchangeRequest(BaseModel):
+    code: str = Field(min_length=4)
+    redirect_uri: str = Field(min_length=1, max_length=2048)
+    state: str = Field(min_length=1, max_length=4096)
+
+
+class GoogleConfigResponse(BaseModel):
+    enabled: bool
+    client_id: str = ""
+
+
 class ResetPasswordRequest(BaseModel):
     token: str
     password: str = Field(min_length=8)

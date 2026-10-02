@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -14,12 +14,25 @@ import {
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
 import { authService } from "@/services/authService";
+import { googleAuthService } from "@/services/googleAuthService";
 
 export default function AdminLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleEnabled, setGoogleEnabled] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    googleAuthService.isEnabled().then((enabled) => {
+      if (active) setGoogleEnabled(enabled);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function login() {
     if (!email.trim() || !password) {
@@ -50,6 +63,38 @@ export default function AdminLogin() {
       Alert.alert("Login Failed", error?.response?.data?.detail || "Unable to login.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loginWithGoogle() {
+    try {
+      setGoogleLoading(true);
+      await googleAuthService.signIn();
+
+      const role = await authService.getRole();
+      if (
+        role !== "admin" &&
+        role !== "super_admin" &&
+        role !== "superadmin"
+      ) {
+        await authService.logout();
+        Alert.alert(
+          "Access Denied",
+          "This account does not have administrator privileges."
+        );
+        return;
+      }
+
+      router.replace("/(tabs)/admin/dashboard");
+    } catch (error: any) {
+      Alert.alert(
+        "Google Sign-In Failed",
+        error?.response?.data?.detail ||
+          error?.message ||
+          "Unable to sign in with Google."
+      );
+    } finally {
+      setGoogleLoading(false);
     }
   }
 
@@ -165,6 +210,25 @@ export default function AdminLogin() {
           )}
         </Pressable>
 
+        {googleEnabled && (
+          <Pressable
+            style={[
+              styles.googleButton,
+              (loading || googleLoading) && styles.disabled,
+            ]}
+            onPress={loginWithGoogle}
+            disabled={loading || googleLoading}
+          >
+            {googleLoading ? (
+              <ActivityIndicator color="#0B6623" />
+            ) : (
+              <Text style={styles.googleText}>
+                Continue with Google
+              </Text>
+            )}
+          </Pressable>
+        )}
+
         <Pressable
           style={styles.backButton}
           onPress={() =>
@@ -274,6 +338,23 @@ const styles = StyleSheet.create({
   buttonText: {
     color: "#fff",
     fontSize: 17,
+    fontWeight: "800",
+  },
+
+  googleButton: {
+    minHeight: 54,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: "#0B6623",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 12,
+    backgroundColor: "#fff",
+  },
+
+  googleText: {
+    color: "#0B6623",
+    fontSize: 16,
     fontWeight: "800",
   },
 

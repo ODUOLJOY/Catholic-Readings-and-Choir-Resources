@@ -34,24 +34,53 @@ def send_password_reset_email(recipient: str, token: str) -> None:
     )
 
     try:
-        if settings.SMTP_PORT == 465:
-            with smtplib.SMTP_SSL(
-                settings.SMTP_HOST,
-                settings.SMTP_PORT,
-                timeout=20,
-                context=ssl.create_default_context(),
-            ) as smtp:
-                _deliver(smtp, sender, recipient, message)
-        else:
-            with smtplib.SMTP(
-                settings.SMTP_HOST,
-                settings.SMTP_PORT,
-                timeout=20,
-            ) as smtp:
-                smtp.starttls(context=ssl.create_default_context())
-                _deliver(smtp, sender, recipient, message)
+        _dispatch(sender, recipient, message)
     except (OSError, smtplib.SMTPException) as error:
         raise EmailDeliveryError("Unable to deliver the password reset email.") from error
+
+
+def send_email_verification_email(recipient: str, token: str) -> None:
+    sender = settings.EMAIL_FROM or settings.SMTP_USERNAME
+    if not email_delivery_configured():
+        raise EmailDeliveryError("SMTP email delivery is not configured.")
+
+    verify_url = (
+        f"{settings.FRONTEND_URL.rstrip('/')}/verify-email?"
+        f"{urlencode({'token': token})}"
+    )
+    message = EmailMessage()
+    message["Subject"] = "Verify your Catholic Readings account email"
+    message["From"] = sender
+    message["To"] = recipient
+    message.set_content(
+        "Thanks for creating a Catholic Readings account.\n\n"
+        f"Confirm your email address within 24 hours using this link:\n{verify_url}\n\n"
+        "If you did not create this account, you can ignore this email."
+    )
+
+    try:
+        _dispatch(sender, recipient, message)
+    except (OSError, smtplib.SMTPException) as error:
+        raise EmailDeliveryError("Unable to deliver the verification email.") from error
+
+
+def _dispatch(sender: str, recipient: str, message: EmailMessage) -> None:
+    if settings.SMTP_PORT == 465:
+        with smtplib.SMTP_SSL(
+            settings.SMTP_HOST,
+            settings.SMTP_PORT,
+            timeout=20,
+            context=ssl.create_default_context(),
+        ) as smtp:
+            _deliver(smtp, sender, recipient, message)
+    else:
+        with smtplib.SMTP(
+            settings.SMTP_HOST,
+            settings.SMTP_PORT,
+            timeout=20,
+        ) as smtp:
+            smtp.starttls(context=ssl.create_default_context())
+            _deliver(smtp, sender, recipient, message)
 
 
 def _deliver(

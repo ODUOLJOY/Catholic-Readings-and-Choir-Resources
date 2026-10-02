@@ -1,3 +1,5 @@
+import secrets
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -158,17 +160,18 @@ def test_change_password(client):
     assert success_resp.status_code == 200
 
 
-def test_super_admin_bootstrap_flow(client, db_session):
-    admin_email = "parmenasoduol1318@gmail.com"
-    settings.BOOTSTRAP_SUPER_ADMIN_EMAIL = admin_email
+def test_super_admin_bootstrap_flow(client, db_session, monkeypatch):
+    admin_email = "bootstrap-admin@example.com"
+    admin_password = secrets.token_urlsafe(24)
+    monkeypatch.setattr(settings, "BOOTSTRAP_SUPER_ADMIN_EMAIL", admin_email)
 
     # Register user with super admin email
     client.post(
         "/api/auth/register",
         json={
-            "full_name": "Parmenas Oduol",
+            "full_name": "Bootstrap Admin",
             "email": admin_email,
-            "password": "AdminPassword123!",
+            "password": admin_password,
         },
     )
 
@@ -188,7 +191,7 @@ def test_super_admin_bootstrap_flow(client, db_session):
         "/api/auth/login",
         json={
             "email": admin_email,
-            "password": "AdminPassword123!",
+            "password": admin_password,
         },
     )
     assert login_resp.status_code == 200

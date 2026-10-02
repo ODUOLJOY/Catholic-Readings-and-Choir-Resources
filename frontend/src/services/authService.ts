@@ -8,7 +8,20 @@ export const authService = {
       password,
     });
 
-    const { access_token, refresh_token } = response.data;
+    await this.persistSession(response.data);
+
+    return response.data;
+  },
+
+  async persistSession(data: {
+    access_token?: string;
+    refresh_token?: string;
+  }) {
+    const { access_token, refresh_token } = data;
+
+    if (!access_token || !refresh_token) {
+      throw new Error("The server did not return a complete session.");
+    }
 
     await AsyncStorage.multiSet([
       ["access_token", access_token],
@@ -16,8 +29,25 @@ export const authService = {
     ]);
 
     await this.fetchAndStoreUser();
-    
-    return response.data;
+
+    return data;
+  },
+
+  async restoreSession(): Promise<boolean> {
+    const accessToken = await AsyncStorage.getItem("access_token");
+    const refreshToken = await AsyncStorage.getItem("refresh_token");
+
+    if (!accessToken && !refreshToken) {
+      return false;
+    }
+
+    try {
+      await this.fetchAndStoreUser();
+      return true;
+    } catch (error) {
+      console.warn("Stored session could not be restored.", error);
+      return false;
+    }
   },
 
   async fetchAndStoreUser() {

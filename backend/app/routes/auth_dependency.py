@@ -37,9 +37,18 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    try:
+        subject_id = int(user_id)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication token.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     user = (
         db.query(User)
-        .filter(User.id == int(user_id))
+        .filter(User.id == subject_id)
         .first()
     )
 

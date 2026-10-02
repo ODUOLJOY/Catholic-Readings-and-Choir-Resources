@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -13,11 +13,37 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { authService } from "@/services/authService";
+import { googleAuthService } from "@/services/googleAuthService";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleEnabled, setGoogleEnabled] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    googleAuthService.isEnabled().then((enabled) => {
+      if (active) setGoogleEnabled(enabled);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const routeAfterAuth = async () => {
+    const user = await authService.getUser();
+    const role = await authService.getRole();
+
+    if (role === "admin" || role === "super_admin" || role === "superadmin") {
+      router.replace("/(tabs)/admin/dashboard");
+    } else if (user && user.profile_setup_completed) {
+      router.replace("/(tabs)");
+    } else {
+      router.replace("/profile-setup");
+    }
+  };
 
   const login = async () => {
     if (!email.trim() || !password.trim()) {
@@ -28,17 +54,7 @@ export default function LoginScreen() {
     try {
       setLoading(true);
       await authService.login(email, password);
-      Alert.alert("Success", "Login successful.");
-      const user = await authService.getUser();
-      const role = await authService.getRole();
-
-      if (role === "admin" || role === "super_admin" || role === "superadmin") {
-        router.replace("/(tabs)/admin/dashboard");
-      } else if (user && user.profile_setup_completed) {
-        router.replace("/(tabs)");
-      } else {
-        router.replace("/profile-setup");
-      }
+      await routeAfterAuth();
     } catch (error: any) {
       let message = "Unable to login.";
       if (error.response?.data?.detail) {
@@ -47,6 +63,22 @@ export default function LoginScreen() {
       Alert.alert("Login Failed", message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const signInWithGoogle = async () => {
+    try {
+      setGoogleLoading(true);
+      await googleAuthService.signIn();
+      await routeAfterAuth();
+    } catch (error: any) {
+      const message =
+        error?.response?.data?.detail ||
+        error?.message ||
+        "Unable to sign in with Google.";
+      Alert.alert("Google Sign-In Failed", message);
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -99,6 +131,28 @@ export default function LoginScreen() {
             </Text>
           )}
         </TouchableOpacity>
+
+        {googleEnabled && (
+          <>
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <TouchableOpacity
+              style={styles.googleButton}
+              disabled={loading || googleLoading}
+              onPress={signInWithGoogle}
+            >
+              {googleLoading ? (
+                <ActivityIndicator color="#0B6623" />
+              ) : (
+                <Text style={styles.googleText}>Continue with Google</Text>
+              )}
+            </TouchableOpacity>
+          </>
+        )}
 
         <TouchableOpacity
           onPress={() => router.push("/forgot-password")}
@@ -164,6 +218,41 @@ const styles = StyleSheet.create({
   loginText: {
     color: "#fff",
     fontSize: 17,
+    fontWeight: "700",
+  },
+
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 22,
+    marginBottom: 4,
+  },
+
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "#e0e0e0",
+  },
+
+  dividerText: {
+    marginHorizontal: 12,
+    color: "#888",
+    fontSize: 13,
+  },
+
+  googleButton: {
+    marginTop: 12,
+    paddingVertical: 15,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#0B6623",
+    alignItems: "center",
+    backgroundColor: "#fff",
+  },
+
+  googleText: {
+    color: "#0B6623",
+    fontSize: 16,
     fontWeight: "700",
   },
 

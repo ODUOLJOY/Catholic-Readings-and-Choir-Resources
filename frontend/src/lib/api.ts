@@ -8,6 +8,40 @@ export const api = axios.create({
 	timeout: 20000,
 });
 
+let refreshPromise: Promise<string> | null = null;
+
+async function clearStoredSession() {
+	await AsyncStorage.multiRemove([
+		"access_token",
+		"refresh_token",
+		"user",
+		"user_role",
+	]);
+}
+
+async function refreshAccessToken(): Promise<string> {
+	const refreshToken = await AsyncStorage.getItem("refresh_token");
+	if (!refreshToken) {
+		throw new Error("No refresh token available.");
+	}
+
+	const response = await api.post("/api/auth/refresh", null, {
+		params: { refresh_token: refreshToken },
+	});
+	const accessToken = response.data?.access_token;
+
+	if (!accessToken) {
+		throw new Error("Refresh response did not include an access token.");
+	}
+
+	await AsyncStorage.setItem("access_token", accessToken);
+	if (response.data?.refresh_token) {
+		await AsyncStorage.setItem("refresh_token", response.data.refresh_token);
+	}
+
+	return accessToken;
+}
+
 api.interceptors.request.use(async (config) => {
 	const token = await AsyncStorage.getItem("access_token");
 
@@ -35,28 +69,16 @@ api.interceptors.response.use(
 			return Promise.reject(error);
 		}
 
-		const refreshToken = await AsyncStorage.getItem("refresh_token");
-		if (!refreshToken) {
-			await AsyncStorage.multiRemove(["access_token", "refresh_token", "user", "user_role"]);
-			return Promise.reject(error);
-		}
-
 		request._retry = true;
 
 		try {
-			const response = await api.post("/api/auth/refresh", null, {
-				params: { refresh_token: refreshToken },
-			});
-			const accessToken = response.data?.access_token;
-
-			if (!accessToken) {
-				throw new Error("Refresh response did not include an access token.");
+			if (!refreshPromise) {
+				refreshPromise = refreshAccessToken().finally(() => {
+					refreshPromise = null;
+				});
 			}
 
-			await AsyncStorage.setItem("access_token", accessToken);
-			if (response.data?.refresh_token) {
-				await AsyncStorage.setItem("refresh_token", response.data.refresh_token);
-			}
+			const accessToken = await refreshPromise;
 			request.headers = request.headers ?? {};
 			request.headers.Authorization = `Bearer ${accessToken}`;
 			return api(request);
@@ -66,12 +88,7 @@ api.interceptors.response.use(
 				refreshError.response &&
 				[400, 401, 403].includes(refreshError.response.status)
 			) {
-				await AsyncStorage.multiRemove([
-					"access_token",
-					"refresh_token",
-					"user",
-					"user_role",
-				]);
+				await clearStoredSession();
 			}
 			return Promise.reject(refreshError);
 		}

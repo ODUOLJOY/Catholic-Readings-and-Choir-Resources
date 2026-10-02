@@ -5,10 +5,11 @@ import uuid
 from datetime import datetime, timezone
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.db.database import get_db
 from app.models.user import User
 from app.schemas.auth import (
@@ -19,22 +20,31 @@ from app.schemas.auth import (
     ResetPasswordRequest,
     TokenResponse,
     ChangePasswordRequest,
+    GoogleCodeExchangeRequest,
+    GoogleConfigResponse,
+    GoogleIdTokenRequest,
+    ResendVerificationRequest,
 )
 from app.schemas.user import UserResponse
+from app.services import google_auth
 from app.services.auth_service import (
     AuthService,
     create_refresh_session,
     ensure_utc,
     generate_reset_token,
     get_refresh_session,
+    issue_email_verification_token,
+    login_with_google_identity,
     revoke_all_user_sessions,
     revoke_refresh_session,
 )
 from app.services.email import (
     EmailDeliveryError,
     email_delivery_configured,
+    send_email_verification_email,
     send_password_reset_email,
 )
+from app.services.google_auth import GoogleAuthError
 from app.routes.auth_dependency import get_current_user
 from app.auth.security import (
     create_access_token,
@@ -54,6 +64,45 @@ logger = logging.getLogger(__name__)
 
 def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _issue_session(
+    db: Session,
+    user: User,
+    request: Request | None = None,
+) -> dict:
+    access_token = create_access_token(
+        data={
+            "sub": str(user.id),
+            "role": user.role,
+        }
+    )
+
+    jti = str(uuid.uuid4())
+    refresh_token = create_refresh_token(
+        data={"sub": str(user.id)},
+        jti=jti,
+    )
+
+    create_refresh_session(
+        db,
+        user_id=user.id,
+        token_hash=_hash_token(refresh_token),
+        jti=jti,
+        expires_at=refresh_token_expires_at(),
+        user_agent=request.headers.get("user-agent") if request else None,
+        ip_address=request.client.host if request and request.client else None,
+    )
+
+    user.last_login = AuthService.now()
+    db.commit()
+
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "user": user,
+    }
 
 
 class ProfileUpdateRequest(BaseModel):
@@ -90,7 +139,19 @@ def register(
         password=payload.password,
     )
 
+    _send_verification_email(db, user)
+
     return user
+
+
+def _send_verification_email(db: Session, user: User) -> None:
+    token = issue_email_verification_token(db, user)
+    try:
+        send_email_verification_email(user.email, token)
+    except EmailDeliveryError:
+        logger.warning(
+            "Verification email was not delivered; the account remains unverified."
+        )
 
 
 @router.post(
@@ -120,41 +181,7 @@ def login(
             detail="Account disabled.",
         )
 
-    access_token = create_access_token(
-        data={
-            "sub": str(user.id),
-            "role": user.role,
-        }
-    )
-
-    jti = str(uuid.uuid4())
-    refresh_token = create_refresh_token(
-        data={
-            "sub": str(user.id),
-        },
-        jti=jti,
-    )
-
-    create_refresh_session(
-        db,
-        user_id=user.id,
-        token_hash=_hash_token(refresh_token),
-        jti=jti,
-        expires_at=refresh_token_expires_at(),
-        user_agent=request.headers.get("user-agent"),
-        ip_address=request.client.host if request.client else None,
-    )
-
-    user.last_login = AuthService.now()
-
-    db.commit()
-
-    return {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "token_type": "bearer",
-        "user": user,
-    }
+    return _issue_session(db, user, request)
 
 
 @router.get(
@@ -378,3 +405,130 @@ def verify_email(
     return {
         "message": "Email verified successfully."
     }
+
+
+@router.post("/resend-verification")
+def resend_verification(
+    payload: ResendVerificationRequest,
+    db: Session = Depends(get_db),
+):
+    if not email_delivery_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Email delivery is not configured.",
+        )
+
+    user = (
+        db.query(User)
+        .filter(User.email == str(payload.email).lower())
+        .first()
+    )
+
+    if user and user.is_active and not user.is_verified:
+        _send_verification_email(db, user)
+
+    return {
+        "message": "If the account exists and is unverified, a verification email will be sent.",
+    }
+
+
+@router.get("/google/config", response_model=GoogleConfigResponse)
+def google_config():
+    enabled = google_auth.google_oauth_configured()
+    return GoogleConfigResponse(
+        enabled=enabled,
+        client_id=settings.GOOGLE_CLIENT_ID if enabled else "",
+    )
+
+
+@router.post("/google", response_model=TokenResponse)
+def google_sign_in(
+    payload: GoogleIdTokenRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    if not google_auth.google_oauth_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Google sign-in is not configured.",
+        )
+
+    try:
+        identity = google_auth.verify_google_id_token(payload.id_token)
+    except GoogleAuthError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Google identity token.",
+        )
+
+    user, _created = login_with_google_identity(db, identity)
+    return _issue_session(db, user, request)
+
+
+@router.get("/google/authorization-url")
+def google_authorization_url(
+    redirect_uri: str = Query(..., min_length=1, max_length=2048),
+):
+    if not google_auth.google_oauth_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Google sign-in is not configured.",
+        )
+
+    try:
+        validated_redirect = google_auth.validate_redirect_uri(redirect_uri)
+    except GoogleAuthError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The requested redirect URI is not allowed.",
+        )
+
+    state = google_auth.create_google_state()
+    return {
+        "authorization_url": google_auth.build_authorization_url(
+            validated_redirect,
+            state,
+        ),
+        "state": state,
+    }
+
+
+@router.post("/google/callback", response_model=TokenResponse)
+def google_callback(
+    payload: GoogleCodeExchangeRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    if not google_auth.google_oauth_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Google sign-in is not configured.",
+        )
+
+    if not google_auth.verify_google_state(payload.state):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired Google sign-in state.",
+        )
+
+    try:
+        validated_redirect = google_auth.validate_redirect_uri(payload.redirect_uri)
+    except GoogleAuthError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The requested redirect URI is not allowed.",
+        )
+
+    try:
+        identity = google_auth.exchange_google_code(
+            payload.code,
+            validated_redirect,
+        )
+    except GoogleAuthError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unable to verify the Google account.",
+        )
+
+    user, _created = login_with_google_identity(db, identity)
+    return _issue_session(db, user, request)

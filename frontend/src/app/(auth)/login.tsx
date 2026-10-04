@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
@@ -15,12 +14,15 @@ import { router } from "expo-router";
 import { authService } from "@/services/authService";
 import { googleAuthService } from "@/services/googleAuthService";
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleEnabled, setGoogleEnabled] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -45,38 +47,51 @@ export default function LoginScreen() {
     }
   };
 
+  const validate = (): boolean => {
+    if (!email.trim()) {
+      setError("Please enter your email address.");
+      return false;
+    }
+    if (!EMAIL_REGEX.test(email.trim().toLowerCase())) {
+      setError("Please enter a valid email address.");
+      return false;
+    }
+    if (!password) {
+      setError("Please enter your password.");
+      return false;
+    }
+    setError(null);
+    return true;
+  };
+
   const login = async () => {
-    if (!email.trim() || !password.trim()) {
-      Alert.alert("Missing Information", "Please enter your email and password.");
+    if (!validate()) {
       return;
     }
 
+    setLoading(true);
+
     try {
-      setLoading(true);
       await authService.login(email, password);
       await routeAfterAuth();
     } catch (error: any) {
-      let message = "Unable to login.";
-      if (error.response?.data?.detail) {
-        message = error.response.data.detail;
-      }
-      Alert.alert("Login Failed", message);
+      const detail = error?.response?.data?.detail;
+      setError(detail || "Invalid email or password.");
     } finally {
       setLoading(false);
     }
   };
 
   const signInWithGoogle = async () => {
+    setGoogleLoading(true);
+    setError(null);
+
     try {
-      setGoogleLoading(true);
       await googleAuthService.signIn();
       await routeAfterAuth();
     } catch (error: any) {
-      const message =
-        error?.response?.data?.detail ||
-        error?.message ||
-        "Unable to sign in with Google.";
-      Alert.alert("Google Sign-In Failed", message);
+      const detail = error?.response?.data?.detail;
+      setError(detail || "Unable to sign in with Google.");
     } finally {
       setGoogleLoading(false);
     }
@@ -96,7 +111,7 @@ export default function LoginScreen() {
         </Text>
 
         <Text style={styles.subtitle}>
-          & Choir Resources
+          &amp; Choir Resources
         </Text>
 
         <TextInput
@@ -105,8 +120,13 @@ export default function LoginScreen() {
           autoCapitalize="none"
           autoCorrect={false}
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(value) => {
+            setEmail(value);
+            if (error) setError(null);
+          }}
           style={styles.input}
+          editable={!loading}
+          placeholderTextColor="#999"
         />
 
         <TextInput
@@ -114,9 +134,16 @@ export default function LoginScreen() {
           secureTextEntry
           autoCapitalize="none"
           value={password}
-          onChangeText={setPassword}
+          onChangeText={(value) => {
+            setPassword(value);
+            if (error) setError(null);
+          }}
           style={styles.input}
+          editable={!loading}
+          placeholderTextColor="#999"
         />
+
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
         <TouchableOpacity
           style={styles.loginButton}
@@ -156,6 +183,7 @@ export default function LoginScreen() {
 
         <TouchableOpacity
           onPress={() => router.push("/forgot-password")}
+          disabled={loading}
         >
           <Text style={styles.link}>
             Forgot Password?
@@ -164,6 +192,7 @@ export default function LoginScreen() {
 
         <TouchableOpacity
           onPress={() => router.push("/register")}
+          disabled={loading}
         >
           <Text style={styles.link}>
             Don&apos;t have an account? Register
@@ -205,6 +234,14 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     fontSize: 16,
     backgroundColor: "#fff",
+  },
+
+  errorText: {
+    color: "#D32F2F",
+    fontSize: 13,
+    marginBottom: 8,
+    marginTop: -8,
+    paddingHorizontal: 4,
   },
 
   loginButton: {

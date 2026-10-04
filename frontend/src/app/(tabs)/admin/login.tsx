@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   StyleSheet,
   Text,
@@ -16,6 +15,8 @@ import {
 import { authService } from "@/services/authService";
 import { googleAuthService } from "@/services/googleAuthService";
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export default function AdminLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -23,6 +24,7 @@ export default function AdminLogin() {
   const [loading, setLoading] = useState(false);
   const [googleEnabled, setGoogleEnabled] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -35,14 +37,23 @@ export default function AdminLogin() {
   }, []);
 
   async function login() {
-    if (!email.trim() || !password) {
-      Alert.alert("Missing Information", "Enter your administrator email and password.");
+    const trimmedEmail = email.trim().toLowerCase();
+
+    if (!trimmedEmail || !password) {
+      setError("Enter your administrator email and password.");
       return;
     }
 
+    if (!EMAIL_REGEX.test(trimmedEmail)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+
+    setError(null);
+    setLoading(true);
+
     try {
-      setLoading(true);
-      await authService.login(email, password);
+      await authService.login(trimmedEmail, password);
 
       const role = await authService.getRole();
       if (
@@ -51,8 +62,7 @@ export default function AdminLogin() {
         role !== "superadmin"
       ) {
         await authService.logout();
-        Alert.alert(
-          "Access Denied",
+        setError(
           "This account does not have administrator privileges."
         );
         return;
@@ -60,15 +70,17 @@ export default function AdminLogin() {
 
       router.replace("/(tabs)/admin/dashboard");
     } catch (error: any) {
-      Alert.alert("Login Failed", error?.response?.data?.detail || "Unable to login.");
+      const detail = error?.response?.data?.detail;
+      setError(detail || "Unable to login.");
     } finally {
       setLoading(false);
     }
   }
 
   async function loginWithGoogle() {
+    setError(null);
+    setGoogleLoading(true);
     try {
-      setGoogleLoading(true);
       await googleAuthService.signIn();
 
       const role = await authService.getRole();
@@ -78,8 +90,7 @@ export default function AdminLogin() {
         role !== "superadmin"
       ) {
         await authService.logout();
-        Alert.alert(
-          "Access Denied",
+        setError(
           "This account does not have administrator privileges."
         );
         return;
@@ -87,12 +98,8 @@ export default function AdminLogin() {
 
       router.replace("/(tabs)/admin/dashboard");
     } catch (error: any) {
-      Alert.alert(
-        "Google Sign-In Failed",
-        error?.response?.data?.detail ||
-          error?.message ||
-          "Unable to sign in with Google."
-      );
+      const detail = error?.response?.data?.detail;
+      setError(detail || "Unable to sign in with Google.");
     } finally {
       setGoogleLoading(false);
     }
@@ -118,6 +125,8 @@ export default function AdminLogin() {
       </View>
 
       <View style={styles.form}>
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
         <Text style={styles.label}>
           Administrator Email
         </Text>
@@ -139,7 +148,10 @@ export default function AdminLogin() {
             autoComplete="email"
             textContentType="emailAddress"
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(value) => {
+              setEmail(value);
+              if (error) setError(null);
+            }}
             editable={!loading}
           />
         </View>
@@ -163,7 +175,10 @@ export default function AdminLogin() {
             autoCapitalize="none"
             autoCorrect={false}
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(value) => {
+              setPassword(value);
+              if (error) setError(null);
+            }}
             editable={!loading}
             onSubmitEditing={login}
           />
@@ -287,6 +302,15 @@ const styles = StyleSheet.create({
     padding: 20,
     borderWidth: 1,
     borderColor: "#E5EAE6",
+  },
+
+  errorText: {
+    color: "#D32F2F",
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 8,
+    marginTop: -4,
+    paddingHorizontal: 2,
   },
 
   label: {

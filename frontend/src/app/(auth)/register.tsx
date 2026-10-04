@@ -1,7 +1,6 @@
 import { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -20,6 +19,9 @@ import {
   HierarchySelection,
 } from "@/components/HierarchyPicker";
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_PASSWORD_LENGTH = 8;
+
 export default function RegisterScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -28,29 +30,69 @@ export default function RegisterScreen() {
   const [hierarchy, setHierarchy] = useState<HierarchySelection | null>(null);
   const [loading, setLoading] = useState(false);
   const [locationOptional, setLocationOptional] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const parish = hierarchy?.parish ?? null;
   const parishLabel = parish ? `${parish.name}` : null;
 
+  const setEmailSafe = (value: string) => {
+    setEmail(value);
+    if (error) setError(null);
+  };
+
+  const setPasswordSafe = (value: string) => {
+    setPassword(value);
+    if (error) setError(null);
+  };
+
+  const setFullNameSafe = (value: string) => {
+    setFullName(value);
+    if (error) setError(null);
+  };
+
   async function handleRegister() {
-    if (!email || !password || !confirmPassword || !fullName) {
-      Alert.alert("Error", "All fields are required");
+    const trimmedEmail = email.trim().toLowerCase();
+
+    if (!fullName.trim()) {
+      setError("Please enter your full name.");
+      return;
+    }
+
+    if (!trimmedEmail) {
+      setError("Please enter your email address.");
+      return;
+    }
+
+    if (!EMAIL_REGEX.test(trimmedEmail)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+
+    if (!password) {
+      setError("Please enter your password.");
+      return;
+    }
+
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setError(
+        "Password must contain at least 8 characters."
+      );
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert("Error", "Passwords do not match");
+      setError("Passwords do not match.");
       return;
     }
 
     if (!parish && !locationOptional) {
-      Alert.alert(
-        "Error",
+      setError(
         "Select your province, diocese, deanery and parish, or tap Skip for now."
       );
       return;
     }
 
+    setError(null);
     setLoading(true);
 
     try {
@@ -59,7 +101,7 @@ export default function RegisterScreen() {
       await api.post(
         "/api/auth/register",
         {
-          email: email.trim().toLowerCase(),
+          email: trimmedEmail,
           password,
           full_name: fullName,
           parish_id: parish ? parish.id : null,
@@ -67,7 +109,7 @@ export default function RegisterScreen() {
         { timeout: 15000 }
       );
 
-      await authService.login(email.trim().toLowerCase(), password);
+      await authService.login(trimmedEmail, password);
 
       const user = await authService.getUser();
       // A user who picked a parish during sign-up is already located, so there
@@ -88,7 +130,7 @@ export default function RegisterScreen() {
         message = "Could not connect to the server.";
       }
 
-      Alert.alert("Registration Failed", message);
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -112,6 +154,8 @@ export default function RegisterScreen() {
         </View>
 
         <View style={styles.formCard}>
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
           <Text style={styles.label}>Full Name</Text>
           <View style={styles.inputWrapper}>
             <Ionicons name="person-outline" size={20} color="#777" />
@@ -119,8 +163,9 @@ export default function RegisterScreen() {
               style={styles.input}
               placeholder="Enter your full name"
               value={fullName}
-              onChangeText={setFullName}
+              onChangeText={setFullNameSafe}
               editable={!loading}
+              placeholderTextColor="#999"
             />
           </View>
 
@@ -131,10 +176,11 @@ export default function RegisterScreen() {
               style={styles.input}
               placeholder="Enter your email"
               value={email}
-              onChangeText={setEmail}
+              onChangeText={setEmailSafe}
               keyboardType="email-address"
               autoCapitalize="none"
               editable={!loading}
+              placeholderTextColor="#999"
             />
           </View>
 
@@ -145,9 +191,10 @@ export default function RegisterScreen() {
               style={styles.input}
               placeholder="Enter your password"
               value={password}
-              onChangeText={setPassword}
+              onChangeText={setPasswordSafe}
               secureTextEntry
               editable={!loading}
+              placeholderTextColor="#999"
             />
           </View>
 
@@ -158,9 +205,13 @@ export default function RegisterScreen() {
               style={styles.input}
               placeholder="Confirm your password"
               value={confirmPassword}
-              onChangeText={setConfirmPassword}
+              onChangeText={(value) => {
+                setConfirmPassword(value);
+                if (error) setError(null);
+              }}
               secureTextEntry
               editable={!loading}
+              placeholderTextColor="#999"
             />
           </View>
 
@@ -233,6 +284,14 @@ const styles = StyleSheet.create<any>({
     borderRadius: 20,
     padding: 20,
     marginBottom: 20,
+  },
+  errorText: {
+    color: "#D32F2F",
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 8,
+    marginTop: -4,
+    paddingHorizontal: 2,
   },
   label: {
     fontSize: 14,

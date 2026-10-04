@@ -115,6 +115,16 @@ def allowed_redirect_uris() -> set[str]:
         candidate = value.strip()
         if candidate:
             uris.add(candidate)
+    # The production web front-end redirects back to ``<FRONTEND_URL>/auth/google``
+    # (see frontend/src/services/googleAuthService.ts ``googleRedirectUri``). Derive
+    # that URI from the canonical ``FRONTEND_URL`` so the backend always allows the
+    # redirect URI the front-end actually sends, instead of requiring operators to
+    # also list it in GOOGLE_ALLOWED_REDIRECT_URIS. Only http/https origins are
+    # derived this way; platform-specific schemes (e.g. the mobile deep link
+    # ``frontend://auth/google``) must still be supplied explicitly via GOOGLE_*.
+    frontend = (settings.FRONTEND_URL or "").strip().rstrip("/")
+    if frontend.startswith(("http://", "https://")):
+        uris.add(f"{frontend}/auth/google")
     return uris
 
 

@@ -334,3 +334,68 @@ def test_verify_google_id_token_normalizes_claims(monkeypatch):
     assert resolved.subject == "abc"
     assert resolved.email == "user@example.com"
     assert resolved.email_verified is True
+
+
+def test_web_redirect_uri_from_frontend_url_allowed(client, monkeypatch):
+    """The production web front-end redirects back to <FRONTEND_URL>/auth/google.
+
+    The backend must allow that redirect URI automatically (derived from
+    FRONTEND_URL) so the authorization-code flow is not rejected at the
+    authorization-URL stage. Platform-specific schemes (e.g. ``frontend://``)
+    are NOT derived from FRONTEND_URL and must still be supplied explicitly.
+    """
+    monkeypatch.setattr(settings, "FRONTEND_URL", "https://app.example.test")
+    enable_google(monkeypatch, identity())
+
+    allowed = client.get(
+        "/api/auth/google/authorization-url",
+        params={"redirect_uri": "https://app.example.test/auth/google"},
+    )
+    assert allowed.status_code == 200
+    assert "authorization_url" in allowed.json()
+
+    denied = client.get(
+        "/api/auth/google/authorization-url",
+        params={"redirect_uri": "https://evil.example.com/auth/google"},
+    )
+    assert denied.status_code == 400
+
+
+def test_mobile_custom_scheme_redirect_is_allowed(client, monkeypatch):
+    """Native apps use the ``frontend://`` deep-link redirect URI.
+
+    It must be supplied via GOOGLE_REDIRECT_URI / GOOGLE_ALLOWED_REDIRECT_URIS
+    (it is never derived from FRONTEND_URL) and the backend must accept it.
+    """
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", CLIENT_ID)
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_SECRET", "")
+    monkeypatch.setattr(settings, "GOOGLE_REDIRECT_URI", "")
+    monkeypatch.setattr(settings, "GOOGLE_ALLOWED_REDIRECT_URIS", "frontend://auth/google")
+    monkeypatch.setattr(settings, "FRONTEND_URL", "http://localhost:8081")
+
+    response = client.get(
+        "/api/auth/google/authorization-url",
+        params={"redirect_uri": "frontend://auth/google"},
+    )
+    assert response.status_code == 200
+    assert "authorization_url" in response.json()
+
+
+def test_callback_returns_401_when_code_exchange_fails(client, monkeypatch):
+    """A failing token exchange surfaces as a stable 401 + application code."""
+    enable_google(monkeypatch, identity())
+    monkeypatch.setattr(
+        google_auth,
+        "exchange_google_code",
+        lambda code, redirect_uri: (_ for _ in ()).throw(
+            GoogleAuthError("Unable to exchange the Google authorization code.")
+        ),
+    )
+
+    state = google_auth.create_google_state()
+    response = client.post(
+        "/api/auth/google/callback",
+        json={"code": "abc123", "redirect_uri": REDIRECT_URI, "state": state},
+    )
+    assert response.status_code == 401
+    assert response.json()["code"] == "AUTH_GOOGLE_VERIFICATION_FAILED"

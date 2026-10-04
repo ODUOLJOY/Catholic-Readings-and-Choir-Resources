@@ -94,7 +94,7 @@ _AUTH_ERROR_CODES = {
     (400, "Full name cannot be empty."): "AUTH_PROFILE_UPDATE_INVALID",
     (400, "Invalid role."): "AUTH_INVALID_ROLE",
     (400, "The requested redirect URI is not allowed."): "AUTH_INVALID_REDIRECT_URI",
-    (400, "Unable to verify the Google account."): "AUTH_GOOGLE_VERIFICATION_FAILED",
+    (401, "Unable to verify the Google account."): "AUTH_GOOGLE_VERIFICATION_FAILED",
     (400, "Invalid Google identity token."): "AUTH_INVALID_GOOGLE_TOKEN",
     (400, "Invalid or expired Google sign-in state."): "AUTH_INVALID_GOOGLE_STATE",
     # --- Login ---

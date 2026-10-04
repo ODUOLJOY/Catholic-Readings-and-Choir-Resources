@@ -2,8 +2,10 @@ from datetime import date
 
 from app.services.calendar import (
     get_calendar_info,
-    get_liturgical_year,
+    get_liturgical_year_sunday,
+    get_liturgical_year_weekday,
     get_liturgical_season,
+    get_liturgical_week,
     get_liturgical_color,
 )
 
@@ -15,9 +17,11 @@ class CalendarEngine:
     Responsible for determining:
     - Liturgical Season
     - Liturgical Colour
-    - Liturgical Year (A/B/C)
+    - Liturgical Year (A/B/C for Sundays, I/II for weekdays)
+    - Liturgical Week
     - Feast Information
-    - Saint of the Day
+    - Celebration Rank
+    - Regional Calendar Support
 
     The implementation is designed so that future
     integration with official Catholic liturgical
@@ -25,20 +29,23 @@ class CalendarEngine:
     """
 
     @staticmethod
-    def today():
-        return CalendarEngine.by_date(date.today())
+    def today(region: str = "KE"):
+        return CalendarEngine.by_date(date.today(), region)
 
     @staticmethod
-    def by_date(day: date):
-
-        info = get_calendar_info(day)
+    def by_date(day: date, region: str = "KE"):
+        info = get_calendar_info(day, region)
 
         return {
             "date": day.isoformat(),
-            "liturgical_year": get_liturgical_year(day),
+            "sunday_cycle": get_liturgical_year_sunday(day),
+            "weekday_cycle": get_liturgical_year_weekday(day),
             "liturgical_season": get_liturgical_season(day),
+            "liturgical_week": get_liturgical_week(day),
             "liturgical_color": get_liturgical_color(day),
-            "calendar": info,
+            "celebration": info.get("celebration"),
+            "rank": info.get("rank"),
+            "region": region,
         }
 
     @staticmethod
@@ -50,33 +57,27 @@ class CalendarEngine:
         return get_liturgical_color(day)
 
     @staticmethod
-    def year(day: date):
-        return get_liturgical_year(day)
+    def sunday_cycle(day: date):
+        return get_liturgical_year_sunday(day)
 
     @staticmethod
-    def feast(day: date):
-        info = get_calendar_info(day)
-        return info.get("feast")
+    def weekday_cycle(day: date):
+        return get_liturgical_year_weekday(day)
 
     @staticmethod
-    def saint(day: date):
-        info = get_calendar_info(day)
-        return info.get("saint")
+    def week(day: date):
+        return get_liturgical_week(day)
 
     @staticmethod
-    def is_holy_day(day: date):
-        info = get_calendar_info(day)
-        return info.get("holy_day", False)
-
-    @staticmethod
-    def liturgical_day(day: date):
-        info = get_calendar_info(day)
+    def celebration(day: date, region: str = "KE"):
+        info = get_calendar_info(day, region)
         return {
-            "date": day.isoformat(),
-            "season": info.get("season"),
+            "name": info.get("celebration"),
+            "rank": info.get("rank"),
             "color": info.get("color"),
-            "year": info.get("year"),
-            "feast": info.get("feast"),
-            "saint": info.get("saint"),
-            "holy_day": info.get("holy_day"),
         }
+
+    @staticmethod
+    def is_holy_day(day: date, region: str = "KE"):
+        celebration = CalendarEngine.celebration(day, region)
+        return celebration.get("rank") in ["Solemnity", "Feast"]

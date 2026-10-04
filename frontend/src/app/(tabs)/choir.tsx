@@ -18,6 +18,7 @@ import { cacheResource } from "@/services/offlineStore";
 import { favoriteService, Favorite } from "@/services/favoriteService";
 import { ReportButton } from "@/components/ReportButton";
 import { Ionicons } from "@expo/vector-icons";
+import { CHOIR_CATEGORY_SECTIONS } from "@/config/choirCategories";
 
 interface ChoirResource {
   id: number;
@@ -32,91 +33,17 @@ interface ChoirResource {
   language?: string;
   season?: string;
   composer?: string;
-  key?: string;
+  key_signature?: string;
   tempo?: string;
   duration?: string;
-  choir_voice?: string;
+  voice_part?: string;
   parish_id?: number | null;
 }
 
-const categories = [
-  "All",
-
-  // Mass
-  "Entrance",
-  "Kyrie Eleison",
-  "Gloria",
-  "Responsorial Psalm",
-  "Gospel Acclamation",
-  "Sadaka",
-  "Offertory",
-  "Sanctus",
-  "Holy Holy",
-  "Memorial Acclamation",
-  "Great Amen",
-  "Agnus Dei",
-  "Lamb of God",
-  "Communion",
-  "Thanksgiving",
-  "Exit",
-  "Recessional",
-
-  // Liturgical seasons
-  "Advent",
-  "Christmas",
-  "Lent",
-  "Holy Week",
-  "Triduum",
-  "Easter",
-  "Pentecost",
-  "Ordinary Time",
-
-  // Marian
-  "Marian",
-  "Our Lady",
-  "Rosary",
-  "Ave Maria",
-  "Marian Feasts",
-
-  // Sacraments and occasions
-  "Wedding",
-  "Funeral",
-  "Baptism",
-  "Confirmation",
-  "First Holy Communion",
-  "Ordination",
-  "Anointing of the Sick",
-
-  // Eucharistic / devotional
-  "Eucharistic",
-  "Adoration",
-  "Benediction",
-  "Divine Mercy",
-  "Praise and Worship",
-
-  // Saints and feasts
-  "Saints",
-  "All Saints",
-  "All Souls",
-  "Feast Day",
-
-  // Christmas-related
-  "Carols",
-  "Epiphany",
-  "Holy Family",
-  "Christ the King",
-
-  // Other
-  "Children",
-  "Youth",
-  "Choir Practice",
-  "Gregorian Chant",
-  "Latin Chant",
-  "Swahili",
-  "English",
-  "Latin",
-  "Other",
-];
+// Canonical 27 categories live in @/config/choirCategories. The "All" option
+// below is a browse filter, not a category a resource can be tagged with, so
+// it is kept here rather than in the shared config.
+const ALL_FILTER = "All";
 
 const seasons = [
   "All Seasons",
@@ -147,15 +74,59 @@ const fileTypes = [
   "Sheet Music",
 ];
 
+// Voices / parts for choral resources
+const voiceParts = [
+  "All Voices",
+  "Soprano",
+  "Alto",
+  "Tenor",
+  "Bass",
+  "SATB",
+];
+
+// Common Western key signatures (ASCII sharp/flat spelling)
+const keySignatures = [
+  "All Keys",
+  "C",
+  "G",
+  "D",
+  "A",
+  "E",
+  "B",
+  "F#",
+  "Bb",
+  "Eb",
+  "Ab",
+  "Db",
+  "Gb",
+  "F",
+];
+
+// Tempo / metre markings
+const tempoMarkers = [
+  "All Tempos",
+  "Largo",
+  "Andante",
+  "Moderato",
+  "Allegro",
+  "Presto",
+  "Slow",
+  "Moderate",
+  "Fast",
+];
+
 export default function Choir() {
   const [resources, setResources] = useState<ChoirResource[]>([]);
   const [filtered, setFiltered] = useState<ChoirResource[]>([]);
 
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("All");
+  const [category, setCategory] = useState(ALL_FILTER);
   const [season, setSeason] = useState("All Seasons");
   const [language, setLanguage] = useState("All Languages");
   const [fileType, setFileType] = useState("All Types");
+  const [voicePart, setVoicePart] = useState("All Voices");
+  const [keySignature, setKeySignature] = useState("All Keys");
+  const [tempo, setTempo] = useState("All Tempos");
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -164,9 +135,11 @@ export default function Choir() {
   const [showSeasons, setShowSeasons] = useState(false);
   const [showLanguages, setShowLanguages] = useState(false);
   const [showFileTypes, setShowFileTypes] = useState(false);
+  const [showVoicePart, setShowVoicePart] = useState(false);
+  const [showKeySignature, setShowKeySignature] = useState(false);
+  const [showTempo, setShowTempo] = useState(false);
 
   useEffect(() => {
-    loadResources();
     loadFavorites();
   }, []);
 
@@ -196,99 +169,80 @@ export default function Choir() {
     }
   }
 
+  // Server-side fetch whenever a server-side facet (or text search) changes.
   useEffect(() => {
-    filterResources();
+    loadResources();
   }, [
     search,
     category,
-    season,
     language,
-    fileType,
-    resources,
+    season,
+    voicePart,
+    keySignature,
+    tempo,
   ]);
+
+  // Client-side post-filter applied to the server result set (file_type only).
+  useEffect(() => {
+    filterResources();
+  }, [resources, fileType]);
 
   async function loadResources() {
     try {
       setLoading(true);
 
-      const response = await api.get("/api/choir/", {
-        params: { query: search }
-      });
+      const params: Record<string, string> = {};
+      if (search.trim()) {
+        params.query = search.trim();
+      }
+      if (category !== ALL_FILTER) {
+        params.category = category;
+      }
+      if (language !== "All Languages") {
+        params.language = language;
+      }
+      if (season !== "All Seasons") {
+        params.season = season;
+      }
+      if (voicePart !== "All Voices") {
+        params.voice_part = voicePart;
+      }
+      if (keySignature !== "All Keys") {
+        params.key_signature = keySignature;
+      }
+      if (tempo !== "All Tempos") {
+        params.tempo = tempo;
+      }
 
-      setResources(
+      const response = await api.get("/api/choir/", { params });
+
+      const data =
         Array.isArray(response.data)
           ? response.data
-          : response.data?.items || []
-      );
+          : response.data?.items || [];
+
+      setResources(data);
     } catch (error) {
-      Alert.alert(
-        "Error",
-        "Unable to load choir resources."
-      );
+      Alert.alert("Error", "Unable to load choir resources.");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }
 
+  // Client-side post-filter. All database-capable facets (search, category,
+  // season, language, voice part, key signature and tempo) are applied by
+  // loadResources via server-side query parameters. Only the file-type facet
+  // remains here because file_type stores a raw extension (e.g. mp3) and is
+  // matched with a substring include for parity with prior behaviour.
   function filterResources() {
     let data = [...resources];
 
-    if (category !== "All") {
-      data = data.filter(
-        (item) =>
-          item.category?.toLowerCase() ===
-          category.toLowerCase()
-      );
-    }
-
-    if (season !== "All Seasons") {
-      data = data.filter(
-        (item) =>
-          item.season?.toLowerCase() ===
-            season.toLowerCase() ||
-          item.category?.toLowerCase() ===
-            season.toLowerCase()
-      );
-    }
-
-    if (language !== "All Languages") {
-      data = data.filter(
-        (item) =>
-          item.language?.toLowerCase() ===
-          language.toLowerCase()
-      );
-    }
-
     if (fileType !== "All Types") {
+      const ft = fileType.toLowerCase();
       data = data.filter((item) =>
-        item.file_type
-          ?.toLowerCase()
-          .includes(fileType.toLowerCase())
+        item.file_type?.toLowerCase().includes(ft)
       );
-    }
-
-    if (search.trim()) {
-      const query = search.trim().toLowerCase();
-
-      data = data.filter((item) => {
-        return (
-          item.title?.toLowerCase().includes(query) ||
-          item.category?.toLowerCase().includes(query) ||
-          item.description
-            ?.toLowerCase()
-            .includes(query) ||
-          item.composer
-            ?.toLowerCase()
-            .includes(query) ||
-          item.language
-            ?.toLowerCase()
-            .includes(query) ||
-          item.season
-            ?.toLowerCase()
-            .includes(query)
-        );
-      });
     }
 
     setFiltered(data);
@@ -408,9 +362,9 @@ export default function Choir() {
             </Text>
           ) : null}
 
-          {item.choir_voice ? (
+          {item.voice_part ? (
             <Text style={styles.tag}>
-              {item.choir_voice}
+              {item.voice_part}
             </Text>
           ) : null}
         </View>
@@ -421,9 +375,9 @@ export default function Choir() {
           </Text>
         ) : null}
 
-        {item.key ? (
+        {item.key_signature ? (
           <Text style={styles.metadata}>
-            Key: {item.key}
+            Key: {item.key_signature}
           </Text>
         ) : null}
 
@@ -461,6 +415,27 @@ export default function Choir() {
         <ReportButton resourceType="choir" resourceId={item.id} />
       </View>
     );
+  }
+
+  function closeAllDropdowns() {
+    setShowSeasons(false);
+    setShowLanguages(false);
+    setShowFileTypes(false);
+    setShowVoicePart(false);
+    setShowKeySignature(false);
+    setShowTempo(false);
+  }
+
+  function toggleDropdown(
+    isOpen: boolean,
+    setIsOpen: (isOpen: boolean) => void
+  ) {
+    if (isOpen) {
+      setIsOpen(false);
+    } else {
+      closeAllDropdowns();
+      setIsOpen(true);
+    }
   }
 
   function renderFilterButton(
@@ -521,67 +496,100 @@ export default function Choir() {
         onChangeText={setSearch}
       />
 
-      <Text style={styles.sectionTitle}>
-        Mass & Song Categories
-      </Text>
-
-      <FlatList
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        data={categories}
-        keyExtractor={(item) => item}
-        style={styles.categoryList}
-        renderItem={({ item }) => (
+      <ScrollView
+        style={styles.categoriesScroll}
+        contentContainerStyle={styles.categoriesContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* "All" is a browse filter, not a resource category. It sits above the
+            three sections so users can clear the category filter in one tap. */}
+        <View style={styles.categoryRow}>
           <TouchableOpacity
             style={[
               styles.categoryButton,
-              category === item &&
-                styles.categoryActive,
+              category === ALL_FILTER && styles.categoryActive,
             ]}
-            onPress={() => setCategory(item)}
+            onPress={() => setCategory(ALL_FILTER)}
           >
             <Text
               style={[
                 styles.categoryText,
-                category === item &&
-                  styles.categoryTextActive,
+                category === ALL_FILTER && styles.categoryTextActive,
               ]}
             >
-              {item}
+              {ALL_FILTER}
             </Text>
           </TouchableOpacity>
-        )}
-      />
+        </View>
+
+        {CHOIR_CATEGORY_SECTIONS.map((section) => (
+          <View key={section.title} style={styles.categorySection}>
+            <Text style={styles.categorySectionTitle}>
+              {section.title}
+            </Text>
+            <View style={styles.categoryRow}>
+              {section.categories.map((item) => {
+                const active = category === item;
+                return (
+                  <TouchableOpacity
+                    key={item}
+                    style={[
+                      styles.categoryButton,
+                      active && styles.categoryActive,
+                    ]}
+                    onPress={() => setCategory(item)}
+                  >
+                    <Text
+                      style={[
+                        styles.categoryText,
+                        active && styles.categoryTextActive,
+                      ]}
+                    >
+                      {item}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        ))}
+      </ScrollView>
 
       <View style={styles.filterRow}>
         {renderFilterButton(
           season,
           season !== "All Seasons",
-          () => {
-            setShowSeasons(!showSeasons);
-            setShowLanguages(false);
-            setShowFileTypes(false);
-          }
+          () => toggleDropdown(showSeasons, setShowSeasons)
         )}
 
         {renderFilterButton(
           language,
           language !== "All Languages",
-          () => {
-            setShowLanguages(!showLanguages);
-            setShowSeasons(false);
-            setShowFileTypes(false);
-          }
+          () => toggleDropdown(showLanguages, setShowLanguages)
         )}
 
         {renderFilterButton(
           fileType,
           fileType !== "All Types",
-          () => {
-            setShowFileTypes(!showFileTypes);
-            setShowSeasons(false);
-            setShowLanguages(false);
-          }
+          () => toggleDropdown(showFileTypes, setShowFileTypes)
+        )}
+
+        {renderFilterButton(
+          voicePart,
+          voicePart !== "All Voices",
+          () => toggleDropdown(showVoicePart, setShowVoicePart)
+        )}
+
+        {renderFilterButton(
+          keySignature,
+          keySignature !== "All Keys",
+          () => toggleDropdown(showKeySignature, setShowKeySignature)
+        )}
+
+        {renderFilterButton(
+          tempo,
+          tempo !== "All Tempos",
+          () => toggleDropdown(showTempo, setShowTempo)
         )}
       </View>
 
@@ -684,23 +692,125 @@ export default function Choir() {
         </ScrollView>
       )}
 
+      {showVoicePart && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.dropdown}
+        >
+          {voiceParts.map((item) => (
+            <TouchableOpacity
+              key={item}
+              style={[
+                styles.dropdownItem,
+                voicePart === item && styles.dropdownActive,
+              ]}
+              onPress={() => {
+                setVoicePart(item);
+                setShowVoicePart(false);
+              }}
+            >
+              <Text
+                style={
+                  voicePart === item
+                    ? styles.dropdownActiveText
+                    : styles.dropdownText
+                }
+              >
+                {item}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+
+      {showKeySignature && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.dropdown}
+        >
+          {keySignatures.map((item) => (
+            <TouchableOpacity
+              key={item}
+              style={[
+                styles.dropdownItem,
+                keySignature === item && styles.dropdownActive,
+              ]}
+              onPress={() => {
+                setKeySignature(item);
+                setShowKeySignature(false);
+              }}
+            >
+              <Text
+                style={
+                  keySignature === item
+                    ? styles.dropdownActiveText
+                    : styles.dropdownText
+                }
+              >
+                {item}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+
+      {showTempo && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.dropdown}
+        >
+          {tempoMarkers.map((item) => (
+            <TouchableOpacity
+              key={item}
+              style={[
+                styles.dropdownItem,
+                tempo === item && styles.dropdownActive,
+              ]}
+              onPress={() => {
+                setTempo(item);
+                setShowTempo(false);
+              }}
+            >
+              <Text
+                style={
+                  tempo === item
+                    ? styles.dropdownActiveText
+                    : styles.dropdownText
+                }
+              >
+                {item}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+
       <View style={styles.resultHeader}>
         <Text style={styles.resultCount}>
           {filtered.length} resource
           {filtered.length === 1 ? "" : "s"}
         </Text>
 
-        {(category !== "All" ||
+        {(category !== ALL_FILTER ||
           season !== "All Seasons" ||
           language !== "All Languages" ||
           fileType !== "All Types" ||
+          voicePart !== "All Voices" ||
+          keySignature !== "All Keys" ||
+          tempo !== "All Tempos" ||
           search.trim().length > 0) && (
           <TouchableOpacity
             onPress={() => {
-              setCategory("All");
+              setCategory(ALL_FILTER);
               setSeason("All Seasons");
               setLanguage("All Languages");
               setFileType("All Types");
+              setVoicePart("All Voices");
+              setKeySignature("All Keys");
+              setTempo("All Tempos");
               setSearch("");
             }}
           >
@@ -740,8 +850,8 @@ export default function Choir() {
             </Text>
 
             <Text style={styles.emptyHint}>
-              Try another category, season,
-              language, or search term.
+              Try another category, season, voice part,
+              key signature, tempo, language, or search term.
             </Text>
           </View>
         }
@@ -800,20 +910,41 @@ const styles = StyleSheet.create({
     color: "#333",
   },
 
-  categoryList: {
+  categoriesScroll: {
     marginBottom: 15,
-    minHeight: 42,
+  },
+
+  categoriesContent: {
+    paddingBottom: 4,
+  },
+
+  categorySection: {
+    marginTop: 10,
+  },
+
+  categorySectionTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0B6623",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    marginBottom: 8,
+  },
+
+  categoryRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
   },
 
   categoryButton: {
-    paddingHorizontal: 15,
-    paddingVertical: 9,
-    borderRadius: 25,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: "#0B6623",
     marginRight: 8,
-    height: 40,
-    justifyContent: "center",
+    marginBottom: 8,
+    backgroundColor: "#fff",
   },
 
   categoryActive: {

@@ -4,6 +4,7 @@ import {
   FlatList,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -11,6 +12,7 @@ import {
 } from "react-native";
 
 import { api } from "@/lib/api";
+import { CHOIR_CATEGORY_SECTIONS, canonicaliseCategory } from "@/config/choirCategories";
 
 type Resource = {
   id: number;
@@ -108,6 +110,16 @@ export default function AdminResources() {
     }
   }
 
+  function openEditor(item: Resource) {
+    // If the stored category is a legacy label, normalise it to the canonical
+    // equivalent so the selector shows an active chip and the save request
+    // always sends a canonical value the backend will accept. Ambiguous labels
+    // (canonicaliseCategory returns null) fall back to "Others" so the row is
+    // never stuck on a label the backend would reject on save.
+    const canonical = canonicaliseCategory(item.category) ?? "Others";
+    setEditing({ ...item, category: canonical });
+  }
+
   async function saveEdit() {
     if (!editing) return;
 
@@ -147,12 +159,31 @@ export default function AdminResources() {
           value={editing.title}
           onChangeText={(value) => setEditing({ ...editing, title: value })}
         />
-        <TextInput
-          accessibilityLabel="Resource category"
-          style={styles.input}
-          value={editing.category}
-          onChangeText={(value) => setEditing({ ...editing, category: value })}
-        />
+        <Text style={styles.fieldLabel}>Category</Text>
+        <ScrollView style={styles.categoryScroll} showsVerticalScrollIndicator={false}>
+          {CHOIR_CATEGORY_SECTIONS.map((section) => (
+            <View key={section.title} style={styles.categorySection}>
+              <Text style={styles.categorySectionTitle}>{section.title}</Text>
+              <View style={styles.categoryRow}>
+                {section.categories.map((item) => {
+                  const active = editing.category === item;
+                  return (
+                    <Pressable
+                      key={item}
+                      disabled={saving}
+                      style={[styles.chip, active && styles.chipActive]}
+                      onPress={() => setEditing({ ...editing, category: item })}
+                    >
+                      <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                        {item}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ))}
+        </ScrollView>
         <TextInput
           accessibilityLabel="Resource language"
           style={styles.input}
@@ -204,7 +235,7 @@ export default function AdminResources() {
               {item.moderation_status ?? (item.is_approved ? "Approved" : "Pending approval")}
             </Text>
             <View style={styles.actions}>
-              <Pressable disabled={saving} onPress={() => setEditing(item)}>
+              <Pressable disabled={saving} onPress={() => openEditor(item)}>
                 <Text style={styles.action}>Edit</Text>
               </Pressable>
               {!item.is_approved && (
@@ -279,6 +310,15 @@ const styles = StyleSheet.create({
   action: { color: "#0B6623", fontWeight: "800" },
   danger: { color: "#C62828", fontWeight: "800" },
   input: { borderWidth: 1, borderColor: "#ddd", borderRadius: 9, padding: 12, marginBottom: 10 },
+  fieldLabel: { fontSize: 13, fontWeight: "700", color: "#333", marginBottom: 6, marginTop: 4 },
+  categoryScroll: { maxHeight: 260, marginBottom: 10 },
+  categorySection: { marginTop: 8 },
+  categorySectionTitle: { fontSize: 12, fontWeight: "700", color: "#0B6623", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 },
+  categoryRow: { flexDirection: "row", flexWrap: "wrap" },
+  chip: { borderWidth: 1, borderColor: "#0B6623", borderRadius: 18, paddingHorizontal: 12, paddingVertical: 7, backgroundColor: "#fff", marginRight: 7, marginBottom: 7 },
+  chipActive: { backgroundColor: "#0B6623" },
+  chipText: { color: "#0B6623", fontWeight: "700", fontSize: 12 },
+  chipTextActive: { color: "#fff" },
   area: { borderWidth: 1, borderColor: "#ddd", borderRadius: 9, padding: 12, minHeight: 100, marginTop: 12, textAlignVertical: "top" },
   button: { backgroundColor: "#0B6623", padding: 14, borderRadius: 9, alignItems: "center" },
   buttonText: { color: "#fff", fontWeight: "800" },

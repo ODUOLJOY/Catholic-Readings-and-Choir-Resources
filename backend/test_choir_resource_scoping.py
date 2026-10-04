@@ -17,6 +17,7 @@ from app.models.locations import Deanery, Diocese
 from app.models.parish import Parish
 from app.models.user import User
 from app.core import dependencies as core_dependencies
+from app.constants.choir_categories import CHOIR_CATEGORIES, normalize_category
 from app.core.config import settings
 from app.auth.security import create_access_token, create_refresh_token
 from app.routes import auth_dependency
@@ -488,3 +489,630 @@ def test_public_static_files_hide_legacy_choir_resource_urls(db: Session, tmp_pa
         public_response = client.get("/uploads/public.txt")
         assert public_response.status_code == 200
         assert public_response.text == "public"
+
+
+
+def test_choir_resource_list_supports_server_side_facet_filters(db: Session):
+    """Server-side faceted filtering for the choir list endpoint."""
+    db.add_all(
+        [
+            ChoirResource(
+                title="Psalm 23",
+                category="MASS",
+                language="English",
+                file_url="/api/choir/1/file",
+                file_type="pdf",
+                voice_part="SATB",
+                season="Advent",
+                key_signature="D",
+                tempo="Allegro",
+                composer="Palestrina",
+                is_approved=True,
+                is_published=True,
+                moderation_status="approved",
+            ),
+            ChoirResource(
+                title="Ave Maria",
+                category="MARIAN",
+                language="Latin",
+                file_url="/api/choir/2/file",
+                file_type="mp3",
+                voice_part="Soprano",
+                season="Christmas",
+                key_signature="C",
+                tempo="Largo",
+                composer="Schubert",
+                is_approved=True,
+                is_published=True,
+                moderation_status="approved",
+            ),
+            ChoirResource(
+                title="Kyrie VIII",
+                category="MASS",
+                language="Latin",
+                file_url="/api/choir/3/file",
+                file_type="pdf",
+                voice_part="Alto",
+                season="Lent",
+                key_signature="G",
+                tempo="Andante",
+                composer="Palestrina",
+                is_approved=True,
+                is_published=True,
+                moderation_status="approved",
+            ),
+        ]
+    )
+    db.commit()
+
+    app.dependency_overrides[get_db] = lambda: db
+    try:
+        with TestClient(app) as client:
+
+            def ids(**params):
+                resp = client.get("/api/choir/", params=params or None)
+                assert resp.status_code == 200, resp.text
+                return [r["id"] for r in resp.json()]
+
+            base = ids()
+            assert len(base) == 3
+
+            # Exact-match facets (backend == filters)
+            assert len(ids(category="MASS")) == 2
+            assert len(ids(voice_part="SATB")) == 1
+            assert len(ids(key_signature="C")) == 1
+            assert len(ids(tempo="Largo")) == 1
+            assert len(ids(season="Advent")) == 1
+            assert len(ids(language="Latin")) == 2
+
+            # ilike facets (case-insensitive substring)
+            assert len(ids(composer="palestrina")) == 2
+            assert len(ids(query="ave")) == 1
+            assert len(ids(query="mass")) == 2  # category now searchable server-side
+
+            # Combined facets
+            assert len(ids(category="MASS", voice_part="SATB")) == 1
+            assert len(ids(language="Latin", key_signature="G")) == 1
+            assert len(ids(season="Advent", tempo="Allegro")) == 1
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+
+# --------------------------------------------------------------------------
+# Canonical 27-category catalog
+# --------------------------------------------------------------------------
+
+
+EXPECTED_CATEGORY_SECTIONS = [
+    (
+        "Mass Ordinary and Celebration Songs",
+        [
+            "Entrance",
+            "Kyrie & Gloria",
+            "Responsorial Psalm",
+            "Sadaka",
+            "Offertory",
+            "Sanctus",
+            "Agnus Dei",
+            "Communion",
+            "Benediction",
+            "Thanksgiving",
+            "Exit",
+        ],
+    ),
+    (
+        "Liturgical Seasons",
+        [
+            "Advent",
+            "Christmas",
+            "Lent",
+            "Pentecost",
+            "Holy Week",
+            "Easter",
+            "Ordinary Time",
+        ],
+    ),
+    (
+        "Other Choir Categories",
+        [
+            "Marian",
+            "Rosary",
+            "Wedding",
+            "Funeral",
+            "Baptism",
+            "Saints",
+            "Latin",
+            "Choir Practice",
+            "Others",
+        ],
+    ),
+]
+
+
+def test_choir_categories_endpoint_returns_the_27_in_order():
+    """GET /api/choir/categories is public and returns exactly the 27 canonical
+    categories in the required three-section order (no extras, no duplicates)."""
+    with TestClient(app) as client:
+        resp = client.get("/api/choir/categories")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+
+    assert body["categories"] == [
+        label
+        for _section, labels in EXPECTED_CATEGORY_SECTIONS
+        for label in labels
+    ]
+    assert len(body["categories"]) == 27
+    assert len(set(body["categories"])) == 27  # no duplicates
+    assert body["categories"] == list(CHOIR_CATEGORIES)  # backend constant matches (list, canonical order)
+
+    sections = body["sections"]
+    assert [s["title"] for s in sections] == [s[0] for s in EXPECTED_CATEGORY_SECTIONS]
+    for section, expected in zip(sections, EXPECTED_CATEGORY_SECTIONS):
+        assert section["categories"] == expected[1]
+    # Flat list is the exact concatenation of the sectioned lists.
+    assert [c for s in sections for c in s["categories"]] == body["categories"]
+
+
+def test_normalize_category_is_the_canonical_compatibility_mapping():
+    """normalize_category (the reversible compatibility mapping) collapses every
+    legacy label to its canonical home and never discards an unknown value."""
+    # Canonical labels pass through with their exact casing.
+    for label in CHOIR_CATEGORIES:
+        assert normalize_category(label) == label
+    assert len(CHOIR_CATEGORIES) == 27
+    assert len(set(CHOIR_CATEGORIES)) == 27
+
+    # Known legacy aliases collapse to canonical homes.
+    assert normalize_category("Kyrie Eleison") == "Kyrie & Gloria"
+    assert normalize_category("Gloria") == "Kyrie & Gloria"
+    assert normalize_category("Lamb of God") == "Agnus Dei"
+    assert normalize_category("Holy Holy") == "Sanctus"
+    assert normalize_category("Recessional") == "Exit"
+    assert normalize_category("Triduum") == "Holy Week"
+    assert normalize_category("Our Lady") == "Marian"
+    assert normalize_category("Ave Maria") == "Marian"
+    assert normalize_category("All Saints") == "Saints"
+    assert normalize_category("Carols") == "Christmas"
+    assert normalize_category("Epiphany") == "Christmas"
+    assert normalize_category("Gregorian Chant") == "Latin"
+    assert normalize_category("Latin Chant") == "Latin"
+    assert normalize_category("Adoration") == "Benediction"
+    assert normalize_category("Mass") == "Others"
+
+    # Case-insensitive + whitespace tolerant.
+    assert normalize_category("kyrie eleison") == "Kyrie & Gloria"
+    assert normalize_category("KYRIE & GLORIA") == "Kyrie & Gloria"
+    assert normalize_category("  wedding  ") == "Wedding"
+    assert normalize_category("") == "Others"
+    assert normalize_category(None) == "Others"
+
+    # Unknown values fall back to Others (never None, never lost).
+    assert normalize_category("Totally Bogus") == "Others"
+    assert normalize_category("First Holy Communion") == "Others"
+
+
+def test_kyrie_gloria_category_filters_and_search_correctly(db: Session):
+    """Selecting 'Kyrie & Gloria' filters the correct songs; the '&' survives URL
+    encoding in requests, DB values, search and navigation."""
+    db.add_all(
+        [
+            ChoirResource(
+                title="Kyrie VIII",
+                category="Kyrie & Gloria",
+                language="Latin",
+                file_url="/api/choir/1/file",
+                file_type="pdf",
+                is_approved=True,
+                is_published=True,
+                moderation_status="approved",
+            ),
+            ChoirResource(
+                title="Salve Regina",
+                category="Marian",
+                language="Latin",
+                file_url="/api/choir/2/file",
+                file_type="mp3",
+                is_approved=True,
+                is_published=True,
+                moderation_status="approved",
+            ),
+            ChoirResource(
+                title="Entrancesong",
+                category="Entrance",
+                language="English",
+                file_url="/api/choir/3/file",
+                file_type="pdf",
+                is_approved=True,
+                is_published=True,
+                moderation_status="approved",
+            ),
+        ]
+    )
+    db.commit()
+
+    app.dependency_overrides[get_db] = lambda: db
+    try:
+        with TestClient(app) as client:
+
+            def ids(**params):
+                resp = client.get("/api/choir/", params=params or None)
+                assert resp.status_code == 200, resp.text
+                return [r["id"] for r in resp.json()]
+
+            assert len(ids()) == 3
+            # Exact category filter — the '&' in "Kyrie & Gloria" round-trips.
+            assert ids(category="Kyrie & Gloria") == [1]
+            assert ids(category="Marian") == [2]
+            assert ids(category="Entrance") == [3]
+            assert ids(category="Responsorial Psalm") == []
+
+            # "Kyrie & Gloria" is searchable server-side (ilike substring).
+            assert ids(query="gloria") == [1]
+            assert ids(query="kyrie") == [1]
+
+            # Combined facets still compose.
+            assert ids(category="Kyrie & Gloria", language="Latin") == [1]
+            assert ids(category="Kyrie & Gloria", language="English") == []
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+def test_empty_category_returns_no_invented_resources(db: Session):
+    """A category with no songs yields an empty result set, never invented rows."""
+    db.add(
+        ChoirResource(
+            title="Only Marian",
+            category="Marian",
+            language="English",
+            file_url="/api/choir/1/file",
+            file_type="pdf",
+            is_approved=True,
+            is_published=True,
+            moderation_status="approved",
+        )
+    )
+    db.commit()
+
+    app.dependency_overrides[get_db] = lambda: db
+    try:
+        with TestClient(app) as client:
+            assert client.get("/api/choir/", params={"category": "Wedding"}).json() == []
+            assert client.get("/api/choir/", params={"category": "Kyrie & Gloria"}).json() == []
+            assert client.get("/api/choir/", params={"category": "Responsorial Psalm"}).json() == []
+
+            # A matching category still returns the single real row.
+            assert [r["id"] for r in client.get("/api/choir/", params={"category": "Marian"}).json()] == [1]
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+def test_upload_normalizes_category_to_canonical(db, tmp_path, monkeypatch):
+    """Uploading with a legacy or free-form category stores the canonical label
+    and never rejects or loses the resource."""
+    parish_a, director_a = add_manager(db, "norm", "parish_music_director")
+    monkeypatch.setattr(settings, "STORAGE_PATH", str(tmp_path))
+    monkeypatch.setattr(upload_routes, "PRIVATE_UPLOAD_DIR", tmp_path / "private_media")
+    pdf_content = b"%PDF-1.7 approved text"
+
+    active_user = {"user": director_a}
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[auth_dependency.get_current_user] = lambda: active_user["user"]
+    app.dependency_overrides[core_dependencies.get_current_user] = lambda: active_user["user"]
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/uploads/",
+                data={
+                    "title": "Legacy Kyrie",
+                    "category": "Kyrie Eleison",
+                    "language": "English",
+                    "parish_id": str(parish_a.id),
+                    "global_scope": "false",
+                },
+                files={"file": ("kyrie.pdf", pdf_content, "application/pdf")},
+            )
+            assert response.status_code == 200, response.text
+            resource = db.get(ChoirResource, response.json()["resource"]["id"])
+            assert resource is not None
+            assert resource.category == "Kyrie & Gloria"  # legacy alias normalized
+            assert resource.parish_id == parish_a.id
+
+            bogus = client.post(
+                "/api/uploads/",
+                data={
+                    "title": "Unknown category",
+                    "category": "Totally Made Up",
+                    "language": "English",
+                    "parish_id": str(parish_a.id),
+                    "global_scope": "false",
+                },
+                files={"file": ("bogus.pdf", pdf_content, "application/pdf")},
+            )
+            assert bogus.status_code == 200, bogus.text
+            stored = db.get(ChoirResource, bogus.json()["resource"]["id"])
+            assert stored.category == "Others"  # unknown -> safe fallback
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(auth_dependency.get_current_user, None)
+        app.dependency_overrides.pop(core_dependencies.get_current_user, None)
+
+
+def test_edit_resource_normalizes_category(db, tmp_path, monkeypatch):
+    """Editing a resource normalizes the category through the same mapping."""
+    parish_a, director_a = add_manager(db, "edit", "parish_music_director")
+    monkeypatch.setattr(settings, "STORAGE_PATH", str(tmp_path))
+    monkeypatch.setattr(upload_routes, "PRIVATE_UPLOAD_DIR", tmp_path / "private_media")
+    resource = ChoirResource(
+        title="Editable",
+        category="MASS",
+        language="English",
+        file_url="/api/choir/1/file",
+        file_type="pdf",
+        parish_id=parish_a.id,
+        is_approved=False,
+        is_published=False,
+    )
+    db.add(resource)
+    db.commit()
+
+    active_user = {"user": director_a}
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[auth_dependency.get_current_user] = lambda: active_user["user"]
+    app.dependency_overrides[core_dependencies.get_current_user] = lambda: active_user["user"]
+    try:
+        with TestClient(app) as client:
+            response = client.put(
+                f"/api/choir/{resource.id}",
+                data={
+                    "title": resource.title,
+                    "category": "Kyrie Eleison",
+                    "language": resource.language,
+                },
+            )
+            assert response.status_code == 200, response.text
+            db.refresh(resource)
+            assert resource.category == "Kyrie & Gloria"
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(auth_dependency.get_current_user, None)
+        app.dependency_overrides.pop(core_dependencies.get_current_user, None)
+
+
+def test_categories_matching_filter_includes_legacy_aliases():
+    """categories_matching_filter returns the canonical label plus every legacy
+    alias that remaps to it, so the browse IN-query catches pre-canonical rows.
+    An unknown filter returns an empty set (matches nothing, never everything).
+    """
+    from app.constants.choir_categories import categories_matching_filter
+
+    # "Kyrie & Gloria" must match rows still labelled "Kyrie Eleison" or "Gloria".
+    kyrie = categories_matching_filter("Kyrie & Gloria")
+    assert "Kyrie & Gloria" in kyrie
+    assert "Kyrie Eleison" in kyrie
+    assert "Gloria" in kyrie
+
+    # "Sanctus" matches the canonical label plus the mass-part aliases.
+    sanctus = categories_matching_filter("Sanctus")
+    assert "Sanctus" in sanctus
+    assert "Holy Holy" in sanctus
+
+    # "Others" is the catch-all -- several legacy labels map to it.
+    others = categories_matching_filter("Others")
+    assert "Others" in others
+    assert "Mass" in others
+    assert "Other" in others
+    assert "Swahili" in others
+
+    # A canonical label with no aliases still matches itself.
+    wedding = categories_matching_filter("Wedding")
+    assert wedding == {"Wedding"}
+
+    # An unknown / non-canonical filter returns an empty set so the browse
+    # query surfaces no rows rather than every row.
+    assert categories_matching_filter("Bogus") == set()
+    assert categories_matching_filter("") == set()
+
+
+def test_legacy_category_filter_matches_pre_canonical_rows(db: Session):
+    """Selecting a canonical category on the browse screen returns rows that
+    still carry a legacy label, proving the IN-filter works end-to-end."""
+    db.add_all(
+        [
+            ChoirResource(
+                title="Kyrie (legacy label)",
+                category="Kyrie Eleison",
+                language="Latin",
+                file_url="/api/choir/1/file",
+                file_type="pdf",
+                is_approved=True,
+                is_published=True,
+                moderation_status="approved",
+            ),
+            ChoirResource(
+                title="Gloria (legacy label)",
+                category="Gloria",
+                language="Latin",
+                file_url="/api/choir/2/file",
+                file_type="pdf",
+                is_approved=True,
+                is_published=True,
+                moderation_status="approved",
+            ),
+            ChoirResource(
+                title="Kyrie (canonical label)",
+                category="Kyrie & Gloria",
+                language="English",
+                file_url="/api/choir/3/file",
+                file_type="pdf",
+                is_approved=True,
+                is_published=True,
+                moderation_status="approved",
+            ),
+            ChoirResource(
+                title="Unrelated Marian",
+                category="Marian",
+                language="Latin",
+                file_url="/api/choir/4/file",
+                file_type="mp3",
+                is_approved=True,
+                is_published=True,
+                moderation_status="approved",
+            ),
+        ]
+    )
+    db.commit()
+
+    app.dependency_overrides[get_db] = lambda: db
+    try:
+        with TestClient(app) as client:
+            # The "Kyrie & Gloria" filter must surface all three Kyrie/Gloria
+            # rows regardless of whether they carry the canonical label or a
+            # legacy alias, and must not surface the unrelated Marian row.
+            resp = client.get("/api/choir/", params={"category": "Kyrie & Gloria"})
+            assert resp.status_code == 200, resp.text
+            ids = {r["id"] for r in resp.json()}
+            assert ids == {1, 2, 3}
+
+            # An unknown filter surfaces nothing.
+            assert client.get(
+                "/api/choir/", params={"category": "Bogus"}
+            ).json() == []
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+def test_legacy_category_migration_remaps_aliases(db: Session):
+    """Rev13 (20261002_13) rewrites every CATEGORY_ALIASES key to its canonical
+    value in storage, and is idempotent on re-run. Downgrade is a no-op.
+
+    The migration module's filename starts with digits so it cannot be imported
+    via a normal ``import`` statement; it is loaded with ``importlib`` instead.
+    The upgrade loop is exercised via the shared ``CATEGORY_ALIASES`` mapping so
+    the test stays in sync with the migration without needing a live alembic
+    context.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    from app.constants.choir_categories import CATEGORY_ALIASES, CHOIR_CATEGORIES
+
+    migration_path = (
+        Path(__file__).resolve().parent
+        / "migrations"
+        / "versions"
+        / "20261002_13_choir_legacy_categories.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "migration_20261002_13", migration_path
+    )
+    assert spec is not None and spec.loader is not None
+    migration_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration_module)
+
+    # The migration imports CATEGORY_ALIASES from the constants module, so its
+    # view of the aliases is the same one the test asserts against.
+    assert migration_module.CATEGORY_ALIASES is CATEGORY_ALIASES
+
+    # Seed rows: one per alias (legacy label) plus one canonical control row
+    # per canonical label, so we can prove aliases move and canonical rows are
+    # untouched.
+    rows = []
+    for alias in CATEGORY_ALIASES:
+        rows.append(
+            ChoirResource(
+                title=f"Legacy {alias}",
+                category=alias,
+                language="English",
+                file_url=f"/api/choir/legacy/{alias}/file",
+                file_type="pdf",
+                is_approved=True,
+                is_published=True,
+                moderation_status="approved",
+            )
+        )
+    for canonical in CHOIR_CATEGORIES:
+        rows.append(
+            ChoirResource(
+                title=f"Canonical {canonical}",
+                category=canonical,
+                language="English",
+                file_url=f"/api/choir/canonical/{canonical}/file",
+                file_type="pdf",
+                is_approved=True,
+                is_published=True,
+                moderation_status="approved",
+            )
+        )
+    db.add_all(rows)
+    db.commit()
+
+    bind = db  # Session.execute is SQLAlchemy 2.0-safe (Engine.execute was removed)
+    import sqlalchemy as sa
+
+    table = "choir_resources"
+
+    # Run the migration's upgrade loop against the fixture bind. We can't call
+    # op.get_bind() outside an alembic context, so we replicate the migration's
+    # parameterised UPDATE loop using the same CATEGORY_ALIASES source.
+    for alias, canonical in CATEGORY_ALIASES.items():
+        if alias == canonical:
+            continue
+        bind.execute(
+            sa.text(
+                f"UPDATE {table} SET category = :canonical WHERE category = :alias"
+            ).bindparams(canonical=canonical, alias=alias)
+        )
+
+    db.expire_all()
+
+    # After the remap, no row carries a legacy alias.
+    remaining_aliases = (
+        db.query(ChoirResource)
+        .filter(ChoirResource.category.in_(list(CATEGORY_ALIASES.keys())))
+        .all()
+    )
+    assert remaining_aliases == []
+
+    # Every row that was on a legacy alias is now on its canonical label.
+    for alias, canonical in CATEGORY_ALIASES.items():
+        remapped = (
+            db.query(ChoirResource)
+            .filter(
+                ChoirResource.category == canonical,
+                ChoirResource.title == f"Legacy {alias}",
+            )
+            .all()
+        )
+        assert len(remapped) == 1, f"alias {alias!r} did not remap to {canonical!r}"
+
+    # Canonical control rows are untouched.
+    for canonical in CHOIR_CATEGORIES:
+        control = (
+            db.query(ChoirResource)
+            .filter(
+                ChoirResource.category == canonical,
+                ChoirResource.title == f"Canonical {canonical}",
+            )
+            .all()
+        )
+        assert len(control) == 1, f"canonical control row {canonical!r} was moved"
+
+    # Idempotency: re-running the same loop updates zero rows because no row
+    # carries an alias anymore.
+    total_before = db.query(ChoirResource).count()
+    for alias, canonical in CATEGORY_ALIASES.items():
+        if alias == canonical:
+            continue
+        bind.execute(
+            sa.text(
+                f"UPDATE {table} SET category = :canonical WHERE category = :alias"
+            ).bindparams(canonical=canonical, alias=alias)
+        )
+    db.expire_all()
+    assert db.query(ChoirResource).count() == total_before
+
+    # The migration's downgrade is a documented no-op: calling it must not
+    # raise and must not change any category value.
+    migration_module.downgrade()  # body returns immediately; no bind needed

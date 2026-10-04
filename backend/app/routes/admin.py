@@ -1,9 +1,8 @@
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
-from uuid import uuid4
 from pathlib import Path
-import shutil
+import uuid
 
 from app.db.database import get_db
 from app.models.readings import Reading
@@ -31,7 +30,15 @@ UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 
-def require_admin(user: User):
+def require_admin(user: User | None):
+    # ``user`` is None when a public route uses the optional-auth dependency and
+    # the caller is anonymous. Reject explicitly instead of raising on None.
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     if user.role not in {"admin", "super_admin"}:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -404,11 +411,13 @@ def delete_reading(
 async def upload_file(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     require_admin(current_user)
 
+    # Validate file type
     extension = Path(file.filename).suffix.lower()
-
+    
     allowed = [
         ".pdf",
         ".jpg",
@@ -425,18 +434,76 @@ async def upload_file(
             400,
             "Unsupported file type.",
         )
-
-    filename = f"{uuid4()}{extension}"
+    
+    # Validate MIME type (don't trust client-supplied content-type)
+    content_type = file.content_type
+    allowed_mime_types = {
+        ".pdf": ["application/pdf"],
+        ".jpg": ["image/jpeg"],
+        ".jpeg": ["image/jpeg"],
+        ".png": ["image/png"],
+        ".mp3": ["audio/mpeg", "audio/mp3"],
+        ".wav": ["audio/wav", "audio/wave"],
+        ".mp4": ["video/mp4"],
+        ".mov": ["video/quicktime"],
+    }
+    
+    if content_type not in allowed_mime_types.get(extension, []):
+        raise HTTPException(
+            400,
+            f"Invalid MIME type for {extension}. Expected: {allowed_mime_types.get(extension)}",
+        )
+    
+    # Validate filename (prevent path traversal)
+    if file.filename is None:
+        raise HTTPException(400, "Filename is required.")
+    
+    # Check for path traversal attempts
+    if ".." in file.filename or "/" in file.filename or "\\" in file.filename:
+        raise HTTPException(400, "Invalid filename.")
+    
+    # Generate safe filename (don't trust original)
+    import uuid
+    filename = f"{uuid.uuid4()}{extension}"
 
     destination = UPLOAD_DIR / filename
 
+    # Ensure upload directory exists and is within allowed path
+    if not UPLOAD_DIR.exists():
+        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    
+    # Verify destination is within upload directory
+    try:
+        destination.resolve().relative_to(UPLOAD_DIR.resolve())
+    except ValueError:
+        raise HTTPException(400, "Invalid upload path.")
+
+    # Validate file size (limit to 50MB)
+    MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+    file_size = 0
+    chunk_size = 8192
+    
     with destination.open("wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+        while chunk := await file.read(chunk_size):
+            file_size += len(chunk)
+            if file_size > MAX_FILE_SIZE:
+                # Delete partial file
+                destination.unlink(missing_ok=True)
+                raise HTTPException(400, "File size exceeds maximum allowed size (50MB).")
+            buffer.write(chunk)
+    
+    # Log upload for audit
+    _audit_admin_action(
+        db, current_user, "file.uploaded", "upload", 0,
+        reason=f"File uploaded: {filename}, size: {file_size}"
+    )
+    db.commit()
 
     return {
         "message": "Upload successful.",
         "filename": filename,
         "url": f"/uploads/{filename}",
+        "size": file_size,
     }
 
 

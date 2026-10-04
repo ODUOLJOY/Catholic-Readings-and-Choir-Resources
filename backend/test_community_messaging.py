@@ -10,6 +10,7 @@ import app.models.parish
 import app.models.user
 from app.db.database import Base, get_db
 from app.main import app
+from hierarchy_test_support import build_chain
 from app.models.community import (
     CommunityConversation,
     ConversationMember,
@@ -164,17 +165,28 @@ def test_blocked_users_cannot_start_direct_conversation(db: Session):
 
 
 def test_member_search_is_limited_to_shared_parish(db: Session):
-    from app.models.locations import Diocese
     from app.models.parish import Parish
 
-    diocese = Diocese(name="Test Diocese", code="test-diocese")
-    db.add(diocese)
-    db.flush()
-    parish = Parish(name="Test Parish", code="test-parish", diocese_id=diocese.id)
-    other_parish = Parish(
-        name="Other Parish", code="other-parish", diocese_id=diocese.id
+    # Parishes now require a deanery and a consistent diocese, so build a full
+    # country -> province -> diocese -> deanery chain.
+    chain = build_chain(
+        db,
+        diocese_code="test-diocese",
+        diocese_name="Test Diocese",
+        deanery_code="test-deanery",
+        deanery_name="Test Deanery",
+        parish_code="test-parish",
+        parish_name="Test Parish",
+        metropolitan=False,
     )
-    db.add_all([parish, other_parish])
+    parish = chain["parish"]
+    other_parish = Parish(
+        name="Other Parish",
+        code="other-parish",
+        deanery_id=chain["deanery"].id,
+        diocese_id=chain["diocese"].id,
+    )
+    db.add(other_parish)
     db.flush()
 
     alice = make_user(db, "alice-search@example.org")

@@ -81,6 +81,9 @@ def test_verify_email_is_one_time(client, db_session):
 def test_verify_email_rejects_unissued_token(client, db_session):
     register(client)
     user = db_session.query(User).filter(User.email == "verify@example.com").one()
+    # Clear token so no issued token hash matches
+    user.email_verification_token = None
+    db_session.commit()
     forged = generate_email_verification_token(user)
     response = client.post("/api/auth/verify-email", params={"token": forged})
     assert response.status_code == 400
@@ -101,6 +104,9 @@ def test_resend_sends_for_unverified_account(client, db_session, monkeypatch):
 
     register(client)
     user = db_session.query(User).filter(User.email == "verify@example.com").one()
+    # Set an initial token hash different from what resend will generate
+    user.email_verification_token = "deadbeef" * 8
+    db_session.commit()
     original_hash = user.email_verification_token
 
     sent = {}

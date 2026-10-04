@@ -19,6 +19,12 @@ from app.auth.security import decode_access_token
 from app.db.database import get_db
 from app.models.user import User
 from app.models.choir import ChoirResource
+from app.constants.choir_categories import (
+    CHOIR_CATEGORIES,
+    CHOIR_CATEGORY_SECTIONS,
+    categories_matching_filter,
+    normalize_category,
+)
 from app.models.community import CommunityAuditLog, ParishMembership
 from app.routes.auth_dependency import (
     get_current_user,
@@ -65,11 +71,34 @@ def get_optional_user(
     return user
 
 
+@router.get("/categories")
+def get_categories() -> dict:
+    """Canonical choir-resource categories (public mirror of the library nav).
+
+    Returns the 27 categories in their required three-section order, plus a flat
+    ordered list. No authentication: anonymous visitors must be able to browse
+    the library navigation and the upload/edit category selector.
+    """
+    return {
+        "sections": [
+            {"title": title, "categories": list(categories)}
+            for title, categories in CHOIR_CATEGORY_SECTIONS
+        ],
+        "categories": list(CHOIR_CATEGORIES),
+    }
+
+
 @router.get("/")
 def get_resources(
     category: str | None = None,
     language: str | None = None,
     query: str | None = None,
+    voice_part: str | None = None,
+    season: str | None = None,
+    key_signature: str | None = None,
+    tempo: str | None = None,
+    composer: str | None = None,
+    alternative_title: str | None = None,
     db: Session = Depends(get_db),
     token: str | None = Depends(optional_bearer),
 ):
@@ -100,7 +129,18 @@ def get_resources(
         query_obj = query_obj.filter(ChoirResource.parish_id.is_(None))
 
     if category:
-        query_obj = query_obj.filter(ChoirResource.category == category)
+        # The browse screen sends a canonical label (e.g. ``"Kyrie & Gloria"``).
+        # Rows uploaded before the canonical list may still carry a legacy
+        # label (``"Kyrie Eleison"``, ``"Gloria"``) that maps to it, so the
+        # filter matches the canonical label plus every legacy label that
+        # remaps to it. An unknown filter matches nothing rather than everything.
+        matching_labels = categories_matching_filter(category)
+        if matching_labels:
+            query_obj = query_obj.filter(
+                ChoirResource.category.in_(matching_labels)
+            )
+        else:
+            query_obj = query_obj.filter(ChoirResource.category == category)
 
     if language:
         query_obj = query_obj.filter(ChoirResource.language == language)
@@ -108,7 +148,27 @@ def get_resources(
     if query:
         query_obj = query_obj.filter(
             ChoirResource.title.ilike(f"%{query}%") |
-            ChoirResource.description.ilike(f"%{query}%")
+            ChoirResource.description.ilike(f"%{query}%") |
+            ChoirResource.alternative_title.ilike(f"%{query}%") |
+            ChoirResource.composer.ilike(f"%{query}%") |
+            ChoirResource.category.ilike(f"%{query}%") |
+            ChoirResource.language.ilike(f"%{query}%") |
+            ChoirResource.season.ilike(f"%{query}%")
+        )
+
+    if voice_part:
+        query_obj = query_obj.filter(ChoirResource.voice_part == voice_part)
+    if season:
+        query_obj = query_obj.filter(ChoirResource.season == season)
+    if key_signature:
+        query_obj = query_obj.filter(ChoirResource.key_signature == key_signature)
+    if tempo:
+        query_obj = query_obj.filter(ChoirResource.tempo == tempo)
+    if composer:
+        query_obj = query_obj.filter(ChoirResource.composer.ilike(f"%{composer}%"))
+    if alternative_title:
+        query_obj = query_obj.filter(
+            ChoirResource.alternative_title.ilike(f"%{alternative_title}%")
         )
 
     return query_obj.order_by(
@@ -215,6 +275,13 @@ async def upload_resource(
     category: str = Form(...),
     language: str = Form(...),
     description: str = Form(""),
+    alternative_title: str = Form(None),
+    author: str = Form(None),
+    arranger: str = Form(None),
+    voice_part: str = Form(None),
+    season: str = Form(None),
+    key_signature: str = Form(None),
+    tempo: str = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
@@ -225,6 +292,13 @@ async def upload_resource(
         category=category,
         description=description,
         language=language,
+        alternative_title=alternative_title,
+        author=author,
+        arranger=arranger,
+        voice_part=voice_part,
+        season=season,
+        key_signature=key_signature,
+        tempo=tempo,
         parish_id=None,
         global_scope=True,
         file=file,
@@ -240,6 +314,13 @@ def update_resource(
     category: str = Form(...),
     language: str = Form(...),
     description: str = Form(""),
+    alternative_title: str = Form(None),
+    author: str = Form(None),
+    arranger: str = Form(None),
+    voice_part: str = Form(None),
+    season: str = Form(None),
+    key_signature: str = Form(None),
+    tempo: str = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -258,9 +339,16 @@ def update_resource(
         raise HTTPException(status_code=403, detail="You cannot manage this resource.")
 
     resource.title = title
-    resource.category = category
+    resource.category = normalize_category(category)
     resource.language = language
     resource.description = description
+    resource.alternative_title = alternative_title
+    resource.author = author
+    resource.arranger = arranger
+    resource.voice_part = voice_part
+    resource.season = season
+    resource.key_signature = key_signature
+    resource.tempo = tempo
     resource.is_approved = False
     resource.is_published = False
     resource.moderation_status = "pending"

@@ -1,10 +1,10 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hmac
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
-from pydantic import BaseModel, Field, model_validator
-from sqlalchemy import or_
+from pydantic import BaseModel, Field, field_validator, model_validator
+from sqlalchemy import and_, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -28,6 +28,7 @@ from app.models.community import (
     PrayerReaction,
     RoleAssignment,
     RoleRequest,
+    SuggestionReply,
 )
 from app.models.locations import Deanery, Diocese
 from app.models.parish import Parish
@@ -37,10 +38,13 @@ from app.models.user import User
 from app.routes.auth_dependency import get_current_user
 from app.services.authorization import (
     can_manage_community_scope,
+    can_moderate_community_scope,
     can_review_role_request,
+    moderation_scope_ids,
     scope_exists,
     user_belongs_to_scope,
 )
+from app.services import rate_limit
 
 router = APIRouter(prefix="/api/community", tags=["Community"])
 
@@ -58,6 +62,69 @@ SUGGESTION_CATEGORIES = {
     "liturgy", "youth", "choir_music", "catechesis", "parish_activities",
     "charity", "evangelization", "technology", "community", "other",
 }
+# The project already shipped its own suggestion vocabulary, so it is preserved
+# rather than replaced: submitted/under_review/in_discussion/accepted/
+# implemented/declined/archived keep their meaning and their stored values.
+# Two states the workflow genuinely lacked are added additively:
+# "needs_information" (clarification requested) and "escalated" (raised beyond
+# the parish). What was missing is a server-side state machine: before this, any
+# permitted status could jump to any other, so a moderator could move a fresh
+# suggestion straight to "implemented" without review. Terminal states accept no
+# further transitions.
+SUGGESTION_TRANSITIONS: dict[str, set[str]] = {
+    "submitted": {
+        "under_review", "needs_information", "in_discussion",
+        "accepted", "declined", "escalated", "archived",
+    },
+    "under_review": {
+        "needs_information", "in_discussion", "accepted",
+        "declined", "escalated", "archived",
+    },
+    "in_discussion": {
+        "under_review", "needs_information", "accepted",
+        "declined", "escalated", "archived",
+    },
+    "needs_information": {
+        "under_review", "in_discussion", "accepted",
+        "declined", "escalated", "archived",
+    },
+    "accepted": {"in_discussion", "implemented", "declined", "escalated", "archived"},
+    "escalated": {
+        "under_review", "in_discussion", "accepted",
+        "implemented", "declined", "archived",
+    },
+    "implemented": set(),
+    "declined": set(),
+    "archived": set(),
+}
+SUGGESTION_TERMINAL_STATUSES = {"implemented", "declined", "archived"}
+SUGGESTION_STATUSES = set(SUGGESTION_TRANSITIONS)
+# Statuses that require an explicit explanation so the submitter is not left
+# guessing why nothing is happening.
+SUGGESTION_STATUSES_REQUIRING_NOTE = {
+    "needs_information",
+    "declined",
+    "archived",
+}
+# Report categories offered to members. The value is stored in
+# ContentReport.category; ContentReport.reason stays free text for context.
+REPORT_CATEGORIES = {
+    "spam",
+    "harassment",
+    "abusive_language",
+    "inappropriate_content",
+    "misleading_information",
+    "suspicious_activity",
+    "copyright",
+    "other",
+}
+COMMUNITY_RULES = (
+    "Share in charity and truth. Be respectful of every parish member, "
+    "especially in matters of faith. Do not share Mass intentions, private "
+    "confessions, or contact details without permission. Keep corrections to "
+    "readings, saints, and music factual and sourced. Report anything that "
+    "concerns you and a moderator will review it."
+)
 
 
 class RoleRequestCreate(BaseModel):
@@ -168,6 +235,59 @@ class BlockCreate(BaseModel):
     user_id: int = Field(gt=0)
 
 
+class MessageEdit(BaseModel):
+    body: str = Field(min_length=1, max_length=10000)
+
+    @field_validator("body")
+    @classmethod
+    def body_must_not_be_blank(cls, value: str) -> str:
+        # min_length alone accepts "   ", which would let an edit erase a message
+        # while leaving an empty row behind for every other member to read.
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("A message cannot be edited to be blank.")
+        return stripped
+
+
+class ReactionRemove(BaseModel):
+    reaction: str = Field(min_length=1, max_length=20)
+
+
+class SuggestionReplyCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=10000)
+    # Internal notes are visible only to authorized administrators in scope.
+    is_internal: bool = False
+
+
+class MessageReportCreate(BaseModel):
+    category: str = Field(min_length=1, max_length=40)
+    reason: str = Field(min_length=3, max_length=100)
+    description: str = Field(default="", max_length=2000)
+
+
+def _conversation_parish_id(db: Session, conversation_id: int) -> int | None:
+    """The parish owning a conversation, or None for direct/group threads."""
+    conversation = db.query(CommunityConversation).filter(
+        CommunityConversation.id == conversation_id
+    ).first()
+    if conversation is None:
+        return None
+    if conversation.scope_type == "parish":
+        return conversation.scope_id
+    if conversation.scope_type == "group" and conversation.group_id is not None:
+        group = db.query(CommunityGroup).filter(
+            CommunityGroup.id == conversation.group_id
+        ).first()
+        if group is not None and group.scope_type == "parish":
+            return group.scope_id
+        return None
+    return None
+
+
+def conversation_is_parish_scope(db: Session, conversation_id: int) -> bool:
+    return _conversation_parish_id(db, conversation_id) is not None
+
+
 def _audit(
     db: Session,
     actor: User,
@@ -221,19 +341,48 @@ def _visible_announcement(db: Session, user: User, item: CommunityAnnouncement) 
     return user_belongs_to_scope(db, user, item.audience_type, item.audience_id)
 
 
+def _recent_notification_titles(db: Session, user_id: int, title: str, window_minutes: int) -> int:
+    """Count identical notification titles emitted to a user in a recent window."""
+    since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+    return (
+        db.query(func.count(Notification.id))
+        .filter(
+            Notification.user_id == user_id,
+            Notification.title == title,
+            Notification.created_at >= since,
+        )
+        .scalar()
+        or 0
+    )
+
+
 def _notify_user(
     db: Session,
     user_id: int,
     title: str,
     body: str,
     category: str,
-) -> None:
+    throttle: tuple[int, int] | None = None,
+) -> bool:
+    """Queue a notification unless the user opted out or is being flooded.
+
+    ``throttle`` is ``(max_identical, window_minutes)``. A parish-wide
+    conversation notifies every member on every message, which for an active
+    parish means hundreds of rows a day per member; collapsing identical recent
+    titles keeps the notification list meaningful without dropping the signal
+    that something happened. Returns True when a row was queued.
+    """
     preference = db.query(CommunityNotificationPreference).filter(
         CommunityNotificationPreference.user_id == user_id
     ).first()
     if preference is not None and not getattr(preference, category):
-        return
+        return False
+    if throttle is not None and user_id > 0:
+        max_identical, window_minutes = throttle
+        if _recent_notification_titles(db, user_id, title, window_minutes) >= max_identical:
+            return False
     db.add(Notification(user_id=user_id, title=title, body=body))
+    return True
 
 
 def _scope_recipients(db: Session, scope_type: str, scope_id: int | None) -> list[int]:
@@ -287,6 +436,110 @@ def _scope_recipients(db: Session, scope_type: str, scope_id: int | None) -> lis
             if user_belongs_to_scope(db, member, group.scope_type, group.scope_id)
         ]
     return []
+
+
+@router.get("/header")
+def community_header(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Identity card for the caller's parish community.
+
+    Every value is derived from the authenticated user's own trusted membership,
+    so there is no scope parameter a client could tamper with. Members with no
+    active parish membership get ``community: null`` plus the reason, which lets
+    the UI explain why the conversation is unavailable instead of showing an
+    empty feed that looks broken.
+    """
+    active_membership = (
+        db.query(ParishMembership)
+        .filter(
+            ParishMembership.user_id == user.id,
+            ParishMembership.status == "active",
+        )
+        .order_by(ParishMembership.requested_at.desc())
+        .first()
+    )
+    base = {
+        "community": None,
+        "parish_membership_status": active_membership.status if active_membership else None,
+        "rules": COMMUNITY_RULES,
+    }
+    if active_membership is None:
+        base["unavailable_reason"] = (
+            "Your parish membership is not active yet. "
+            "An administrator must approve it before you can join the parish community."
+        )
+        return base
+
+    parish = db.query(Parish).filter(Parish.id == active_membership.parish_id).first()
+    if parish is None or getattr(parish, "is_active", True) is False:
+        base["unavailable_reason"] = "This parish is not currently active."
+        return base
+
+    diocese = (
+        db.query(Diocese).filter(Diocese.id == parish.diocese_id).first()
+        if parish.diocese_id
+        else None
+    )
+    deanery = (
+        db.query(Deanery).filter(Deanery.id == parish.deanery_id).first()
+        if parish.deanery_id
+        else None
+    )
+    member_count = (
+        db.query(func.count(ParishMembership.id))
+        .filter(
+            ParishMembership.parish_id == parish.id,
+            ParishMembership.status == "active",
+        )
+        .scalar()
+        or 0
+    )
+    conversation = (
+        db.query(CommunityConversation)
+        .filter(
+            CommunityConversation.conversation_type == "scope",
+            CommunityConversation.scope_type == "parish",
+            CommunityConversation.scope_id == parish.id,
+            CommunityConversation.is_active.is_(True),
+        )
+        .first()
+    )
+    my_roles = [
+        {
+            "role": assignment.role,
+            "scope_type": assignment.scope_type,
+            "scope_id": assignment.scope_id,
+            "ministry": assignment.ministry,
+        }
+        for assignment in db.query(RoleAssignment).filter(
+            RoleAssignment.user_id == user.id,
+            RoleAssignment.scope_type == "parish",
+            RoleAssignment.scope_id == parish.id,
+            RoleAssignment.is_active.is_(True),
+        ).all()
+    ]
+    base["community"] = {
+        "parish_id": parish.id,
+        "parish_name": parish.name,
+        "parish_code": parish.code,
+        "diocese_id": parish.diocese_id,
+        "diocese_name": diocese.name if diocese else None,
+        "deanery_id": parish.deanery_id,
+        "deanery_name": deanery.name if deanery else None,
+        "member_count": member_count,
+        "description": (
+            f"{parish.name} parish community"
+            + (f", {diocese.name}" if diocese else "")
+        ),
+        "rules": COMMUNITY_RULES,
+        "conversation_id": conversation.id if conversation else None,
+        "my_roles": my_roles,
+        "can_moderate": can_moderate_community_scope(db, user, "parish", parish.id),
+        "can_manage": can_manage_community_scope(db, user, "parish", parish.id),
+    }
+    return base
 
 
 @router.get("/me")
@@ -945,6 +1198,7 @@ def create_suggestion(
 ):
     if payload.category not in SUGGESTION_CATEGORIES:
         raise HTTPException(status_code=422, detail="Unknown suggestion category.")
+    rate_limit.consume("community.suggestion", user.id, rate_limit.SUGGESTION_SUBMIT)
     _require_member_scope(db, user, payload.scope_type, payload.scope_id)
     item = CommunitySuggestion(
         submitter_id=user.id,
@@ -956,6 +1210,19 @@ def create_suggestion(
     )
     db.add(item)
     db.flush()
+    # Route to administration by organizational scope rather than making the
+    # member pick an administrator. Only administrators who actually hold that
+    # scope are notified, so a parish suggestion never reaches another parish.
+    recipients = _suggestion_administrators(db, payload.scope_type, payload.scope_id)
+    item.assigned_to = recipients[0] if recipients else None
+    for administrator_id in recipients:
+        _notify_user(
+            db,
+            administrator_id,
+            "New parish suggestion",
+            f"A {payload.category} suggestion was submitted in your scope.",
+            "role_requests",
+        )
     _audit(
         db, user, "suggestion.submitted", "suggestion", item.id,
         payload.scope_type, payload.scope_id,
@@ -970,8 +1237,22 @@ def create_suggestion(
         "scope_id": item.scope_id,
         "status": item.status,
         "is_anonymous": item.is_anonymous,
+        "assigned_to": item.assigned_to,
         "created_at": item.created_at,
     }
+
+
+def _suggestion_administrators(
+    db: Session, scope_type: str, scope_id: int
+) -> list[int]:
+    """Administrator ids authorized to handle a suggestion in this scope."""
+    if scope_type not in {"parish", "diocese"}:
+        return []
+    administrators: list[int] = []
+    for person in db.query(User).filter(User.is_active.is_(True)).all():
+        if can_manage_community_scope(db, person, scope_type, scope_id):
+            administrators.append(person.id)
+    return administrators
 
 
 @router.get("/suggestions/mine")
@@ -989,17 +1270,28 @@ def reviewable_suggestions(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    items = (
-        db.query(CommunitySuggestion)
-        .filter(CommunitySuggestion.status.notin_(["archived", "implemented", "declined"]))
-        .order_by(CommunitySuggestion.created_at.asc())
-        .limit(500)
-        .all()
+    """The review queue for the caller's scopes.
+
+    The query is constrained to authorized scopes in SQL. Loading every open
+    suggestion in the platform and filtering afterwards would both pull other
+    parishes' text into the request and make the response cost grow with total
+    platform volume.
+    """
+    query = db.query(CommunitySuggestion).filter(
+        CommunitySuggestion.status.notin_(SUGGESTION_TERMINAL_STATUSES)
     )
-    visible = [
-        item for item in items
-        if can_manage_community_scope(db, user, item.scope_type, item.scope_id)
-    ]
+    scopes = moderation_scope_ids(db, user)
+    if scopes:
+        conditions = [
+            (CommunitySuggestion.scope_type == scope_type)
+            & (CommunitySuggestion.scope_id == scope_id)
+            for scope_type, scope_id in scopes
+        ]
+        query = query.filter(or_(*conditions))
+    elif scopes is not None:
+        # Holds moderator roles, but in no scope this queue covers.
+        return []
+    items = query.order_by(CommunitySuggestion.created_at.asc()).limit(200).all()
     return [
         {
             "id": item.id,
@@ -1010,10 +1302,151 @@ def reviewable_suggestions(
             "status": item.status,
             "is_anonymous": item.is_anonymous,
             "submitter_id": None if item.is_anonymous else item.submitter_id,
+            "assigned_to": item.assigned_to,
+            "escalated_at": item.escalated_at,
             "created_at": item.created_at,
         }
-        for item in visible
+        for item in items
     ]
+
+
+def _suggestion_for_participant(
+    db: Session, suggestion_id: int, user: User
+) -> tuple[CommunitySuggestion, bool]:
+    """Fetch a suggestion the caller is entitled to see.
+
+    Returns the suggestion and whether the caller administers its scope.
+    Submitters keep access to their own suggestion regardless of role so they can
+    follow replies; every other reader must hold scope authority.
+    """
+    suggestion = db.query(CommunitySuggestion).filter(
+        CommunitySuggestion.id == suggestion_id
+    ).first()
+    if suggestion is None:
+        raise HTTPException(status_code=404, detail="Suggestion not found.")
+    manages = can_manage_community_scope(
+        db, user, suggestion.scope_type, suggestion.scope_id
+    )
+    if not manages and suggestion.submitter_id != user.id:
+        raise HTTPException(status_code=404, detail="Suggestion not found.")
+    return suggestion, manages
+
+
+def _require_suggestion_scope(
+    db: Session, user: User, suggestion: CommunitySuggestion
+) -> None:
+    """Guard the suggestion write endpoints.
+
+    This deliberately answers 404 rather than 403, matching
+    ``_suggestion_for_participant``. An administrator of one parish must not be
+    able to learn that a suggestion with a given id exists in another parish, so
+    the two surfaces report the same thing for the same reason.
+    """
+    if not can_manage_community_scope(
+        db, user, suggestion.scope_type, suggestion.scope_id
+    ):
+        raise HTTPException(status_code=404, detail="Suggestion not found.")
+
+
+@router.get("/suggestions/{suggestion_id}")
+def suggestion_detail(
+    suggestion_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    suggestion, manages = _suggestion_for_participant(db, suggestion_id, user)
+    replies = (
+        db.query(SuggestionReply)
+        .filter(SuggestionReply.suggestion_id == suggestion.id)
+        .order_by(SuggestionReply.created_at.asc(), SuggestionReply.id.asc())
+        .all()
+    )
+    visible = [reply for reply in replies if manages or not reply.is_internal]
+    submitter_name = None
+    if suggestion.submitter_id is not None:
+        submitter = db.query(User).filter(User.id == suggestion.submitter_id).first()
+        submitter_name = submitter.full_name if submitter else None
+    return {
+        "id": suggestion.id,
+        "category": suggestion.category,
+        "body": suggestion.body,
+        "scope_type": suggestion.scope_type,
+        "scope_id": suggestion.scope_id,
+        "status": suggestion.status,
+        "review_note": suggestion.review_note,
+        "is_anonymous": suggestion.is_anonymous,
+        "submitter_id": None if suggestion.is_anonymous else suggestion.submitter_id,
+        "submitter_name": None if suggestion.is_anonymous else submitter_name,
+        "assigned_to": suggestion.assigned_to,
+        "resolved_at": suggestion.resolved_at,
+        "escalated_at": suggestion.escalated_at,
+        "created_at": suggestion.created_at,
+        "replies": [
+            {
+                "id": reply.id,
+                "author_id": reply.author_id,
+                "body": reply.body,
+                # The submitter is never shown that an internal note exists.
+                "is_internal": reply.is_internal if manages else None,
+                "created_at": reply.created_at,
+            }
+            for reply in visible
+        ],
+        "can_manage": manages,
+    }
+
+
+@router.post("/suggestions/{suggestion_id}/replies", status_code=201)
+def reply_to_suggestion(
+    suggestion_id: int,
+    payload: SuggestionReplyCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Administrator reply on a suggestion.
+
+    Public replies notify the submitter. Internal notes stay inside the
+    moderation surface so private administrative discussion is never exposed to
+    the member.
+    """
+    suggestion = db.query(CommunitySuggestion).filter(
+        CommunitySuggestion.id == suggestion_id
+    ).with_for_update().first()
+    if suggestion is None:
+        raise HTTPException(status_code=404, detail="Suggestion not found.")
+    _require_suggestion_scope(db, user, suggestion)
+    rate_limit.consume("community.suggestion.reply", user.id, rate_limit.SUGGESTION_REPLY)
+    reply = SuggestionReply(
+        suggestion_id=suggestion.id,
+        author_id=user.id,
+        body=payload.body,
+        is_internal=payload.is_internal,
+    )
+    db.add(reply)
+    if suggestion.assigned_to is None:
+        suggestion.assigned_to = user.id
+    if not payload.is_internal and suggestion.submitter_id is not None:
+        _notify_user(
+            db,
+            suggestion.submitter_id,
+            "Reply to your suggestion",
+            payload.body[:500],
+            "role_requests",
+        )
+    _audit(
+        db, user, "suggestion.replied", "suggestion", suggestion.id,
+        suggestion.scope_type, suggestion.scope_id,
+        "internal note" if payload.is_internal else "reply",
+    )
+    db.commit()
+    db.refresh(reply)
+    return {
+        "id": reply.id,
+        "suggestion_id": reply.suggestion_id,
+        "author_id": reply.author_id,
+        "is_internal": reply.is_internal,
+        "created_at": reply.created_at,
+    }
 
 
 @router.patch("/suggestions/{suggestion_id}")
@@ -1023,37 +1456,72 @@ def update_suggestion(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    allowed = {"under_review", "in_discussion", "accepted", "implemented", "declined", "archived"}
-    if payload.status not in allowed:
+    if payload.status not in SUGGESTION_STATUSES:
         raise HTTPException(status_code=422, detail="Invalid suggestion status.")
+    if payload.status in SUGGESTION_STATUSES_REQUIRING_NOTE and not payload.review_note:
+        raise HTTPException(
+            status_code=422,
+            detail="A review note is required when moving a suggestion to this status.",
+        )
     item = db.query(CommunitySuggestion).filter(
         CommunitySuggestion.id == suggestion_id
     ).with_for_update().first()
     if item is None:
         raise HTTPException(status_code=404, detail="Suggestion not found.")
-    _require_manage_scope(db, user, item.scope_type, item.scope_id)
+    _require_suggestion_scope(db, user, item)
+    # Server-side transition validation: a suggestion cannot skip straight from
+    # "submitted" to "implemented", and a closed suggestion cannot be reopened.
+    permitted = SUGGESTION_TRANSITIONS.get(item.status, set())
+    if payload.status not in permitted:
+        if item.status in SUGGESTION_TERMINAL_STATUSES:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"This suggestion is already closed as '{item.status}' "
+                    "and cannot change status."
+                ),
+            )
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"A suggestion in '{item.status}' cannot move to "
+                f"'{payload.status}'."
+            ),
+        )
+    previous_status = item.status
     item.status = payload.status
     item.reviewer_id = user.id
     item.review_note = payload.review_note
+    if item.assigned_to is None:
+        item.assigned_to = user.id
+    now = datetime.now(timezone.utc)
+    if payload.status in SUGGESTION_TERMINAL_STATUSES:
+        item.resolved_at = now
+    if payload.status == "escalated":
+        item.escalated_at = now
     _audit(
         db, user, f"suggestion.{payload.status}", "suggestion", item.id,
-        item.scope_type, item.scope_id, payload.review_note,
+        item.scope_type, item.scope_id,
+        payload.review_note or f"{previous_status} -> {payload.status}",
     )
     if item.submitter_id is not None:
-        db.add(
-            Notification(
-                user_id=item.submitter_id,
-                title="Suggestion reviewed",
-                body=f"Your suggestion status is now {payload.status}.",
-            )
+        _notify_user(
+            db,
+            item.submitter_id,
+            "Suggestion updated",
+            f"Your suggestion moved from {previous_status} to {payload.status}.",
+            "role_requests",
         )
     db.commit()
     return {
         "id": item.id,
         "status": item.status,
+        "previous_status": previous_status,
         "review_note": item.review_note,
         "scope_type": item.scope_type,
         "scope_id": item.scope_id,
+        "resolved_at": item.resolved_at,
+        "escalated_at": item.escalated_at,
     }
 
 
@@ -1491,6 +1959,9 @@ def create_direct_conversation(
             status_code=400,
             detail="You cannot start a conversation with yourself.",
         )
+    rate_limit.consume(
+        "community.conversation.create", user.id, rate_limit.CONVERSATION_CREATE
+    )
     other = db.query(User).filter(
         User.id == payload.user_id,
         User.is_active.is_(True),
@@ -1542,6 +2013,7 @@ def search_members(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    rate_limit.consume("community.member.search", user.id, rate_limit.MEMBER_SEARCH)
     active_parish_ids = [
         row[0]
         for row in db.query(ParishMembership.parish_id).filter(
@@ -1593,37 +2065,361 @@ def search_members(
     ]
 
 
+def _blocked_ids_between(db: Session, user_id: int, other_ids: set[int]) -> set[int]:
+    """Subset of ``other_ids`` that the caller has blocked, or who blocked them."""
+    if not other_ids:
+        return set()
+    blocked_by_me = {
+        row[0]
+        for row in db.query(MemberBlock.blocked_id)
+        .filter(
+            MemberBlock.blocker_id == user_id,
+            MemberBlock.blocked_id.in_(other_ids),
+        )
+        .all()
+    }
+    blocked_me = {
+        row[0]
+        for row in db.query(MemberBlock.blocker_id)
+        .filter(
+            MemberBlock.blocked_id == user_id,
+            MemberBlock.blocker_id.in_(other_ids),
+        )
+        .all()
+    }
+    return blocked_by_me | blocked_me
+
+
+def _blocked_direct_conversation_ids(
+    db: Session, user: User, direct_ids: set[int]
+) -> set[int]:
+    """Direct conversations whose other participant is blocked either way.
+
+    Resolved with two queries regardless of how many threads are involved, so
+    the caller can drop these ids before paginating.
+    """
+    if not direct_ids:
+        return set()
+    peer_by_conversation: dict[int, int] = {}
+    for row in db.query(
+        ConversationMember.conversation_id, ConversationMember.user_id
+    ).filter(
+        ConversationMember.conversation_id.in_(direct_ids),
+        ConversationMember.user_id != user.id,
+    ).all():
+        peer_by_conversation[row[0]] = row[1]
+    if not peer_by_conversation:
+        return set()
+    blocked = _blocked_ids_between(db, user.id, set(peer_by_conversation.values()))
+    if not blocked:
+        return set()
+    return {
+        conversation_id
+        for conversation_id, peer_id in peer_by_conversation.items()
+        if peer_id in blocked
+    }
+
+
+def _visible_conversation_ids(db: Session, user: User) -> tuple[list[int], set[int]]:
+    """Conversation ids the caller may see, resolved in SQL rather than in Python.
+
+    Returning ids first means the conversation query itself can be constrained to
+    the caller's own data. The previous implementation loaded every conversation
+    in the table and filtered afterwards, which both leaked cross-parish rows
+    into the request and made the response cost grow with the size of the whole
+    community table.
+    """
+    member_conversation_ids = [
+        row[0]
+        for row in db.query(ConversationMember.conversation_id).filter(
+            ConversationMember.user_id == user.id
+        ).all()
+    ]
+    direct_ids = [
+        row[0]
+        for row in db.query(CommunityConversation.id)
+        .filter(
+            CommunityConversation.conversation_type == "direct",
+            CommunityConversation.is_active.is_(True),
+            CommunityConversation.id.in_(member_conversation_ids or [0]),
+        )
+        .all()
+    ]
+
+    parish_ids = [
+        row[0]
+        for row in db.query(ParishMembership.parish_id).filter(
+            ParishMembership.user_id == user.id,
+            ParishMembership.status == "active",
+        ).all()
+    ]
+    # Group threads additionally require that the group sits inside a scope the
+    # member actually belongs to, not merely that they joined the group row.
+    # Every candidate group is checked against the same three sets that
+    # ``user_belongs_to_scope`` consults, so the whole decision is one query
+    # instead of two per group.
+    joined_groups = db.query(
+        CommunityGroup.id, CommunityGroup.scope_type, CommunityGroup.scope_id
+    ).join(
+        GroupMembership, GroupMembership.group_id == CommunityGroup.id
+    ).filter(
+        GroupMembership.user_id == user.id,
+        CommunityGroup.is_active.is_(True),
+    )
+    group_ids = [tuple(row) for row in joined_groups.all()]
+    diocese_ids: set[int] = set()
+    deanery_ids: set[int] = set()
+    if parish_ids:
+        hierarchy = {
+            row[0]: (row[1], row[2])
+            for row in db.query(Parish.id, Parish.diocese_id, Parish.deanery_id)
+            .filter(Parish.id.in_(parish_ids))
+            .all()
+        }
+        diocese_ids = {
+            diocese_id for diocese_id, _ in hierarchy.values() if diocese_id
+        }
+        deanery_ids = {
+            deanery_id for _, deanery_id in hierarchy.values() if deanery_id
+        }
+
+    scope_group_ids: list[int] = []
+    for group_id, group_scope_type, group_scope_id in group_ids:
+        if group_scope_type == "parish":
+            if group_scope_id in parish_ids:
+                scope_group_ids.append(group_id)
+        elif group_scope_type == "diocese":
+            if group_scope_id in diocese_ids:
+                scope_group_ids.append(group_id)
+        elif group_scope_type == "deanery":
+            if group_scope_id in deanery_ids:
+                scope_group_ids.append(group_id)
+
+    scope_ids: list[int] = []
+    if parish_ids:
+        scope_ids.extend(
+            row[0]
+            for row in db.query(CommunityConversation.id)
+            .filter(
+                CommunityConversation.conversation_type == "scope",
+                CommunityConversation.scope_type == "parish",
+                CommunityConversation.scope_id.in_(parish_ids),
+                CommunityConversation.is_active.is_(True),
+            )
+            .all()
+        )
+    if scope_group_ids:
+        group_conversation_ids = [
+            row[0]
+            for row in db.query(CommunityConversation.id)
+            .filter(
+                CommunityConversation.conversation_type == "scope",
+                CommunityConversation.scope_type == "group",
+                CommunityConversation.scope_id.in_(scope_group_ids),
+                CommunityConversation.is_active.is_(True),
+            )
+            .all()
+        ]
+        # Non-parish scope threads stay restricted to explicit members.
+        joined = {
+            row[0]
+            for row in db.query(ConversationMember.conversation_id).filter(
+                ConversationMember.user_id == user.id,
+                ConversationMember.conversation_id.in_(group_conversation_ids or [0]),
+            ).all()
+        }
+        scope_ids.extend(joined)
+
+    visible = list({*direct_ids, *scope_ids})
+    return visible, set(direct_ids)
+
+
+def _conversation_summaries_bulk(
+    db: Session,
+    conversations: list[CommunityConversation],
+    user: User,
+    excluded_direct_participants: set[int] | None = None,
+) -> list[dict]:
+    """Build conversation summaries in a fixed number of queries.
+
+    The per-conversation version issued three or four queries each, so a member
+    with a busy parish feed paid hundreds of round trips per screen load.
+    """
+    if not conversations:
+        return []
+    conversation_ids = [conversation.id for conversation in conversations]
+
+    memberships = {
+        membership.conversation_id: membership
+        for membership in db.query(ConversationMember).filter(
+            ConversationMember.conversation_id.in_(conversation_ids),
+            ConversationMember.user_id == user.id,
+        ).all()
+    }
+
+    last_message_ids = {
+        row[0]: row[1]
+        for row in db.query(
+            CommunityMessage.conversation_id,
+            func.max(CommunityMessage.id),
+        )
+        .filter(
+            CommunityMessage.conversation_id.in_(conversation_ids),
+            CommunityMessage.is_deleted.is_(False),
+        )
+        .group_by(CommunityMessage.conversation_id)
+        .all()
+    }
+    last_messages: dict[int, CommunityMessage] = {}
+    if last_message_ids:
+        last_messages = {
+            message.id: message
+            for message in db.query(CommunityMessage)
+            .filter(CommunityMessage.id.in_(set(last_message_ids.values())))
+            .all()
+        }
+
+    unread_conditions = []
+    for conversation_id in conversation_ids:
+        membership = memberships.get(conversation_id)
+        condition = CommunityMessage.conversation_id == conversation_id
+        if membership is not None and membership.last_read_message_id is not None:
+            condition = and_(condition, CommunityMessage.id > membership.last_read_message_id)
+        unread_conditions.append(condition)
+    unread_counts = {
+        row[0]: row[1]
+        for row in db.query(
+            CommunityMessage.conversation_id,
+            func.count(CommunityMessage.id),
+        )
+        .filter(
+            CommunityMessage.conversation_id.in_(conversation_ids),
+            CommunityMessage.is_deleted.is_(False),
+            CommunityMessage.sender_id != user.id,
+            or_(*unread_conditions),
+        )
+        .group_by(CommunityMessage.conversation_id)
+        .all()
+    }
+
+    direct_ids = [
+        conversation.id
+        for conversation in conversations
+        if conversation.conversation_type == "direct"
+    ]
+    participants: dict[int, int] = {}
+    if direct_ids:
+        for row in db.query(
+            ConversationMember.conversation_id, ConversationMember.user_id
+        ).filter(
+            ConversationMember.conversation_id.in_(direct_ids),
+            ConversationMember.user_id != user.id,
+        ).all():
+            participants[row[0]] = row[1]
+
+    participant_profiles: dict[int, User] = {}
+    if participants:
+        participant_profiles = {
+            person.id: person
+            for person in db.query(User)
+            .filter(User.id.in_(set(participants.values())))
+            .all()
+        }
+
+    blocked = (
+        _blocked_ids_between(db, user.id, set(participants.values()))
+        if participants
+        else set()
+    )
+    hide = excluded_direct_participants or set()
+
+    summaries: list[dict] = []
+    for conversation in conversations:
+        if (
+            conversation.conversation_type == "direct"
+            and participants.get(conversation.id) in blocked | hide
+        ):
+            continue
+        membership = memberships.get(conversation.id)
+        last_message = last_messages.get(
+            last_message_ids.get(conversation.id, 0)
+        )
+        summary = {
+            "id": conversation.id,
+            "conversation_type": conversation.conversation_type,
+            "scope_type": conversation.scope_type,
+            "scope_id": conversation.scope_id,
+            "group_id": conversation.group_id,
+            "created_by": conversation.created_by,
+            "created_at": conversation.created_at,
+            "unread_count": unread_counts.get(conversation.id, 0),
+            "is_muted": membership.is_muted if membership else False,
+            "last_message": {
+                "id": last_message.id,
+                "sender_id": last_message.sender_id,
+                "body": last_message.body,
+                "created_at": last_message.created_at,
+            } if last_message else None,
+        }
+        if conversation.conversation_type == "direct":
+            other = participant_profiles.get(participants.get(conversation.id, 0))
+            summary["participant"] = {
+                "id": other.id,
+                "full_name": other.full_name,
+            } if other else None
+        summaries.append(summary)
+    return summaries
+
+
 @router.get("/conversations")
 def list_conversations(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    visible_ids, direct_ids = _visible_conversation_ids(db, user)
+    hidden_direct_ids = _blocked_direct_conversation_ids(db, user, direct_ids)
+    if hidden_direct_ids:
+        # Excluded before pagination rather than after, so a page is never short
+        # because a blocked thread sat inside the requested window.
+        visible_ids = [
+            conversation_id
+            for conversation_id in visible_ids
+            if conversation_id not in hidden_direct_ids
+        ]
+    if not visible_ids:
+        return []
     conversations = (
         db.query(CommunityConversation)
-        .filter(CommunityConversation.is_active.is_(True))
-        .order_by(CommunityConversation.created_at.desc())
-        .limit(200)
+        .filter(
+            CommunityConversation.id.in_(visible_ids),
+            CommunityConversation.is_active.is_(True),
+        )
+        .order_by(CommunityConversation.created_at.desc(), CommunityConversation.id.desc())
+        .offset(offset)
+        .limit(limit)
         .all()
     )
-    summaries: list[dict] = []
-    for item in conversations:
-        if item.conversation_type == "direct":
-            is_member = db.query(ConversationMember.id).filter(
-                ConversationMember.conversation_id == item.id,
-                ConversationMember.user_id == user.id,
-            ).first() is not None
-            if not is_member:
-                continue
-        elif user_belongs_to_scope(db, user, item.scope_type, item.scope_id):
-            if item.scope_type != "parish" and not db.query(ConversationMember.id).filter(
-                ConversationMember.conversation_id == item.id,
-                ConversationMember.user_id == user.id,
-            ).first():
-                continue
-        else:
-            continue
-        summaries.append(_conversation_summary(db, item, user))
-    return summaries
+    return _conversation_summaries_bulk(db, conversations, user)
+
+
+@router.get("/conversations/{conversation_id}")
+def conversation_detail(
+    conversation_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Single conversation summary, membership-checked.
+
+    Membership is resolved through the same helper the message endpoints use, so
+    a guessed id cannot reveal that a conversation exists.
+    """
+    conversation = _conversation_for_member(db, conversation_id, user)
+    summaries = _conversation_summaries_bulk(db, [conversation], user)
+    if not summaries:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+    return summaries[0]
 
 
 @router.get("/conversations/{conversation_id}/messages")
@@ -1667,6 +2463,7 @@ def create_message(
     user: User = Depends(get_current_user),
 ):
     conversation = _conversation_for_member(db, conversation_id, user)
+    rate_limit.consume("community.message.send", user.id, rate_limit.MESSAGE_SEND)
     if payload.reply_to_id is not None:
         parent = db.query(CommunityMessage).filter(
             CommunityMessage.id == payload.reply_to_id,
@@ -1713,6 +2510,7 @@ def create_message(
                 "New community message",
                 payload.body[:500],
                 "messages",
+                throttle=(5, 60),
             )
     db.commit()
     db.refresh(message)
@@ -1722,8 +2520,7 @@ def create_message(
 @router.post("/messages/{message_id}/report", status_code=201)
 def report_message(
     message_id: int,
-    reason: str = Query(min_length=3, max_length=100),
-    description: str = Query(default="", max_length=2000),
+    payload: MessageReportCreate,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -1734,17 +2531,42 @@ def report_message(
     if message is None:
         raise HTTPException(status_code=404, detail="Message not found.")
     _conversation_for_member(db, message.conversation_id, user)
+    rate_limit.consume("community.report", user.id, rate_limit.REPORT_SUBMIT)
+    if payload.category not in REPORT_CATEGORIES:
+        raise HTTPException(status_code=422, detail="Unknown report category.")
+    if message.sender_id == user.id:
+        raise HTTPException(
+            status_code=422, detail="You cannot report your own message."
+        )
     report = ContentReport(
         reporter_id=user.id,
         resource_type="message",
         resource_id=message.id,
-        reason=reason,
-        description=description,
+        category=payload.category,
+        reason=payload.reason,
+        description=payload.description,
+        conversation_id=message.conversation_id,
+        # Scope is derived from the conversation, never accepted from the client,
+        # so a moderator queue cannot be widened by tampering with a request.
+        scope_type=(
+            "parish"
+            if conversation_is_parish_scope(db, message.conversation_id)
+            else None
+        ),
+        scope_id=_conversation_parish_id(db, message.conversation_id),
     )
     db.add(report)
+    _audit(
+        db, user, "message.reported", "message", message.id,
+        reason=f"{payload.category}: {payload.reason}",
+    )
     db.commit()
     db.refresh(report)
-    return {"report_id": report.id, "status": report.status}
+    return {
+        "report_id": report.id,
+        "status": report.status,
+        "category": report.category,
+    }
 
 
 @router.delete("/messages/{message_id}")
@@ -1784,6 +2606,14 @@ def react_to_message(
     if message is None:
         raise HTTPException(status_code=404, detail="Message not found.")
     _conversation_for_member(db, message.conversation_id, user)
+    rate_limit.consume("community.reaction", user.id, rate_limit.REACTION)
+    existing = db.query(MessageReaction.id).filter(
+        MessageReaction.message_id == message.id,
+        MessageReaction.user_id == user.id,
+        MessageReaction.reaction == payload.reaction,
+    ).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="You have already added this reaction.")
     item = MessageReaction(
         message_id=message.id,
         user_id=user.id,
@@ -1797,6 +2627,92 @@ def react_to_message(
         raise HTTPException(status_code=409, detail="You have already added this reaction.")
     db.refresh(item)
     return item
+
+
+@router.patch("/messages/{message_id}")
+def edit_own_message(
+    message_id: int,
+    payload: MessageEdit,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Edit a message the caller authored.
+
+    Ownership is enforced against the stored ``sender_id`` rather than anything
+    client supplied, so swapping the path id cannot reach another member's post.
+    Conversation membership is re-checked first so a removed member cannot keep
+    editing history they can no longer read.
+    """
+    message = db.query(CommunityMessage).filter(
+        CommunityMessage.id == message_id
+    ).with_for_update().first()
+    if message is None or message.is_deleted:
+        raise HTTPException(status_code=404, detail="Message not found.")
+    _conversation_for_member(db, message.conversation_id, user)
+    if message.sender_id != user.id:
+        raise HTTPException(status_code=403, detail="You can edit only your own messages.")
+    message.body = payload.body.strip()
+    message.is_edited = True
+    message.edited_at = datetime.now(timezone.utc)
+    _audit(
+        db, user, "message.edited", "message", message.id,
+        reason="Edited by message author.",
+    )
+    db.commit()
+    db.refresh(message)
+    return message
+
+
+@router.delete("/messages/{message_id}/reactions")
+def remove_reaction(
+    message_id: int,
+    payload: ReactionRemove,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    message = db.query(CommunityMessage).filter(
+        CommunityMessage.id == message_id,
+        CommunityMessage.is_deleted.is_(False),
+    ).first()
+    if message is None:
+        raise HTTPException(status_code=404, detail="Message not found.")
+    _conversation_for_member(db, message.conversation_id, user)
+    reaction = db.query(MessageReaction).filter(
+        MessageReaction.message_id == message.id,
+        MessageReaction.user_id == user.id,
+        MessageReaction.reaction == payload.reaction,
+    ).first()
+    if reaction is None:
+        raise HTTPException(status_code=404, detail="Reaction not found.")
+    db.delete(reaction)
+    db.commit()
+    return {"message_id": message.id, "status": "removed"}
+
+
+@router.get("/messages/{message_id}/reactions")
+def list_reactions(
+    message_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    message = db.query(CommunityMessage).filter(
+        CommunityMessage.id == message_id,
+        CommunityMessage.is_deleted.is_(False),
+    ).first()
+    if message is None:
+        raise HTTPException(status_code=404, detail="Message not found.")
+    _conversation_for_member(db, message.conversation_id, user)
+    reactions = db.query(MessageReaction).filter(
+        MessageReaction.message_id == message.id
+    ).all()
+    counts: dict[str, int] = {}
+    for reaction in reactions:
+        counts[reaction.reaction] = counts.get(reaction.reaction, 0) + 1
+    return {
+        "message_id": message.id,
+        "counts": counts,
+        "mine": [r.reaction for r in reactions if r.user_id == user.id],
+    }
 
 
 @router.put("/conversations/{conversation_id}/mute")
@@ -1824,6 +2740,7 @@ def block_member(
 ):
     if payload.user_id == user.id:
         raise HTTPException(status_code=422, detail="You cannot block your own account.")
+    rate_limit.consume("community.block", user.id, rate_limit.BLOCK_CHANGE)
     if not db.query(User.id).filter(User.id == payload.user_id, User.is_active.is_(True)).first():
         raise HTTPException(status_code=404, detail="Member not found.")
     existing = db.query(MemberBlock).filter(
@@ -1835,6 +2752,66 @@ def block_member(
     db.add(MemberBlock(blocker_id=user.id, blocked_id=payload.user_id))
     db.commit()
     return {"status": "blocked"}
+
+
+@router.get("/members/blocks")
+def list_blocks(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Blocks the caller set, and blocks other members set against the caller.
+
+    Returning both directions lets the UI explain why someone is unreachable
+    without leaking anything about accounts outside the caller's own community.
+    """
+    blocked = [
+        {
+            "user_id": person.id,
+            "full_name": person.full_name,
+            "direction": "blocked_by_me",
+        }
+        for person in db.query(User)
+        .join(MemberBlock, MemberBlock.blocked_id == User.id)
+        .filter(MemberBlock.blocker_id == user.id, User.is_active.is_(True))
+        .order_by(User.full_name)
+        .all()
+    ]
+    blocked_me = [
+        {
+            "user_id": person.id,
+            "full_name": person.full_name,
+            "direction": "blocked_me",
+        }
+        for person in db.query(User)
+        .join(MemberBlock, MemberBlock.blocker_id == User.id)
+        .filter(MemberBlock.blocked_id == user.id, User.is_active.is_(True))
+        .order_by(User.full_name)
+        .all()
+    ]
+    return {"blocked": blocked, "blocked_me": blocked_me}
+
+
+@router.delete("/members/block/{user_id}")
+def unblock_member(
+    user_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if user_id == user.id:
+        raise HTTPException(status_code=422, detail="You cannot unblock your own account.")
+    rate_limit.consume("community.block", user.id, rate_limit.BLOCK_CHANGE)
+    existing = db.query(MemberBlock).filter(
+        MemberBlock.blocker_id == user.id,
+        MemberBlock.blocked_id == user_id,
+    ).first()
+    if existing is None:
+        # DELETE is idempotent: the caller's intent -- "this member is not
+        # blocked" -- already holds, so a double tap must not surface an error.
+        return {"user_id": user_id, "status": "not_blocked"}
+    db.delete(existing)
+    _audit(db, user, "member.unblocked", "user", user_id)
+    db.commit()
+    return {"user_id": user_id, "status": "unblocked"}
 
 
 @router.get("/audit")

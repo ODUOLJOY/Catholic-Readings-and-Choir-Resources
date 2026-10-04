@@ -15,38 +15,10 @@ import * as DocumentPicker from "expo-document-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { api } from "@/lib/api";
+import { CHOIR_CATEGORY_SECTIONS } from "@/config/choirCategories";
 
-const categories = [
-  "Entrance",
-  "Kyrie Eleison",
-  "Gloria",
-  "Responsorial Psalm",
-  "Gospel Acclamation",
-  "Sadaka",
-  "Offertory",
-  "Sanctus",
-  "Memorial Acclamation",
-  "Great Amen",
-  "Agnus Dei",
-  "Communion",
-  "Thanksgiving",
-  "Exit",
-  "Recessional",
-  "Advent",
-  "Christmas",
-  "Lent",
-  "Holy Week",
-  "Easter",
-  "Pentecost",
-  "Ordinary Time",
-  "Marian",
-  "Wedding",
-  "Funeral",
-  "Baptism",
-  "Confirmation",
-  "Ordination",
-  "Other",
-];
+// Canonical 27 categories imported from @/config/choirCategories so the
+// upload selector stays in sync with the browse screen and the edit screen.
 
 const seasons = [
   "Advent",
@@ -329,36 +301,40 @@ export default function UploadScreen() {
           Category
         </Text>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.horizontal}
-        >
-          {categories.map((item) => (
-            <Pressable
-              key={item}
-              style={[
-                styles.chip,
-                category === item &&
-                  styles.chipActive,
-              ]}
-              onPress={() =>
-                setCategory(item)
-              }
-              disabled={uploading}
-            >
-              <Text
-                style={[
-                  styles.chipText,
-                  category === item &&
-                    styles.chipTextActive,
-                ]}
-              >
-                {item}
+        <View style={styles.categorySections}>
+          {CHOIR_CATEGORY_SECTIONS.map((section) => (
+            <View key={section.title} style={styles.categorySection}>
+              <Text style={styles.categorySectionTitle}>
+                {section.title}
               </Text>
-            </Pressable>
+              <View style={styles.categoryRow}>
+                {section.categories.map((item) => {
+                  const active = category === item;
+                  return (
+                    <Pressable
+                      key={item}
+                      style={[
+                        styles.chip,
+                        active && styles.chipActive,
+                      ]}
+                      onPress={() => setCategory(item)}
+                      disabled={uploading}
+                    >
+                      <Text
+                        style={[
+                          styles.chipText,
+                          active && styles.chipTextActive,
+                        ]}
+                      >
+                        {item}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
           ))}
-        </ScrollView>
+        </View>
 
         <Text style={styles.label}>
           Liturgical Season
@@ -672,6 +648,28 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
 
+  categorySections: {
+    marginBottom: 4,
+  },
+
+  categorySection: {
+    marginTop: 10,
+  },
+
+  categorySectionTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0B6623",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    marginBottom: 8,
+  },
+
+  categoryRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+
   chip: {
     borderWidth: 1,
     borderColor: "#0B6623",
@@ -680,6 +678,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     backgroundColor: "#fff",
     marginRight: 8,
+    marginBottom: 8,
   },
 
   chipActive: {

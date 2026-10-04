@@ -176,7 +176,9 @@ class CommunitySuggestion(Base):
     __tablename__ = "community_suggestions"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('submitted', 'under_review', 'in_discussion', 'accepted', 'implemented', 'declined', 'archived')",
+            "status IN ('submitted', 'under_review', 'needs_information', "
+            "'in_discussion', 'accepted', 'escalated', 'implemented', "
+            "'declined', 'archived')",
             name="ck_suggestion_status",
         ),
         Index("ix_suggestions_scope_status", "scope_type", "scope_id", "status"),
@@ -192,10 +194,37 @@ class CommunitySuggestion(Base):
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="submitted", index=True)
     reviewer_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     review_note: Mapped[str | None] = mapped_column(Text)
+    assigned_to: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    escalated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class SuggestionReply(Base):
+    __tablename__ = "community_suggestion_replies"
+    __table_args__ = (
+        Index(
+            "ix_community_suggestion_replies_suggestion_created",
+            "suggestion_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    suggestion_id: Mapped[int] = mapped_column(
+        ForeignKey("community_suggestions.id"), nullable=False, index=True
+    )
+    author_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    # Internal notes stay visible only to authorized administrators in the
+    # suggestion's organizational scope. They must never reach the submitter.
+    is_internal: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class CommunityEvent(Base):
@@ -325,11 +354,15 @@ class CommunityMessage(Base):
     conversation_id: Mapped[int] = mapped_column(
         ForeignKey("community_conversations.id"), nullable=False, index=True
     )
-    sender_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    sender_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     reply_to_id: Mapped[int | None] = mapped_column(ForeignKey("community_messages.id"))
     body: Mapped[str] = mapped_column(Text, nullable=False)
     attachment_url: Mapped[str | None] = mapped_column(String(500))
     is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_edited: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

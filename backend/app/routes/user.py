@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
@@ -10,11 +11,21 @@ from app.models.locations import Deanery
 from app.models.community import CommunityAuditLog, ParishMembership
 from app.routes.auth_dependency import get_current_user
 from app.schemas.user import UserResponse
+from app.services import hierarchy_service
 
 class LocationUpdateRequest(BaseModel):
+    """Parish selection for the signed-in user.
+
+    ``parish_id`` is the only field required. The deanery, diocese and
+    ecclesiastical province are derived from the parish on the server. The
+    optional ``deanery_id`` / ``diocese_id`` fields are still accepted for
+    backwards compatibility with older clients, but when present they are
+    validated rather than trusted.
+    """
+
     parish_id: int
-    deanery_id: int
-    diocese_id: int
+    deanery_id: Optional[int] = None
+    diocese_id: Optional[int] = None
 
 
 class LocationUpdateResponse(UserResponse):
@@ -52,21 +63,26 @@ def update_user_location(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
-    parish = db.query(Parish).filter(Parish.id == payload.parish_id).first()
-    if not parish:
-        raise HTTPException(status_code=404, detail="Parish not found")
-        
-    if parish.deanery_id != payload.deanery_id:
-        raise HTTPException(status_code=400, detail="Parish does not belong to the selected deanery")
-        
-    if parish.diocese_id != payload.diocese_id:
-        raise HTTPException(status_code=400, detail="Parish does not belong to the selected diocese")
-        
-    deanery = db.query(Deanery).filter(Deanery.id == payload.deanery_id).first()
-    if not deanery:
-        raise HTTPException(status_code=404, detail="Deanery not found")
-    if deanery.diocese_id != payload.diocese_id:
-        raise HTTPException(status_code=400, detail="Deanery does not belong to the selected diocese")
+    # Resolve and validate the full ancestry from the parish alone. The client
+    # cannot introduce an inconsistent province / diocese / deanery combination.
+    try:
+        resolved = hierarchy_service.resolve_parish_by_id(
+            db, payload.parish_id, require_active=True
+        )
+    except hierarchy_service.HierarchyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if payload.deanery_id is not None and payload.deanery_id != resolved.deanery.id:
+        raise HTTPException(
+            status_code=400,
+            detail="Parish does not belong to the selected deanery",
+        )
+
+    if payload.diocese_id is not None and payload.diocese_id != resolved.diocese.id:
+        raise HTTPException(
+            status_code=400,
+            detail="Parish does not belong to the selected diocese",
+        )
 
     if user.parish_id != payload.parish_id:
         db.query(ParishMembership).filter(

@@ -5,6 +5,7 @@ from sqlalchemy import (
     Integer,
     String,
     ForeignKey,
+    Enum as SQLEnum,
 )
 from enum import Enum
 from sqlalchemy.orm import relationship
@@ -15,9 +16,20 @@ from app.db.database import Base
 
 class UserRole(str, Enum):
     USER = "user"
+    CHOIR_CONTRIBUTOR = "choir_contributor"
+    PARISH_ADMINISTRATOR = "parish_administrator"
+    DIOCESAN_ADMINISTRATOR = "diocesan_administrator"
     MODERATOR = "moderator"
     ADMIN = "admin"
     SUPER_ADMIN = "super_admin"
+
+
+class UserStatus(str, Enum):
+    ACTIVE = "active"
+    PENDING = "pending"
+    SUSPENDED = "suspended"
+    LOCKED = "locked"
+    DEACTIVATED = "deactivated"
 
 
 class User(Base):
@@ -67,19 +79,79 @@ class User(Base):
         nullable=True,
     )
 
+    # Organisation membership only. Selecting a parish during registration never
+    # grants administrative privileges; those come from the separate
+    # RoleAssignment / RoleRequest approval workflow.
+    parish = relationship("Parish", back_populates="users")
+
     role = Column(
         String(30),
         default="user",
         nullable=False,
     )
     # user
+    # choir_contributor
+    # parish_administrator
+    # diocesan_administrator
+    # moderator
     # admin
     # super_admin
+
+    status = Column(
+        # values_callable stores the enum values ("active") rather than the member
+        # names ("ACTIVE"). This must stay in step with the enum labels and
+        # server_default created by migration 09, and with the lowercase UserRole
+        # values, or PostgreSQL will reject writes outright.
+        SQLEnum(
+            UserStatus,
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
+        default=UserStatus.ACTIVE,
+        nullable=False,
+    )
 
     is_active = Column(
         Boolean,
         default=True,
         nullable=False,
+    )
+
+    locked_at = Column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    locked_by = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=True,
+    )
+
+    suspended_at = Column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    suspended_by = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=True,
+    )
+
+    suspension_reason = Column(
+        String(500),
+        nullable=True,
+    )
+
+    deactivated_at = Column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    deactivated_by = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=True,
     )
 
     is_verified = Column(

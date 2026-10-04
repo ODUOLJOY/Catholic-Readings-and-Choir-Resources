@@ -28,6 +28,7 @@ from app.schemas.auth import (
 )
 from app.schemas.user import UserResponse
 from app.services import google_auth
+from app.services import hierarchy_service
 from app.services.auth_service import (
     AuthService,
     create_refresh_session,
@@ -133,12 +134,42 @@ def register(
             detail="Email already registered.",
         )
 
+    # Only the leaf of the hierarchy is accepted from the client. The province,
+    # diocese and deanery are derived from the parish on the server, so a client
+    # cannot submit a province from one ecclesiastical province together with a
+    # diocese from another.
+    hierarchy = None
+    if payload.parish_id is not None:
+        try:
+            hierarchy = hierarchy_service.resolve_parish_by_id(
+                db, payload.parish_id, require_active=True
+            )
+        except hierarchy_service.HierarchyError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=str(exc),
+            ) from exc
+
     user = AuthService.create_user(
         db=db,
         full_name=payload.full_name,
         email=payload.email.lower(),
         password=payload.password,
+        parish_id=payload.parish_id,
     )
+
+    # Selecting a parish establishes organisational membership only. It never
+    # grants administrative rights; those come from the separate role approval
+    # workflow (RoleRequest / RoleAssignment).
+    if hierarchy is not None:
+        logger.info(
+            "Registered user %s in %s / %s / %s / %s",
+            user.id,
+            hierarchy.province.name,
+            hierarchy.diocese.name,
+            hierarchy.deanery.name,
+            hierarchy.parish.name,
+        )
 
     _send_verification_email(db, user)
 

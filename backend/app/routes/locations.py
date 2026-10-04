@@ -6,6 +6,7 @@ from app.models.parish import Parish
 from app.models.user import User
 from app.core.dependencies import get_current_user
 from app.routes.admin import require_admin
+from app.services import hierarchy_service
 
 router = APIRouter(prefix="/api/v1/locations", tags=["Locations"])
 
@@ -15,18 +16,30 @@ def get_admin_stats(
     current_user: User = Depends(get_current_user)
 ):
     require_admin(current_user)
-    
+
+    # These are counted from the flags and the current verification vocabulary.
+    # The jurisdiction type used to be inferred from code prefixes such as
+    # "arch_", which no longer match the stable KE-* codes.
     total_dioceses = db.query(Diocese).count()
-    archdioceses = db.query(Diocese).filter(Diocese.code.startswith("arch_")).count()
-    dioceses = db.query(Diocese).filter(Diocese.code.startswith("dio_")).count()
-    military_ordinariate = db.query(Diocese).filter(Diocese.code == "mil_ord").count()
-    
+    military_ordinariate = db.query(Diocese).filter(
+        Diocese.is_military_ordinariate.is_(True)
+    ).count()
+    archdioceses = db.query(Diocese).filter(
+        Diocese.is_archdiocese.is_(True),
+        Diocese.is_military_ordinariate.is_(False),
+    ).count()
+    dioceses = total_dioceses - archdioceses - military_ordinariate
+
     total_deaneries = db.query(Deanery).count()
     total_parishes = db.query(Parish).count()
-    
-    verified_parishes = db.query(Parish).filter(Parish.verification_status == "verified").count()
-    needs_review_parishes = db.query(Parish).filter(Parish.verification_status == "needs_review").count()
-    
+
+    verified_parishes = db.query(Parish).filter(
+        Parish.verification_status == "VERIFIED"
+    ).count()
+    needs_review_parishes = db.query(Parish).filter(
+        Parish.verification_status == "NEEDS_REVIEW"
+    ).count()
+
     return {
         "total_jurisdictions": total_dioceses,
         "archdioceses": archdioceses,
@@ -98,7 +111,15 @@ def create_parish(
     if not deanery:
         raise HTTPException(status_code=400, detail="Invalid hierarchy")
         
-    parish = Parish(name=name, code=code, deanery_id=deanery_id, diocese_id=diocese_id)
+    parish = Parish(
+        name=name,
+        code=code,
+        deanery_id=deanery_id,
+        diocese_id=diocese_id,
+        # Admin-created rows are unverified by definition. The vocabulary is the
+        # uppercase one used everywhere else in the hierarchy.
+        verification_status="NEEDS_REVIEW",
+    )
     db.add(parish)
     db.commit()
     db.refresh(parish)
@@ -136,14 +157,37 @@ def delete_parish(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    """Deactivate a parish.
+
+    This is deliberately a soft delete. A parish referenced by users, readings
+    or community threads must not disappear from history, and the hierarchy
+    endpoints already distinguish active from inactive rows.
+    """
     require_admin(current_user)
     parish = db.query(Parish).filter(Parish.id == parish_id).first()
     if not parish:
         raise HTTPException(status_code=404, detail="Parish not found")
-    
-    db.delete(parish)
+
+    parish.is_active = False
     db.commit()
-    return {"message": "Parish deleted"}
+    return {"message": "Parish deactivated", "id": parish.id, "is_active": False}
+
+
+@router.post("/parishes/{parish_id}/restore")
+def restore_parish(
+    parish_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Reactivate a previously deactivated parish."""
+    require_admin(current_user)
+    parish = db.query(Parish).filter(Parish.id == parish_id).first()
+    if not parish:
+        raise HTTPException(status_code=404, detail="Parish not found")
+
+    parish.is_active = True
+    db.commit()
+    return {"message": "Parish restored", "id": parish.id, "is_active": True}
 
 @router.post("/import")
 def bulk_import(
@@ -167,9 +211,19 @@ def bulk_import(
     try:
         for jurisdiction_code, jurisdiction_data in data.items():
             results["jurisdictions_processed"] += 1
-            diocese = db.query(Diocese).filter(Diocese.code == jurisdiction_code).first()
+            # Payloads built before the hierarchy migration identify
+            # jurisdictions as "arch_nbo" / "dio_kti" / "mil_ord" or by display
+            # name only, so fall back to a normalised lookup instead of failing
+            # every legacy import outright.
+            diocese = hierarchy_service.resolve_legacy_diocese(db, jurisdiction_code)
+            if diocese is None:
+                diocese = hierarchy_service.resolve_legacy_diocese(
+                    db, jurisdiction_data.get("name", "")
+                )
             if not diocese:
-                results["errors"].append(f"Jurisdiction {jurisdiction_code} not found")
+                results["errors"].append(
+                    f"Jurisdiction {jurisdiction_code} not found"
+                )
                 results["invalid_records"] += 1
                 continue
                 
@@ -193,7 +247,7 @@ def bulk_import(
                             code=parish_code, 
                             deanery_id=deanery.id, 
                             diocese_id=diocese.id,
-                            verification_status="needs_review"
+                            verification_status="NEEDS_REVIEW"
                         )
                         db.add(parish)
                         results["parishes_added"] += 1

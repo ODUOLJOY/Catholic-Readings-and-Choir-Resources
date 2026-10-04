@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app.db.database import Base
+from hierarchy_test_support import build_chain
 from app.models.locations import Deanery, Diocese
 from app.models.parish import Parish
 from app.models.user import User
@@ -64,30 +65,28 @@ def db():
 
 
 def create_user_and_parish(db: Session) -> tuple[User, Parish, Deanery, Diocese]:
-    diocese = Diocese(name="Test Diocese", code="test-diocese")
-    db.add(diocese)
-    db.flush()
-
-    deanery = Deanery(
-        name="Test Deanery",
-        code="test-deanery",
-        diocese_id=diocese.id,
+    # A parish must sit on a complete country -> province -> diocese -> deanery
+    # chain, because the hierarchy resolver validates the full ancestry.
+    chain = build_chain(
+        db,
+        diocese_code="test-diocese",
+        diocese_name="Test Diocese",
+        deanery_code="test-deanery",
+        deanery_name="Test Deanery",
+        parish_code="test-parish",
+        parish_name="Test Parish",
+        metropolitan=False,
     )
-    db.add(deanery)
-    db.flush()
+    parish = chain["parish"]
+    deanery = chain["deanery"]
+    diocese = chain["diocese"]
 
-    parish = Parish(
-        name="Test Parish",
-        code="test-parish",
-        deanery_id=deanery.id,
-        diocese_id=diocese.id,
-    )
     user = User(
         full_name="Test User",
         email="test@example.org",
         hashed_password="not-a-real-password-hash",
     )
-    db.add_all([parish, user])
+    db.add(user)
     db.commit()
     return user, parish, deanery, diocese
 

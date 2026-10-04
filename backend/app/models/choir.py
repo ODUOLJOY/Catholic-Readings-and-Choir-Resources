@@ -24,7 +24,7 @@ class ChoirResource(Base):
 
     # Category and Language
     category = Column(String(100), nullable=False, index=True)
-    language = Column(String(20), nullable=False, default="English")
+    language = Column(String(20), nullable=False, default="English", index=True)
 
     # File Info
     file_url = Column(String(500), nullable=False)
@@ -36,6 +36,21 @@ class ChoirResource(Base):
     composer = Column(String(255), nullable=True)
     lyrics = Column(Text, nullable=True)
     duration = Column(Integer, nullable=True)  # in seconds for audio/video
+
+    # Structured metadata — mirrors the frontend ChoirResource interface and the
+    # choir-library product vision. Every field is nullable so the extension is
+    # backwards-compatible for rows created before these columns existed.
+    alternative_title = Column(String(255), nullable=True)
+    author = Column(String(255), nullable=True)
+    arranger = Column(String(255), nullable=True)
+    # Vocal/part assignment, e.g. "SATB", "SSA", "Soprano", "Choir".
+    voice_part = Column(String(50), nullable=True, index=True)
+    # Liturgical season, e.g. Advent, Christmas, Lent, Easter, Ordinary Time.
+    season = Column(String(50), nullable=True, index=True)
+    # Musical key signature, e.g. "C major", "A minor".
+    key_signature = Column(String(50), nullable=True, index=True)
+    # Tempo marking, e.g. "Allegro", "Andante", "120 BPM".
+    tempo = Column(String(50), nullable=True, index=True)
 
     # Status
     is_approved = Column(Boolean, default=False, index=True)

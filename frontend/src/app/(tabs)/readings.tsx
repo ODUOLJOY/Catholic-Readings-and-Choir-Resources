@@ -9,29 +9,41 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { api } from "@/lib/api";
+import { LiturgicalCache } from "@/services/liturgicalCache";
 
-interface Reading {
-  id: number;
+interface ReadingReference {
+  type: string;
+  book: string;
+  display_reference: string;
+  is_alternative: boolean;
+  is_optional: boolean;
+  is_primary: boolean;
+}
+
+interface LiturgicalDay {
   date: string;
-  calendar: {
-    celebration: string;
+  region: string;
+  celebration: {
+    name: string;
     rank: string;
-    color: string;
+  };
+  liturgical: {
     season: string;
+    week: number | null;
+    colour: string;
+    sunday_cycle: string;
+    weekday_cycle: string;
   };
-  reading: {
-    first_reading_reference: string;
-    first_reading: string;
-    responsorial_psalm_reference?: string;
-    responsorial_psalm?: string;
-    second_reading_reference?: string;
-    second_reading?: string;
-    gospel_reference: string;
-    gospel: string;
-  };
+  readings: ReadingReference[];
+  available_reading_sets: any[];
+  source: {
+    name: string | null;
+    region: string;
+  } | null;
+  verification_status: string;
 }
 
 const categories: string[] = [
@@ -43,52 +55,63 @@ const categories: string[] = [
 ];
 
 export default function Readings() {
-  const { date } = useLocalSearchParams<{ date: string }>();
-  const [readings, setReadings] = useState<Reading[]>([]);
-  const [selectedCategory, setSelectedCategory] =
-    useState("All");
+  const { date: dateParam } = useLocalSearchParams<{ date: string }>();
+  const router = useRouter();
+  const [currentDate, setCurrentDate] = useState<string>(dateParam || new Date().toISOString().split('T')[0]);
+  const [liturgicalDay, setLiturgicalDay] = useState<LiturgicalDay | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState("All");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [isFromCache, setIsFromCache] = useState(false);
+  
   const filtered = useMemo(() => {
-    if (selectedCategory === "All") {
-      return readings;
+    if (!liturgicalDay || selectedCategory === "All") {
+      return liturgicalDay?.readings || [];
     }
 
-    return readings.filter((reading) => {
+    return liturgicalDay.readings.filter((reading) => {
+      const type = reading.type.toLowerCase();
       switch (selectedCategory.toLowerCase()) {
         case "first reading":
-          return Boolean(reading.reading.first_reading);
+          return type === "first_reading";
         case "psalm":
-          return Boolean(reading.reading.responsorial_psalm);
+          return type === "responsorial_psalm";
         case "second reading":
-          return Boolean(reading.reading.second_reading);
+          return type === "second_reading";
         case "gospel":
-          return Boolean(reading.reading.gospel);
+          return type === "gospel";
         default:
           return false;
       }
     });
-  }, [readings, selectedCategory]);
+  }, [liturgicalDay, selectedCategory]);
 
-  async function loadReadings() {
+  async function loadReadings(dateStr: string) {
     try {
       setLoading(true);
+      setIsFromCache(false);
 
-      const endpoint = date ? `/api/v1/liturgy/date/${date}` : "/api/v1/liturgy/today";
+      // Try to load from cache first
+      const cached = await LiturgicalCache.get(dateStr, "KE");
+      if (cached) {
+        setLiturgicalDay(cached);
+        setIsFromCache(true);
+        setLoading(false);
+        return;
+      }
+
+      // Fetch from API
+      const endpoint = `/api/v1/liturgy/date/${dateStr}`;
       const response = await api.get(endpoint);
-      setReadings([response.data]);
+      setLiturgicalDay(response.data);
+      
+      // Cache the response
+      await LiturgicalCache.set(dateStr, "KE", response.data);
     } catch (error) {
-      console.log(
-        "Readings error:",
-        error
-      );
-
-      setReadings([]);
-
-      Alert.alert(
-        "Error",
-        "Unable to load readings."
-      );
+      console.log("Readings error:", error);
+      setLiturgicalDay(null);
+      Alert.alert("Error", "Unable to load readings.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -96,12 +119,26 @@ export default function Readings() {
   }
 
   useEffect(() => {
-    void Promise.resolve().then(loadReadings);
-  }, [date]);
+    void Promise.resolve().then(() => loadReadings(currentDate));
+  }, [currentDate]);
 
   async function refresh() {
     setRefreshing(true);
-    await loadReadings();
+    await loadReadings(currentDate);
+  }
+
+  function navigateDate(direction: number) {
+    const date = new Date(currentDate);
+    date.setDate(date.getDate() + direction);
+    const newDateStr = date.toISOString().split('T')[0];
+    setCurrentDate(newDateStr);
+    router.setParams({ date: newDateStr });
+  }
+
+  function goToToday() {
+    const today = new Date().toISOString().split('T')[0];
+    setCurrentDate(today);
+    router.setParams({ date: today });
   }
 
   function getIcon(type: string) {
@@ -118,38 +155,36 @@ export default function Readings() {
     return "book-open";
   }
 
-  function renderReading({
-    item,
-  }: {
-    item: Reading;
-  }) {
-    const entries = [
-      ["First Reading", item.reading.first_reading_reference, item.reading.first_reading],
-      ["Psalm", item.reading.responsorial_psalm_reference, item.reading.responsorial_psalm],
-      ["Second Reading", item.reading.second_reading_reference, item.reading.second_reading],
-      ["Gospel", item.reading.gospel_reference, item.reading.gospel],
-    ].filter((entry): entry is [string, string, string] => Boolean(entry[2]));
+  function getReadingTypeLabel(type: string): string {
+    const typeMap: Record<string, string> = {
+      FIRST_READING: "First Reading",
+      RESPONSORIAL_PSALM: "Responsorial Psalm",
+      SECOND_READING: "Second Reading",
+      GOSPEL_ACCLAMATION: "Gospel Acclamation",
+      GOSPEL: "Gospel",
+    };
+    return typeMap[type] || type;
+  }
 
+  function renderReading({ item }: { item: ReadingReference }) {
     return (
       <View style={styles.card}>
-        {entries.map(([type, reference, content]) => (
-          <View key={type} style={styles.readingSection}>
-            <View style={styles.cardHeader}>
-              <View style={styles.iconContainer}>
-                <MaterialCommunityIcons
-                  name={getIcon(type)}
-                  size={25}
-                  color="#0B6623"
-                />
-              </View>
-              <View style={styles.headerText}>
-                <Text style={styles.type}>{type}</Text>
-                <Text style={styles.reference}>{reference}</Text>
-              </View>
-            </View>
-            <Text style={styles.content}>{content}</Text>
+        <View style={styles.cardHeader}>
+          <View style={styles.iconContainer}>
+            <MaterialCommunityIcons
+              name={getIcon(item.type)}
+              size={25}
+              color="#0B6623"
+            />
           </View>
-        ))}
+          <View style={styles.headerText}>
+            <Text style={styles.type}>{getReadingTypeLabel(item.type)}</Text>
+            <Text style={styles.reference}>{item.display_reference}</Text>
+            {item.book && <Text style={styles.book}>{item.book}</Text>}
+            {item.is_alternative && <Text style={styles.badge}>Alternative</Text>}
+            {item.is_optional && <Text style={styles.badge}>Optional</Text>}
+          </View>
+        </View>
       </View>
     );
   }
@@ -157,14 +192,8 @@ export default function Readings() {
   if (loading) {
     return (
       <View style={styles.loading}>
-        <ActivityIndicator
-          size="large"
-          color="#0B6623"
-        />
-
-        <Text style={styles.loadingText}>
-          Loading readings...
-        </Text>
+        <ActivityIndicator size="large" color="#0B6623" />
+        <Text style={styles.loadingText}>Loading readings...</Text>
       </View>
     );
   }
@@ -174,53 +203,71 @@ export default function Readings() {
       {/* HEADER */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.heading}>
-            Daily Readings
-          </Text>
-
-          <Text style={styles.subtitle}>
-            Catholic Scripture for today
-          </Text>
+          <Text style={styles.heading}>Daily Readings</Text>
+          <Text style={styles.subtitle}>Catholic Scripture for today</Text>
         </View>
+        <View style={styles.headerActions}>
+          {isFromCache && (
+            <TouchableOpacity style={styles.cacheButton}>
+              <MaterialCommunityIcons name="cloud-check" size={20} color="#F59E0B" />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity style={styles.refreshButton} onPress={refresh}>
+            <Ionicons name="refresh" size={22} color="#0B6623" />
+          </TouchableOpacity>
+        </View>
+      </View>
 
-        <TouchableOpacity
-          style={styles.refreshButton}
-          onPress={refresh}
-        >
-          <Ionicons
-            name="refresh"
-            size={22}
-            color="#0B6623"
-          />
+      {/* DATE NAVIGATION */}
+      <View style={styles.dateNavigation}>
+        <TouchableOpacity style={styles.navButton} onPress={() => navigateDate(-1)}>
+          <Ionicons name="chevron-back" size={24} color="#0B6623" />
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.dateButton} onPress={goToToday}>
+          <MaterialCommunityIcons name="calendar-today" size={20} color="#0B6623" />
+          <Text style={styles.dateText}>
+            {new Date(currentDate).toLocaleDateString(undefined, {
+              weekday: "short",
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            })}
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.navButton} onPress={() => navigateDate(1)}>
+          <Ionicons name="chevron-forward" size={24} color="#0B6623" />
         </TouchableOpacity>
       </View>
 
-      {/* TODAY */}
-      <View style={styles.today}>
-        <MaterialCommunityIcons
-          name="calendar-today"
-          size={23}
-          color="#fff"
-        />
-
-        <View style={styles.todayText}>
-          <Text style={styles.todayTitle}>
-            Today&apos;s Readings
-          </Text>
-
-          <Text style={styles.todayDate}>
-            {new Date().toLocaleDateString(
-              undefined,
-              {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              }
-            )}
-          </Text>
+      {/* LITURGICAL INFO */}
+      {liturgicalDay && (
+        <View style={styles.liturgicalInfo}>
+          <View style={styles.liturgicalRow}>
+            <MaterialCommunityIcons name="church" size={20} color="#0B6623" />
+            <Text style={styles.liturgicalLabel}>{liturgicalDay.celebration.name}</Text>
+            <Text style={styles.liturgicalBadge}>{liturgicalDay.celebration.rank}</Text>
+          </View>
+          <View style={styles.liturgicalRow}>
+            <MaterialCommunityIcons name="palette" size={20} color={liturgicalDay.liturgical.colour === "Red" ? "#C41E3A" : liturgicalDay.liturgical.colour === "White" ? "#F5F5F5" : liturgicalDay.liturgical.colour === "Purple" ? "#8E44AD" : "#0B6623"} />
+            <Text style={styles.liturgicalLabel}>{liturgicalDay.liturgical.season}</Text>
+            {liturgicalDay.liturgical.week && <Text style={styles.liturgicalValue}>Week {liturgicalDay.liturgical.week}</Text>}
+            <Text style={styles.liturgicalValue}>({liturgicalDay.liturgical.colour})</Text>
+          </View>
+          <View style={styles.liturgicalRow}>
+            <MaterialCommunityIcons name="bookmark" size={20} color="#0B6623" />
+            <Text style={styles.liturgicalLabel}>Year {liturgicalDay.liturgical.sunday_cycle}</Text>
+            <Text style={styles.liturgicalValue}>({liturgicalDay.liturgical.weekday_cycle})</Text>
+          </View>
+          {liturgicalDay.verification_status !== "verified" && (
+            <View style={styles.liturgicalRow}>
+              <MaterialCommunityIcons name="alert-circle" size={20} color="#F59E0B" />
+              <Text style={styles.liturgicalValue}>Unverified</Text>
+            </View>
+          )}
         </View>
-      </View>
+      )}
 
       {/* CATEGORIES */}
       <FlatList
@@ -231,22 +278,10 @@ export default function Readings() {
         style={styles.categories}
         renderItem={({ item }) => (
           <TouchableOpacity
-            style={[
-              styles.category,
-              selectedCategory === item &&
-                styles.categoryActive,
-            ]}
-            onPress={() =>
-              setSelectedCategory(item)
-            }
+            style={[styles.category, selectedCategory === item && styles.categoryActive]}
+            onPress={() => setSelectedCategory(item)}
           >
-            <Text
-              style={[
-                styles.categoryText,
-                selectedCategory === item &&
-                  styles.categoryTextActive,
-              ]}
-            >
+            <Text style={[styles.categoryText, selectedCategory === item && styles.categoryTextActive]}>
               {item}
             </Text>
           </TouchableOpacity>
@@ -256,39 +291,17 @@ export default function Readings() {
       {/* READINGS */}
       <FlatList
         data={filtered}
-        keyExtractor={(item, index) =>
-          item.id
-            ? item.id.toString()
-            : index.toString()
-        }
+        keyExtractor={(item, index) => `${item.type}-${index}`}
         renderItem={renderReading}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={refresh}
-            colors={["#0B6623"]}
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={refresh} colors={["#0B6623"]} />
         }
-        contentContainerStyle={
-          filtered.length === 0
-            ? styles.emptyContainer
-            : styles.list
-        }
+        contentContainerStyle={filtered.length === 0 ? styles.emptyContainer : styles.list}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <MaterialCommunityIcons
-              name="book-off-outline"
-              size={55}
-              color="#aaa"
-            />
-
-            <Text style={styles.emptyTitle}>
-              No readings available
-            </Text>
-
-            <Text style={styles.emptyText}>
-              Pull down to refresh the readings.
-            </Text>
+            <MaterialCommunityIcons name="book-off-outline" size={55} color="#aaa" />
+            <Text style={styles.emptyTitle}>No readings available</Text>
+            <Text style={styles.emptyText}>Pull down to refresh the readings.</Text>
           </View>
         }
       />
@@ -323,6 +336,21 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
 
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  cacheButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#FEF3C7",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 8,
+  },
+
   heading: {
     fontSize: 28,
     fontWeight: "800",
@@ -335,37 +363,89 @@ const styles = StyleSheet.create({
   },
 
   refreshButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: "#EAF4ED",
     justifyContent: "center",
     alignItems: "center",
   },
 
-  today: {
-    backgroundColor: "#0B6623",
+  dateNavigation: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#fff",
     borderRadius: 15,
-    padding: 16,
+    padding: 12,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: "#E5EAE6",
+  },
+
+  navButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#EAF4ED",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  dateButton: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    marginHorizontal: 12,
+  },
+
+  dateText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#0B6623",
+    marginLeft: 8,
+  },
+
+  liturgicalInfo: {
+    backgroundColor: "#fff",
+    borderRadius: 15,
+    padding: 16,
     marginBottom: 15,
+    borderWidth: 1,
+    borderColor: "#E5EAE6",
   },
 
-  todayText: {
-    marginLeft: 12,
+  liturgicalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
   },
 
-  todayTitle: {
-    color: "#fff",
-    fontSize: 17,
-    fontWeight: "800",
+  liturgicalLabel: {
+    marginLeft: 10,
+    fontSize: 14,
+    color: "#444",
+    fontWeight: "500",
+    flex: 1,
   },
 
-  todayDate: {
-    color: "#DDEFE2",
+  liturgicalBadge: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#0B6623",
+    backgroundColor: "#EAF4ED",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    marginLeft: 8,
+  },
+
+  liturgicalValue: {
+    marginLeft: 5,
     fontSize: 13,
-    marginTop: 3,
+    color: "#777",
+    fontStyle: "italic",
   },
 
   categories: {
@@ -413,7 +493,7 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 8,
   },
 
   iconContainer: {
@@ -443,17 +523,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
-  title: {
-    fontSize: 19,
-    fontWeight: "800",
-    color: "#222",
-    marginBottom: 10,
+  book: {
+    color: "#555",
+    marginTop: 2,
+    fontSize: 13,
+    fontStyle: "italic",
   },
 
-  content: {
-    fontSize: 16,
-    color: "#444",
-    lineHeight: 25,
+  badge: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#666",
+    backgroundColor: "#F3F4F6",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginTop: 4,
+    alignSelf: "flex-start",
   },
 
   emptyContainer: {
@@ -479,7 +565,4 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 7,
   },
-    readingSection: {
-      marginBottom: 14,
-    },
 });

@@ -17,6 +17,15 @@ CHOIR_RESOURCE_MANAGER_ROLES = {
     "choir_director",
 }
 
+# Roles that may act on moderation queues. Moderators are deliberately kept
+# separate from administrators: a moderator may hide content and resolve
+# reports, but must never inherit role assignment or system configuration.
+MODERATOR_ROLES = {
+    "moderator",
+    "parish_admin",
+    "diocesan_admin",
+}
+
 
 def user_belongs_to_scope(
     db: Session,
@@ -157,6 +166,182 @@ def can_manage_community_scope(
         scope_type,
         scope_id,
     )
+
+
+def scope_contains(
+    db: Session,
+    ancestor_type: str,
+    ancestor_id: int,
+    scope_type: str,
+    scope_id: int,
+) -> bool:
+    """Whether ``scope_type/scope_id`` sits at or below ``ancestor_type/ancestor_id``.
+
+    Reports and suggestions are normally scoped to a parish or a group, but the
+    people trusted to review them are appointed at diocese, deanery, or parish
+    level. Requiring an exact scope match would leave every diocesan and deanery
+    moderator locked out of their own queue, so authority is resolved downward
+    through the hierarchy instead. It never resolves upward or sideways: a parish
+    moderator still cannot reach a sibling parish, and a moderator of one parish
+    cannot reach another.
+    """
+    if ancestor_type == scope_type and ancestor_id == scope_id:
+        return True
+    if scope_type == "parish":
+        parish = db.query(Parish).filter(Parish.id == scope_id).first()
+        if parish is None:
+            return False
+        if ancestor_type == "diocese":
+            return parish.diocese_id == ancestor_id
+        if ancestor_type == "deanery":
+            return parish.deanery_id == ancestor_id
+        return False
+    if scope_type == "group" and ancestor_type == "parish":
+        group = db.query(CommunityGroup).filter(
+            CommunityGroup.id == scope_id
+        ).first()
+        return (
+            group is not None
+            and group.scope_type == "parish"
+            and group.scope_id == ancestor_id
+        )
+    return False
+
+
+def can_moderate_community_scope(
+    db: Session,
+    user: User,
+    scope_type: str | None,
+    scope_id: int | None,
+) -> bool:
+    """Whether ``user`` may moderate content belonging to a scope.
+
+    Platform administrators may act anywhere. Everyone else must hold an active
+    moderator/administrator assignment whose scope contains the content's scope,
+    so a parish moderator can never reach a sibling parish and a diocesan
+    moderator can never reach another diocese.
+    """
+    if user.role == "super_admin":
+        return True
+    if scope_type is None or scope_id is None:
+        return False
+    assignments = (
+        db.query(RoleAssignment)
+        .filter(
+            RoleAssignment.user_id == user.id,
+            RoleAssignment.is_active.is_(True),
+            RoleAssignment.role.in_(MODERATOR_ROLES),
+        )
+        .all()
+    )
+    return any(
+        assignment.scope_id is not None
+        and scope_contains(
+            db, assignment.scope_type, assignment.scope_id, scope_type, scope_id
+        )
+        for assignment in assignments
+    )
+
+
+def can_moderate_platform_content(db: Session, user: User) -> bool:
+    """Whether ``user`` may moderate content that has no organizational scope.
+
+    Readings, saints, and choir resources are platform-wide, so a report about
+    one carries no parish. Restricting those reports to super admins would leave
+    them unreviewable in practice, so a moderator or administrator holding a
+    global assignment may action them. Ordinary members never qualify.
+    """
+    if user.role == "super_admin":
+        return True
+    return (
+        db.query(RoleAssignment.id)
+        .filter(
+            RoleAssignment.user_id == user.id,
+            RoleAssignment.is_active.is_(True),
+            RoleAssignment.scope_type == "global",
+            RoleAssignment.role.in_(MODERATOR_ROLES),
+        )
+        .first()
+        is not None
+    )
+
+
+def can_review_moderation_report(
+    db: Session,
+    user: User,
+    scope_type: str | None,
+    scope_id: int | None,
+) -> bool:
+    """Combined scope check for a single report."""
+    if scope_type is None or scope_id is None:
+        return can_moderate_platform_content(db, user)
+    return can_moderate_community_scope(db, user, scope_type, scope_id)
+
+
+def moderation_scope_ids(db: Session, user: User) -> set[tuple[str, int]] | None:
+    """Scope pairs ``user`` may moderate, or ``None`` meaning unrestricted.
+
+    Returning ``None`` for a super admin keeps callers simple: they can skip
+    scope filtering entirely rather than materialising the whole hierarchy.
+    """
+    if user.role == "super_admin":
+        return None
+    assignments = (
+        db.query(RoleAssignment)
+        .filter(
+            RoleAssignment.user_id == user.id,
+            RoleAssignment.is_active.is_(True),
+            RoleAssignment.role.in_(MODERATOR_ROLES),
+        )
+        .all()
+    )
+    if not assignments:
+        return set()
+    scopes: set[tuple[str, int]] = set()
+    for assignment in assignments:
+        if assignment.scope_type == "global":
+            return None
+        if assignment.scope_id is None:
+            continue
+        scopes.add((assignment.scope_type, assignment.scope_id))
+        if assignment.scope_type in {"diocese", "deanery"}:
+            # Expand to the concrete parish rows so a report queue query can be
+            # expressed as a single scoped filter instead of a per-report check.
+            parish_ids = [
+                parish_id
+                for (parish_id,) in db.query(Parish.id).filter(
+                    Parish.diocese_id == assignment.scope_id
+                    if assignment.scope_type == "diocese"
+                    else Parish.deanery_id == assignment.scope_id
+                ).all()
+            ]
+            scopes.update(("parish", parish_id) for parish_id in parish_ids)
+            if assignment.scope_type == "diocese":
+                scopes.update(
+                    ("deanery", deanery_id)
+                    for (deanery_id,) in db.query(Deanery.id)
+                    .filter(Deanery.diocese_id == assignment.scope_id)
+                    .all()
+                )
+        elif assignment.scope_type == "parish":
+            parish_ids = [assignment.scope_id]
+        else:
+            parish_ids = []
+        if parish_ids:
+            # Groups are moderated by whoever moderates the parish that owns them,
+            # which ``scope_contains`` already allows. The queue query has to name
+            # those group rows explicitly or a parish moderator sees reports about
+            # the parish but not about its groups.
+            scopes.update(
+                ("group", group_id)
+                for (group_id,) in db.query(CommunityGroup.id)
+                .filter(
+                    CommunityGroup.scope_type == "parish",
+                    CommunityGroup.scope_id.in_(parish_ids),
+                )
+                .all()
+            )
+    return scopes
 
 
 def can_manage_choir_resource_scope(

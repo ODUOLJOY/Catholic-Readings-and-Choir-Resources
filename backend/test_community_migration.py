@@ -32,7 +32,12 @@ import app.models.user
 from app.db.database import Base
 from app.models.community import ParishMembership
 from app.models.choir import ChoirResource
-from app.models.locations import Deanery, Diocese
+from app.models.locations import (
+    Country,
+    Deanery,
+    Diocese,
+    EcclesiasticalProvince,
+)
 from app.models.parish import Parish
 from app.models.readings import Reading
 from app.models.user import User
@@ -46,6 +51,11 @@ def test_community_migration_backfills_legacy_parishes_idempotently():
         poolclass=StaticPool,
     )
     legacy_tables = [
+        # countries / ecclesiastical_provinces are included because
+        # ``dioceses.ecclesiastical_province_id`` is a foreign key and alembic
+        # reflects referenced tables when it rebuilds a table in batch mode.
+        Country.__table__,
+        EcclesiasticalProvince.__table__,
         Diocese.__table__,
         Deanery.__table__,
         Parish.__table__,
@@ -87,6 +97,13 @@ def test_community_migration_backfills_legacy_parishes_idempotently():
         Column("updated_at", DateTime(timezone=True)),
         Column("approved_at", DateTime(timezone=True)),
         Column("published_at", DateTime(timezone=True)),
+        Column("alternative_title", String(255)),
+        Column("author", String(255)),
+        Column("arranger", String(255)),
+        Column("voice_part", String(50)),
+        Column("season", String(50)),
+        Column("key_signature", String(50)),
+        Column("tempo", String(50)),
     )
     legacy_resource_table.create(engine)
 

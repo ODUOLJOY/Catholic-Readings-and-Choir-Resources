@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.services.public_files import PublicFiles
 from app.routes import (
     admin,
+    admin_v2,
     auth,
     choir,
     content,
@@ -20,10 +21,12 @@ from app.routes import (
     uploads,
     liturgy,
     locations,
+    hierarchy,
     user,
     favorites,
     parish_requests,
     community,
+    report,
 )
 
 app = FastAPI(
@@ -66,6 +69,7 @@ app.include_router(auth.router)
 app.include_router(readings.router)
 app.include_router(liturgy.router)
 app.include_router(locations.router)
+app.include_router(hierarchy.router)
 app.include_router(user.router)
 app.include_router(favorites.router, prefix="/api")
 app.include_router(parish_requests.router)
@@ -77,6 +81,10 @@ app.include_router(uploads.router)
 app.include_router(downloads.router)
 app.include_router(content.router)
 app.include_router(admin.router)
+app.include_router(admin_v2.router)
+# Registered so the in-app "Report Content" button resolves. This router was
+# previously written but never mounted, which made reporting silently fail.
+app.include_router(report.router)
 
 
 @app.get("/", tags=["System"])

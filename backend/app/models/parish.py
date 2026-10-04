@@ -1,22 +1,63 @@
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, ForeignKey
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+
 from app.db.database import Base
+from app.models.locations import SourceMetadataMixin, VerificationStatus
 
 
-class Parish(Base):
+class Parish(Base, SourceMetadataMixin):
+    """A parish of a Catholic diocese in Kenya.
+
+    ``code`` is the stable machine-readable identifier used by the importer and
+    the API. Display names are unique only *within* a deanery, because many
+    dioceses legitimately have several "St. Mary's Parish" entries.
+    """
+
     __tablename__ = "parishes"
+    __table_args__ = (
+        UniqueConstraint("deanery_id", "name", name="uq_parishes_deanery_name"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
 
-    name = Column(String(255), nullable=False, unique=True, index=True)
-    code = Column(String(50), unique=True, nullable=False)
+    name = Column(String(255), nullable=False, index=True)
+    code = Column(String(80), unique=True, nullable=False, index=True)
 
-    deanery_id = Column(Integer, ForeignKey("deaneries.id"), nullable=True)
-    diocese_id = Column(Integer, ForeignKey("dioceses.id"), nullable=True)
-    deanery = relationship("Deanery", back_populates="parishes")
+    deanery_id = Column(
+        Integer,
+        ForeignKey("deaneries.id"),
+        nullable=False,
+        index=True,
+    )
+    # Denormalised for query performance; kept consistent with
+    # ``Deanery.diocese_id`` by the hierarchy service and the importer.
+    diocese_id = Column(
+        Integer,
+        ForeignKey("dioceses.id"),
+        nullable=False,
+        index=True,
+    )
 
-    country = Column(String(100), nullable=False, default="Kenya")
+    country_id = Column(
+        Integer,
+        ForeignKey("countries.id"),
+        nullable=True,
+        index=True,
+    )
+
+    # Retained for backward compatibility with existing consumers. Prefer
+    # ``country_id``.
+    country = Column(String(100), nullable=True)
 
     county = Column(String(100), nullable=True)
 
@@ -39,7 +80,12 @@ class Parish(Base):
     description = Column(Text, nullable=True)
 
     is_active = Column(Boolean, default=True, nullable=False)
-    verification_status = Column(String(50), default="needs_review", nullable=False)
+
+    verification_status = Column(
+        String(50),
+        default=VerificationStatus.NEEDS_REVIEW,
+        nullable=False,
+    )
 
     created_at = Column(
         DateTime(timezone=True),
@@ -53,3 +99,11 @@ class Parish(Base):
         onupdate=func.now(),
         nullable=False,
     )
+
+    deanery = relationship("Deanery", back_populates="parishes")
+    diocese = relationship("Diocese", back_populates="parishes")
+    country_record = relationship("Country")
+    users = relationship("User", back_populates="parish")
+
+
+__all__ = ["Parish"]

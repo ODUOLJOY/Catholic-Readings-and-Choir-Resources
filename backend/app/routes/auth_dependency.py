@@ -10,6 +10,27 @@ oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="/api/auth/login"
 )
 
+# Same scheme but without ``auto_error``, so an anonymous request yields None
+# instead of a 401. Used by public endpoints that only need a caller identity
+# when privileged behaviour (such as viewing inactive rows) is requested.
+optional_oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl="/api/auth/login", auto_error=False
+)
+
+
+def get_optional_user(
+    token: str | None = Depends(optional_oauth2_scheme),
+    db: Session = Depends(get_db),
+) -> User | None:
+    """Return the authenticated user, or ``None`` for an anonymous request.
+
+    A present-but-invalid token still raises 401, so a bad credential is never
+    silently downgraded to anonymous access.
+    """
+    if token is None:
+        return None
+    return get_current_user(token=token, db=db)
+
 
 def get_current_user(
     token: str = Depends(oauth2_scheme),

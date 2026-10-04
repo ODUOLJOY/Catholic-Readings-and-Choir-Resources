@@ -18,6 +18,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.core.config import settings
 from app.db.database import get_db
 from app.models.choir import ChoirResource
+from app.constants.choir_categories import normalize_category
 from app.models.parish import Parish
 from app.models.user import User
 from app.routes.auth_dependency import get_current_user
@@ -158,6 +159,15 @@ async def upload_resource(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+
+    # Structured metadata (all optional / backwards compatible).
+    alternative_title: str = Form(None),
+    author: str = Form(None),
+    arranger: str = Form(None),
+    voice_part: str = Form(None),
+    season: str = Form(None),
+    key_signature: str = Form(None),
+    tempo: str = Form(None),
 ):
     filename_suffix = Path(file.filename or "").suffix.lower()
     extension = filename_suffix.lstrip(".")
@@ -222,6 +232,8 @@ async def upload_resource(
         filepath.unlink(missing_ok=True)
         raise
 
+    category = normalize_category(category)
+
     resource = ChoirResource(
         title=title,
         description=description,
@@ -234,6 +246,13 @@ async def upload_resource(
         parish_id=parish_id,
         is_approved=False,
         is_published=False,
+        alternative_title=alternative_title,
+        author=author,
+        arranger=arranger,
+        voice_part=voice_part,
+        season=season,
+        key_signature=key_signature,
+        tempo=tempo,
     )
 
     committed = False

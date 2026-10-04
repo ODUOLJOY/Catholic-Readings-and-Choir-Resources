@@ -228,7 +228,19 @@ def create_user(
     )
 
     db.add(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        # The uniqueness pre-check above is best-effort. The users.email
+        # UNIQUE constraint is the authoritative guard against concurrent
+        # registrations of the same email: one transaction wins and the
+        # conflicting one is serialised into a clean conflict response
+        # (HTTP 409 -> AUTH_EMAIL_ALREADY_EXISTS) rather than an opaque 500.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email already registered.",
+        ) from None
     db.refresh(user)
 
     return user

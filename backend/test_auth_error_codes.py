@@ -142,3 +142,60 @@ def test_non_auth_errors_omit_code_by_default(client):
     body = response.json()
     assert "code" not in body
     assert "detail" in body
+
+
+def test_create_user_handles_concurrent_duplicate_conflict():
+    """§3: the users.email UNIQUE constraint is the authoritative race guard.
+    Under a concurrent same-email registration the uniqueness pre-check can be
+    slipped, so create_user converts the resulting IntegrityError into a clean
+    409 (AUTH_EMAIL_ALREADY_EXISTS) instead of an opaque 500."""
+    from unittest.mock import MagicMock
+    from fastapi import HTTPException
+    from sqlalchemy.exc import IntegrityError
+    from app.services.auth_service import create_user
+
+    db = MagicMock()
+    # Simulate the TOCTOU race window: the pre-check sees no existing user...
+    db.query.return_value.filter.return_value.first.return_value = None
+    # ...but the INSERT collides with the users.email UNIQUE constraint.
+    db.commit.side_effect = IntegrityError("insert", {}, "duplicate")
+
+    with pytest.raises(HTTPException) as exc:
+        create_user(
+            db,
+            full_name="Race User",
+            email="race@example.com",
+            password="SecurePassword123!",
+        )
+    assert exc.value.status_code == 409
+    assert "already registered" in exc.value.detail.lower()
+    # the handler rolls back the failed transaction before raising
+    db.rollback.assert_called_once()
+
+
+def test_email_uniqueness_is_case_insensitive(client, db_session):
+    """§3: one email = one application account, regardless of letter case.
+    `John@example.com` and `JOHN@EXAMPLE.COM` must resolve to the SAME local
+    account (both provider and application identity are case-folded), and login
+    must succeed with the upper-cased form. The users.email UNIQUE constraint is
+    the authoritative guard, so no duplicate application user is ever created."""
+    from app.models.user import User
+
+    # Register with a mixed-case email.
+    created = _register(client, email="John@example.com")
+    assert created.status_code == 201
+
+    # The identical address in a different case is the same account -> rejected.
+    dup = _register(client, email="JOHN@EXAMPLE.COM")
+    assert dup.status_code == 400
+    body = dup.json()
+    assert "already registered" in body["detail"].lower()
+    assert body["code"] == "AUTH_EMAIL_ALREADY_EXISTS"
+
+    # Exactly one application user survives (case-folded identity).
+    assert db_session.query(User).count() == 1
+
+    # Login is case-insensitive too — the upper-cased form authenticates.
+    login = _login(client, email="JOHN@EXAMPLE.COM")
+    assert login.status_code == 200
+    assert "access_token" in login.json()

@@ -27,7 +27,7 @@ export const googleAuthService = {
     }
   },
 
-  async signIn(): Promise<{ created: boolean }> {
+  async signIn(): Promise<void> {
     const redirectUri = googleRedirectUri();
 
     const config = await api.get("/api/auth/google/authorization-url", {
@@ -82,6 +82,10 @@ export const googleAuthService = {
 
     await authService.persistSession(response.data);
 
-    return { created: true };
+    // No fabricated "created" flag: account creation vs. linking is resolved
+    // server-side by login_with_google_identity (Google subject + email), and
+    // post-sign-in navigation is driven by the user's profile_setup_completed
+    // flag fetched from /api/auth/me. Returning { created: true } here would
+    // falsely claim every Google sign-in created a new account.
   },
 };

@@ -81,6 +81,9 @@ _AUTH_ERROR_CODES = {
     # --- Registration / account identity (ONE EMAIL = ONE ACCOUNT) ---
     (400, "Email already registered."): "AUTH_EMAIL_ALREADY_EXISTS",
     (400, "Email already exists."): "AUTH_EMAIL_ALREADY_EXISTS",
+    # Concurrent same-email registration slips past the pre-check and is
+    # rejected by the users.email UNIQUE constraint (see create_user).
+    (409, "Email already registered."): "AUTH_EMAIL_ALREADY_EXISTS",
     (400, "Google did not provide a verified email address."): "AUTH_GOOGLE_NO_VERIFIED_EMAIL",
     (400, "Incorrect current password."): "AUTH_CURRENT_PASSWORD_INCORRECT",
     (400, "Invalid reset token."): "AUTH_INVALID_RESET_TOKEN",

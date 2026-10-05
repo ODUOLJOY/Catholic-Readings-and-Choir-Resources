@@ -10,8 +10,23 @@ services:
       pip install --upgrade pip
       pip install -r requirements.txt
 
+    # Startup validates the schema and the permission grants, and refuses to serve
+    # traffic without them. Both checks are read-only: nothing here creates tables,
+    # runs migrations, or inserts grants, because an implicit create_all on boot is
+    # an unreviewed production migration that runs on every deploy. `&&` is
+    # required -- without it a failed check would fall through to Uvicorn and start
+    # against the very state that was just reported as unusable, which is how these
+    # 500s reached production.
+    #
+    # The permission check is per-role, not a total count: a partially seeded
+    # database leaves an administrator unable to act while a count-only check
+    # still reports success.
+    #
+    # Provisioning is a separate, explicitly approved step, in this order:
+    #   python -m app.services.schema_bootstrap
+    #   python -m app.services.permission_seed
     startCommand: |
-      uvicorn app.main:app --host 0.0.0.0 --port $PORT
+      python -m app.services.schema_bootstrap --check && python -m app.services.permission_seed --check && uvicorn app.main:app --host 0.0.0.0 --port $PORT
 
     autoDeploy: true
 
@@ -49,7 +64,23 @@ services:
         value: production
 
       - key: FRONTEND_URL
-        value: https://catholic-readings-and-choir-resource-app.vercel.app
+        value: https://stellular-clafoutis-ad641c.netlify.app
+
+      # Explicit browser origins allowed to call this API with credentials.
+      # Only deployed origins are listed: the local Expo web origin is matched
+      # separately by `app.core.config.LOOPBACK_ORIGIN_RE`, which accepts any
+      # loopback port. Pinned loopback ports here were unreliable because Expo
+      # takes the next free port when the previous one is busy, so a dev server
+      # on 8082 was rejected and every request failed as a CORS error.
+      - key: ALLOWED_ORIGINS
+        value: >-
+          ["https://stellular-clafoutis-ad641c.netlify.app",
+          "https://catholic-readings-and-choir-resource-app.vercel.app",
+          "http://localhost:8081",
+          "http://127.0.0.1:8081",
+          "http://localhost:19006",
+          "http://127.0.0.1:19006",
+          "http://localhost:3000"]
 
       - key: MPESA_ENVIRONMENT
         value: production

@@ -61,6 +61,21 @@ class UserAdminResponse(UserResponse):
     updated_at: Optional[datetime] = None
 
 
+class AdminUserListResponse(UserAdminResponse):
+    """User row as shown in an administrator's user-management table.
+
+    Deliberately narrower than the ``User`` table. Serialising the ORM model
+    directly leaked ``hashed_password``, ``password_reset_token`` and
+    ``email_verification_token`` to any administrator, which turns a read-only
+    screen into full account takeover. Only fields an administrator needs to act
+    are exposed here; secrets are never part of any response schema.
+    """
+
+    status: str
+    suspended_at: Optional[datetime] = None
+    suspension_reason: Optional[str] = None
+
+
 # ==========================================
 # User Profile
 # ==========================================

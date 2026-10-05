@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 from app.models.user import User, UserRole, UserStatus
 from app.models.parish import Parish
 from app.models.locations import Country, EcclesiasticalProvince, Diocese, Deanery
@@ -72,7 +73,11 @@ def grant_permissions(db: Session, role, permissions) -> None:
 @pytest.fixture
 def db():
     """Create an in-memory SQLite database for testing."""
-    engine = create_engine("sqlite:///:memory:")
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
     Base.metadata.create_all(bind=engine)
     SessionLocal = sessionmaker(bind=engine)
     session = SessionLocal()

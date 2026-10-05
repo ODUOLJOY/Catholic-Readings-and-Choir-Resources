@@ -1,55 +1,87 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, Button, StyleSheet, Alert } from 'react-native';
-import { useLocalSearchParams, router } from 'expo-router';
-import { api } from '@/lib/api';
+import React from "react";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { router, useLocalSearchParams } from "expo-router";
 
-export default function ReportContent() {
-  const { resourceType, resourceId } = useLocalSearchParams<{ resourceType: string; resourceId: string }>();
-  const [reason, setReason] = useState('');
-  const [description, setDescription] = useState('');
+import { defaultReportLabels, ReportForm } from "@/components/ReportModal";
+import {
+  communityService,
+  isReportableResourceType,
+} from "@/services/communityService";
 
-  const handleSubmit = async () => {
-    if (!reason) {
-      Alert.alert('Error', 'Please provide a reason for the report.');
-      return;
-    }
-    try {
-      await api.post('/api/reports/', {
-        resource_type: resourceType,
-        resource_id: parseInt(resourceId),
-        reason,
-        description,
-      });
-      Alert.alert('Success', 'Report submitted successfully.');
-      router.back();
-    } catch (error) {
-      Alert.alert('Error', 'Failed to submit report.');
-    }
-  };
+/**
+ * Route target for the shared `ReportButton`, used by the reading, saint and choir
+ * detail screens. It renders the same `ReportForm` the community screens use, so
+ * there is one reporting implementation rather than a second one for catalogue
+ * content.
+ */
+export default function ReportContentScreen() {
+  const { resourceType, resourceId } = useLocalSearchParams<{
+    resourceType?: string;
+    resourceId?: string;
+  }>();
+
+  const parsedId = Number(resourceId);
+  const validType = resourceType && isReportableResourceType(resourceType);
+  const validId = Number.isInteger(parsedId) && parsedId > 0;
+
+  if (!validType || !validId) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.invalidTitle}>This content cannot be reported</Text>
+        <Text style={styles.invalidBody}>
+          The report link is incomplete, so there is nothing to send to moderation.
+        </Text>
+        <Text style={styles.backLink} onPress={() => router.back()}>
+          Go back
+        </Text>
+      </View>
+    );
+  }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Report Content</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Reason (e.g., Inappropriate content)"
-        value={reason}
-        onChangeText={setReason}
+    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+      <Text style={styles.title}>{defaultReportLabels.title}</Text>
+      <Text style={styles.subtitle}>
+        {resourceType.replaceAll("_", " ")} #{parsedId}
+      </Text>
+      <ReportForm
+        resourceType={resourceType}
+        resourceId={parsedId}
+        onSubmit={(payload) => communityService.submitReport(payload)}
+        labels={defaultReportLabels}
+        onFinished={() => setTimeout(() => router.back(), 1400)}
       />
-      <TextInput
-        style={[styles.input, { height: 100 }]}
-        placeholder="Details"
-        value={description}
-        onChangeText={setDescription}
-        multiline
-      />
-      <Button title="Submit Report" onPress={handleSubmit} color="#0B6623" />
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#fff' },
-  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 20, color: '#0B6623' },
-  input: { borderWidth: 1, borderColor: '#ccc', padding: 10, marginBottom: 15, borderRadius: 5 },
+  screen: { flex: 1, backgroundColor: "#F7F9F7" },
+  content: { padding: 20, paddingBottom: 40 },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+    backgroundColor: "#F7F9F7",
+  },
+  title: { fontSize: 24, fontWeight: "800", color: "#0B6623" },
+  subtitle: { color: "#59665C", marginTop: 4, marginBottom: 6, textTransform: "capitalize" },
+  invalidTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#8A1C13",
+    textAlign: "center",
+  },
+  invalidBody: {
+    color: "#59665C",
+    textAlign: "center",
+    marginTop: 10,
+    lineHeight: 20,
+  },
+  backLink: {
+    marginTop: 18,
+    color: "#0B6623",
+    fontWeight: "700",
+  },
 });

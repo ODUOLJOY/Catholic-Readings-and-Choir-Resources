@@ -105,6 +105,15 @@ def test_invalid_credentials_carry_error_code(client):
     assert bad_email.json()["code"] == "AUTH_INVALID_CREDENTIALS"
 
 
+def test_login_attempts_are_rate_limited_per_client(client):
+    for _ in range(10):
+        assert _login(client, email="unknown@example.com").status_code == 401
+
+    limited = _login(client, email="unknown@example.com")
+    assert limited.status_code == 429
+    assert int(limited.headers["Retry-After"]) > 0
+
+
 def test_unauthenticated_me_carries_error_code(client):
     response = client.get("/api/auth/me")
     assert response.status_code == 401
@@ -127,7 +136,7 @@ def test_admin_endpoint_enforces_role_server_side(client):
 def test_invalid_refresh_token_carries_error_code(client):
     response = client.post(
         "/api/auth/refresh",
-        params={"refresh_token": "not-a-real-token"},
+        json={"refresh_token": "not-a-real-token"},
     )
     assert response.status_code == 401
     body = response.json()

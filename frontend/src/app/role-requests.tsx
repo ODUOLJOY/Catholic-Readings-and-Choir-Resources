@@ -10,7 +10,11 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
-import { api } from "@/lib/api";
+import {
+  communityService,
+  describeError,
+  RoleRequestView,
+} from "@/services/communityService";
 
 type ScopeType = "parish" | "diocese" | "group";
 type RoleOption = {
@@ -19,17 +23,6 @@ type RoleOption = {
   scope: ScopeType;
 };
 
-type RoleRequest = {
-  id: number;
-  requested_role: string;
-  scope_type: ScopeType;
-  scope_id: number;
-  status: string;
-  reason: string;
-  review_note?: string | null;
-};
-
-type CommunityGroup = { id: number; name: string };
 type CommunityProfile = {
   parish_id: number | null;
   diocese_id: number | null;
@@ -51,9 +44,9 @@ export default function RoleRequestsScreen() {
   const { mode } = useLocalSearchParams<{ mode?: string }>();
   const reviewing = mode === "review";
   const [profile, setProfile] = useState<CommunityProfile | null>(null);
-  const [groups, setGroups] = useState<CommunityGroup[]>([]);
+  const [groups, setGroups] = useState<{ id: number; name: string }[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
-  const [requests, setRequests] = useState<RoleRequest[]>([]);
+  const [requests, setRequests] = useState<RoleRequestView[]>([]);
   const [selectedRole, setSelectedRole] = useState<RoleOption>(roles[0]);
   const [reason, setReason] = useState("");
   const [ministry, setMinistry] = useState("");
@@ -71,22 +64,21 @@ export default function RoleRequestsScreen() {
   const load = useCallback(async () => {
     try {
       if (reviewing) {
-        const response = await api.get<RoleRequest[]>("/api/community/role-requests/review");
-        setRequests(response.data);
+        setRequests(await communityService.getReviewableRoleRequests());
       } else {
         const [profileResponse, requestsResponse, groupsResponse] = await Promise.all([
-          api.get<CommunityProfile>("/api/community/me"),
-          api.get<RoleRequest[]>("/api/community/role-requests/mine"),
-          api.get<CommunityGroup[]>("/api/community/groups/mine"),
+          communityService.getProfile(),
+          communityService.getMyRoleRequests(),
+          communityService.getMyGroups(),
         ]);
-        setProfile(profileResponse.data);
-        setRequests(requestsResponse.data);
-        setGroups(groupsResponse.data);
+        setProfile(profileResponse);
+        setRequests(requestsResponse);
+        setGroups(groupsResponse);
       }
     } catch (error) {
       Alert.alert(
         "Unable to load requests",
-        "Check your connection and your community permissions, then try again.",
+        describeError(error, "Check your connection and your community permissions, then try again."),
       );
     } finally {
       setLoading(false);
@@ -112,36 +104,36 @@ export default function RoleRequestsScreen() {
     }
     setSaving(true);
     try {
-      const response = await api.post("/api/community/role-requests", {
+      const created = await communityService.createRoleRequest({
         requested_role: selectedRole.role,
         scope_type: selectedRole.scope,
         scope_id: requestedScopeId,
         ministry: ministry.trim() || undefined,
         reason: reason.trim(),
       });
-      setRequests((current) => [response.data, ...current]);
+      setRequests((current) => [created, ...current]);
       setReason("");
       setMinistry("");
       Alert.alert("Request submitted", "Your request is awaiting review by an authorized administrator.");
-    } catch (error: any) {
-      Alert.alert("Request not submitted", error?.response?.data?.detail ?? "Please try again.");
+    } catch (error) {
+      Alert.alert("Request not submitted", describeError(error, "Please try again."));
     } finally {
       setSaving(false);
     }
   }
 
-  async function review(request: RoleRequest, status: "under_review" | "more_information_required" | "approved" | "rejected") {
+  async function review(request: RoleRequestView, status: "under_review" | "more_information_required" | "approved" | "rejected") {
     if ((status === "rejected" || status === "more_information_required") && reviewNote.trim().length === 0) {
       Alert.alert("Review note required", "Enter a reason for this decision.");
       return;
     }
     setSaving(true);
     try {
-      await api.patch(`/api/community/role-requests/${request.id}`, { status, review_note: reviewNote.trim() || undefined });
+      await communityService.decideRoleRequest(request.id, status, reviewNote.trim());
       setReviewNote("");
       await load();
-    } catch (error: any) {
-      Alert.alert("Review failed", error?.response?.data?.detail ?? "Please try again.");
+    } catch (error) {
+      Alert.alert("Review failed", describeError(error, "Please try again."));
     } finally {
       setSaving(false);
     }

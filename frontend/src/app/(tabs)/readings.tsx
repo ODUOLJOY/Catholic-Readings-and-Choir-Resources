@@ -13,6 +13,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { api } from "@/lib/api";
 import { LiturgicalCache } from "@/services/liturgicalCache";
+import { formatKenyaDate, kenyaDateString, shiftCalendarDate } from "@/utils/calendar";
 
 interface ReadingReference {
   type: string;
@@ -57,7 +58,7 @@ const categories: string[] = [
 export default function Readings() {
   const { date: dateParam } = useLocalSearchParams<{ date: string }>();
   const router = useRouter();
-  const [currentDate, setCurrentDate] = useState<string>(dateParam || new Date().toISOString().split('T')[0]);
+  const [currentDate, setCurrentDate] = useState<string>(dateParam || kenyaDateString());
   const [liturgicalDay, setLiturgicalDay] = useState<LiturgicalDay | null>(null);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [loading, setLoading] = useState(true);
@@ -128,15 +129,13 @@ export default function Readings() {
   }
 
   function navigateDate(direction: number) {
-    const date = new Date(currentDate);
-    date.setDate(date.getDate() + direction);
-    const newDateStr = date.toISOString().split('T')[0];
+    const newDateStr = shiftCalendarDate(currentDate, direction);
     setCurrentDate(newDateStr);
     router.setParams({ date: newDateStr });
   }
 
   function goToToday() {
-    const today = new Date().toISOString().split('T')[0];
+    const today = kenyaDateString();
     setCurrentDate(today);
     router.setParams({ date: today });
   }
@@ -227,12 +226,7 @@ export default function Readings() {
         <TouchableOpacity style={styles.dateButton} onPress={goToToday}>
           <MaterialCommunityIcons name="calendar-today" size={20} color="#0B6623" />
           <Text style={styles.dateText}>
-            {new Date(currentDate).toLocaleDateString(undefined, {
-              weekday: "short",
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            })}
+            {formatKenyaDate(currentDate)}
           </Text>
         </TouchableOpacity>
         

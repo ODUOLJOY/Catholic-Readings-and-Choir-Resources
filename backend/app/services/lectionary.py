@@ -2,11 +2,11 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from app.models.readings import Reading
-from app.services.calendar import get_calendar_info
+from app.services.calendar import get_calendar_info, kenya_today
 
 
 def get_today_readings(db: Session):
-    return get_readings_by_date(db, date.today())
+    return get_readings_by_date(db, kenya_today())
 
 
 def get_readings_by_date(db: Session, reading_date: date):

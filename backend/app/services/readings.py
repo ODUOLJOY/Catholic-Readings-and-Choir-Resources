@@ -3,6 +3,7 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from app.models.readings import Reading
+from app.services.calendar import kenya_today
 
 
 class ReadingService:
@@ -12,7 +13,7 @@ class ReadingService:
         return (
             db.query(Reading)
             .filter(
-                Reading.reading_date == date.today(),
+                Reading.reading_date == kenya_today(),
                 Reading.is_published == True,
             )
             .first()

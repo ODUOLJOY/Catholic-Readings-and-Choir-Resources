@@ -239,7 +239,7 @@ def test_refresh_token_cannot_invalidate_another_users_session(client, db_sessio
         == 200
     )
     still_bob = client.post(
-        "/api/auth/refresh", params={"refresh_token": bob["refresh_token"]}
+        "/api/auth/refresh", json={"refresh_token": bob["refresh_token"]}
     )
     assert still_bob.status_code == 200
     assert still_bob.json()["refresh_token"] != bob["refresh_token"]
@@ -252,11 +252,11 @@ def test_sequential_refresh_reuse_is_rejected(client):
     assert register(client).status_code == 201
     tokens = login(client).json()
     first = client.post(
-        "/api/auth/refresh", params={"refresh_token": tokens["refresh_token"]}
+        "/api/auth/refresh", json={"refresh_token": tokens["refresh_token"]}
     )
     assert first.status_code == 200
     reused = client.post(
-        "/api/auth/refresh", params={"refresh_token": tokens["refresh_token"]}
+        "/api/auth/refresh", json={"refresh_token": tokens["refresh_token"]}
     )
     assert reused.status_code == 401
 
@@ -301,7 +301,7 @@ def test_password_reset_one_time_and_revokes_sessions(client, db_session, monkey
     assert (
         client.post(
             "/api/auth/refresh",
-            params={"refresh_token": first_login["refresh_token"]},
+            json={"refresh_token": first_login["refresh_token"]},
         ).status_code
         == 401
     )

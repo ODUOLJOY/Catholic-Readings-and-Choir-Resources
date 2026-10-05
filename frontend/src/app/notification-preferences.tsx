@@ -9,16 +9,9 @@ import {
   Text,
   View,
 } from "react-native";
-import { api } from "@/lib/api";
+import { communityService, describeError, NotificationPreferences } from "@/services/communityService";
 
-type Preferences = {
-  announcements: boolean;
-  events: boolean;
-  role_requests: boolean;
-  messages: boolean;
-};
-
-const initial: Preferences = {
+const initial: NotificationPreferences = {
   announcements: true,
   events: true,
   role_requests: true,
@@ -31,20 +24,19 @@ export default function NotificationPreferencesScreen() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    api.get<Preferences>("/api/community/notification-preferences")
-      .then((response) => setPreferences(response.data))
-      .catch(() => Alert.alert("Preferences unavailable", "Could not load notification preferences."))
+    communityService.getNotificationPreferences()
+      .then(setPreferences)
+      .catch((error) => Alert.alert("Preferences unavailable", describeError(error, "Could not load notification preferences.")))
       .finally(() => setLoading(false));
   }, []);
 
   async function save() {
     setSaving(true);
     try {
-      const response = await api.put<Preferences>("/api/community/notification-preferences", preferences);
-      setPreferences(response.data);
+      setPreferences(await communityService.updateNotificationPreferences(preferences));
       Alert.alert("Saved", "In-app notification preferences were updated.");
-    } catch (error: any) {
-      Alert.alert("Save failed", error?.response?.data?.detail ?? "Please try again.");
+    } catch (error) {
+      Alert.alert("Save failed", describeError(error, "Please try again."));
     } finally {
       setSaving(false);
     }

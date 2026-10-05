@@ -7,6 +7,17 @@ snapshot do not verify hosted storage, external providers, a real staging
 database, a complete content corpus, native-device behavior, or a deployed
 end-to-end journey.
 
+## Render startup migration behavior
+
+The current `backend/render.yaml` enables auto-deploy and runs
+`python -m app.services.schema_bootstrap` before starting Uvicorn. That command
+creates and stamps the current model schema when no application tables exist,
+or runs `alembic upgrade head` against an existing schema. A Render deployment
+can therefore mutate the configured database even though the release procedure
+below requires a reviewed staging rehearsal. No hosted database or deployment
+was accessed during this audit. The database/deployment owner must explicitly
+approve this startup behavior or change the deployment process before release.
+
 ## Checks completed in this pass
 
 | Check | Result | Evidence / limit |

@@ -11,6 +11,7 @@ with real assertions, so a failure names itself and stops only its own case.
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.db.database import Base
 from app.models.locations import Diocese
@@ -27,7 +28,11 @@ from app.services.authorization_enhanced import (
 @pytest.fixture()
 def db():
     """A fresh in-memory database per test, so cases cannot leak into each other."""
-    engine = create_engine("sqlite:///:memory:")
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
     Base.metadata.create_all(bind=engine)
     SessionLocal = sessionmaker(bind=engine)
     session = SessionLocal()

@@ -1,6 +1,6 @@
 """Tests for liturgical calendar engine."""
 import pytest
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from app.services.calendar import (
     get_advent_start,
     get_liturgical_year_sunday,
@@ -11,7 +11,13 @@ from app.services.calendar import (
     get_liturgical_color,
     get_celebration,
     get_calendar_info,
+    kenya_today,
 )
+
+
+def test_kenya_today_uses_nairobi_date_near_utc_midnight():
+    instant = datetime(2026, 10, 4, 22, 0, tzinfo=timezone.utc)
+    assert kenya_today(instant) == date(2026, 10, 5)
 
 
 class TestEasterSunday:

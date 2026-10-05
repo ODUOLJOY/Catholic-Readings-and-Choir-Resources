@@ -6,6 +6,7 @@ from app.models.readings import Reading
 from app.services.calendar import (
     get_calendar_info,
     get_liturgical_year,
+    kenya_today,
 )
 
 
@@ -22,7 +23,7 @@ class LectionaryEngine:
         self.db = db
 
     def get_today(self):
-        return self.get_by_date(date.today())
+        return self.get_by_date(kenya_today())
 
     def get_by_date(self, reading_date: date):
 
@@ -102,4 +103,4 @@ class LectionaryEngine:
 
     def current_liturgical_cycle(self):
 
-        return get_liturgical_year(date.today())
+        return get_liturgical_year(kenya_today())

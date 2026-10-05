@@ -12,6 +12,8 @@ from app.routes.auth_dependency import (
     get_current_user,
     require_admin,
 )
+from app.schemas.readings import ReadingCreate, ReadingResponse, ReadingUpdate
+from app.services.calendar import kenya_today
 
 router = APIRouter(
     prefix="/api/readings",
@@ -28,7 +30,7 @@ def today_readings(
     language: str = Query("English"),
     db: Session = Depends(get_db),
 ):
-    today = date.today()
+    today = kenya_today()
 
     reading = (
         db.query(Reading)
@@ -154,8 +156,18 @@ def all_readings(
 def search_readings(
     q: str,
     language: str | None = None,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
+    """Full-text search across reading content.
+
+    Previously this ran ``.all()`` with no limit, so a single request against a
+    table of full liturgical texts had to materialise every matching row and
+    every one of them carries seven large text columns. One request could exhaust
+    the server's memory. The result set is now bounded and paginated, matching the
+    list endpoint.
+    """
     query = db.query(Reading).filter(Reading.published == True)
     if language:
         query = query.filter(Reading.language.ilike(language))
@@ -172,6 +184,8 @@ def search_readings(
             ),
         )
         .order_by(Reading.reading_date.desc())
+        .limit(limit)
+        .offset(offset)
         .all()
     )
 
@@ -182,17 +196,17 @@ def search_readings(
 # ADMIN ROUTES
 # ==========================
 
-@router.post("/")
+@router.post("/", response_model=ReadingResponse)
 def create_reading(
-    payload: dict,
+    payload: ReadingCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
     exists = (
         db.query(Reading)
         .filter(
-            Reading.reading_date == payload.get("reading_date"),
-            Reading.language == payload.get("language", "English"),
+            Reading.reading_date == payload.reading_date,
+            Reading.language == payload.language,
         )
         .first()
     )
@@ -203,7 +217,17 @@ def create_reading(
             detail="Reading already exists."
         )
 
-    reading = Reading(**payload)
+    # ``published``, ``approved`` and ``uploaded_by`` are not taken from the
+    # request body: a new reading starts unpublished and unapproved, and the
+    # author comes from the authenticated session. The previous
+    # ``Reading(**payload)`` let a request set all three directly, which bypassed
+    # the moderation workflow.
+    reading = Reading(
+        **payload.model_dump(),
+        published=False,
+        approved=False,
+        uploaded_by=current_user.id,
+    )
     db.add(reading)
     db.commit()
     db.refresh(reading)
@@ -211,10 +235,10 @@ def create_reading(
     return reading
 
 
-@router.put("/{reading_id}")
+@router.put("/{reading_id}", response_model=ReadingResponse)
 def update_reading(
     reading_id: int,
-    payload: dict,
+    payload: ReadingUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
@@ -230,9 +254,14 @@ def update_reading(
             detail="Reading not found."
         )
 
-    for key, value in payload.items():
-        if hasattr(Reading, key) and key != "id":
-            setattr(reading, key, value)
+    # Explicit field list instead of ``for key, value in payload.items()`` with a
+    # ``hasattr`` check, which applied every model attribute the caller guessed.
+    changes = payload.model_dump(exclude_unset=True)
+    if not changes:
+        raise HTTPException(status_code=400, detail="No editable fields supplied.")
+
+    for field, value in changes.items():
+        setattr(reading, field, value)
 
     db.commit()
     db.refresh(reading)

@@ -3,6 +3,7 @@ import { Stack, useRouter, useSegments } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
 
 import { authService } from "@/services/authService";
+import { onSessionChange } from "@/lib/api";
 
 export default function RootLayout() {
   const [authenticated, setAuthenticated] = useState(false);
@@ -25,6 +26,14 @@ export default function RootLayout() {
       active = false;
     };
   }, []);
+
+  // A refresh that fails server-side clears the stored session. Reflect that here
+  // so the app stops presenting itself as signed in instead of leaving every
+  // screen showing whatever error the next request happened to produce.
+  useEffect(
+    () => onSessionChange((sessionActive) => setAuthenticated(sessionActive)),
+    [],
+  );
 
   useEffect(() => {
     const inAuthGroup = segments[0] === "(auth)";

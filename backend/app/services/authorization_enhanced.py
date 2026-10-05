@@ -49,16 +49,24 @@ def actor_diocese_id(db: Session, actor: User) -> Optional[int]:
 
 
 def has_permission(db: Session, user: User, permission: str) -> bool:
-    """Check if user has a specific permission."""
+    """Check if user has a specific permission.
+
+    The ``role_permissions`` table is the sole authority and a role with no rows
+    holds no permissions. This is deliberately fail-closed: the granular
+    permission system exists so that holding a scope (a diocese, a parish) never
+    implies the right to act inside it, and a permissive fallback would quietly
+    undo that. Where a role genuinely needs its default powers, grant the rows
+    explicitly -- see ``app.services.permission_seed``.
+    """
     if user.role == UserRole.SUPER_ADMIN:
         return True
-    
+
     # Check if user's role has the permission
     role_perms = db.query(RolePermission).join(Permission).filter(
         RolePermission.role == normalize_role_value(user.role),
         Permission.name == permission
     ).first()
-    
+
     return role_perms is not None
 
 
@@ -66,12 +74,12 @@ def has_any_permission(db: Session, user: User, permissions: list[str]) -> bool:
     """Check if user has any of the specified permissions."""
     if user.role == UserRole.SUPER_ADMIN:
         return True
-    
+
     role_perms = db.query(RolePermission).join(Permission).filter(
         RolePermission.role == normalize_role_value(user.role),
         Permission.name.in_(permissions)
     ).first()
-    
+
     return role_perms is not None
 
 
@@ -79,12 +87,12 @@ def has_all_permissions(db: Session, user: User, permissions: list[str]) -> bool
     """Check if user has all of the specified permissions."""
     if user.role == UserRole.SUPER_ADMIN:
         return True
-    
+
     count = db.query(RolePermission).join(Permission).filter(
         RolePermission.role == normalize_role_value(user.role),
         Permission.name.in_(permissions)
     ).distinct().count()
-    
+
     return count == len(permissions)
 
 
@@ -307,10 +315,13 @@ def get_scoped_user_query(db: Session, actor: User):
     
     if actor.role == UserRole.DIOCESAN_ADMINISTRATOR:
         actor_diocese = actor_diocese_id(db, actor)
-        target_parish = db.query(Parish).filter(Parish.id == target_user.parish_id).first()
-        if actor_diocese is None or target_parish is None:
-            return False
-        return base_query.join(Parish).filter(Parish.diocese_id == actor_diocese)
+        if actor_diocese is None:
+            # An unscoped actor must never be treated as having diocesan-wide
+            # visibility. Fail closed to their own record.
+            return base_query.filter(User.id == actor.id)
+        return base_query.join(Parish, User.parish_id == Parish.id).filter(
+            Parish.diocese_id == actor_diocese
+        )
     
     if actor.role == UserRole.PARISH_ADMINISTRATOR:
         if actor.parish_id:

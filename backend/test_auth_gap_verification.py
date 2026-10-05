@@ -22,6 +22,7 @@ from app.db.database import Base, get_db
 from app.main import app
 from app.models.auth import ExternalIdentity, RefreshSession
 from app.models.user import User
+from app.schemas.auth import RefreshTokenRequest
 from app.services import auth_service, google_auth
 from app.services.google_auth import GoogleAuthError, GoogleIdentity
 
@@ -336,7 +337,9 @@ def test_concurrent_refresh_does_not_replay_a_rotated_token(tmp_path):
         def attempt(_ignored):
             worker = FileSession()
             try:
-                result = refresh_route(refresh_token=original, db=worker)
+                result = refresh_route(
+                    payload=RefreshTokenRequest(refresh_token=original), db=worker
+                )
                 worker.commit()
                 return 200
             except HTTPException as error:
@@ -359,7 +362,9 @@ def test_concurrent_refresh_does_not_replay_a_rotated_token(tmp_path):
         verifier = FileSession()
         try:
             with pytest.raises(HTTPException) as error:
-                refresh_route(refresh_token=original, db=verifier)
+                refresh_route(
+                    payload=RefreshTokenRequest(refresh_token=original), db=verifier
+                )
             assert error.value.status_code == 401
         finally:
             verifier.close()

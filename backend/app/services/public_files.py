@@ -33,7 +33,13 @@ class PublicFiles(StaticFiles):
             encoded_path,
         ):
             raise StarletteHTTPException(status_code=404)
-        return await super().get_response(path, scope)
+        response = await super().get_response(path, scope)
+        # This directory holds administrator-uploaded images. Without `nosniff` a
+        # browser may ignore the Content-Type derived from the extension and
+        # interpret a file as HTML, which turns any stored upload into script
+        # execution on the app's own origin.
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        return response
 
     def _is_choir_resource_path(
         self,

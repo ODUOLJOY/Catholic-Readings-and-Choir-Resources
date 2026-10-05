@@ -10,6 +10,7 @@ from app.routes.auth_dependency import (
     get_current_user,
     require_admin,
 )
+from app.services.calendar import kenya_today
 
 router = APIRouter(
     prefix="/api/saints",
@@ -23,7 +24,7 @@ router = APIRouter(
 
 @router.get("/today")
 def saint_of_today(db: Session = Depends(get_db)):
-    today = date.today()
+    today = kenya_today()
 
     saint = (
         db.query(Saint)

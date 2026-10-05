@@ -2,7 +2,7 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from app.models.readings import Reading
-from app.services.calendar import get_calendar_info
+from app.services.calendar import get_calendar_info, kenya_today
 from app.services.liturgical_sync import LiturgicalSyncService
 
 
@@ -25,10 +25,10 @@ class MissalEngine:
 
     @staticmethod
     def sync_today(db: Session):
-        return LiturgicalSyncService.sync_date(db, date.today())
+        return LiturgicalSyncService.sync_date(db, kenya_today())
 
     def get_today_readings(self, language: str = "English"):
-        return self.get_readings(date.today(), language)
+        return self.get_readings(kenya_today(), language)
 
     def _select_reading_set(self, day):
         sets = sorted(day.reading_sets, key=lambda reading_set: reading_set.id or 0)

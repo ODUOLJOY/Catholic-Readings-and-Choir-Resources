@@ -7,6 +7,7 @@ from app.services.calendar import (
     get_liturgical_season,
     get_liturgical_week,
     get_liturgical_color,
+    kenya_today,
 )
 
 
@@ -30,7 +31,7 @@ class CalendarEngine:
 
     @staticmethod
     def today(region: str = "KE"):
-        return CalendarEngine.by_date(date.today(), region)
+        return CalendarEngine.by_date(kenya_today(), region)
 
     @staticmethod
     def by_date(day: date, region: str = "KE"):

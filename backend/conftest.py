@@ -16,3 +16,37 @@ def _reset_rate_limits():
     reset_for_tests()
     yield
     reset_for_tests()
+
+
+@pytest.fixture(autouse=True)
+def _allow_test_client_host():
+    """Let ``TestClient`` requests through ``TrustedHostMiddleware``.
+
+    ``TestClient`` sends ``Host: testserver``, which is not a host the service is
+    served on and would therefore be rejected as a Host-header injection attempt.
+    It is added only in tests, so the production host allowlist stays strict
+    without being weakened just to make the suite pass.
+
+    ``add_middleware`` copies the list at import time, so the captured reference
+    is updated in place rather than by rebinding ``settings.ALLOWED_HOSTS``.
+    """
+    from app.core.config import settings
+    from app.main import app
+
+    middleware = next(
+        (
+            item
+            for item in app.user_middleware
+            if item.cls.__name__ == "TrustedHostMiddleware"
+        ),
+        None,
+    )
+    captured = middleware.kwargs["allowed_hosts"] if middleware else None
+    original = list(captured) if captured is not None else list(settings.ALLOWED_HOSTS)
+
+    if captured is not None and "testserver" not in captured:
+        captured.append("testserver")
+    yield
+    if captured is not None:
+        captured[:] = original
+    settings.ALLOWED_HOSTS = original

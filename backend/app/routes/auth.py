@@ -18,6 +18,7 @@ from app.schemas.auth import (
     ForgotPasswordRequest,
     LogoutRequest,
     RegisterRequest,
+    RefreshTokenRequest,
     ResetPasswordRequest,
     TokenResponse,
     ChangePasswordRequest,
@@ -29,6 +30,7 @@ from app.schemas.auth import (
 from app.schemas.user import UserResponse
 from app.services import google_auth
 from app.services import hierarchy_service
+from app.services import rate_limit
 from app.services.auth_service import (
     AuthService,
     create_refresh_session,
@@ -195,6 +197,12 @@ def login(
     request: Request,
     db: Session = Depends(get_db),
 ):
+    client_host = request.client.host if request.client else "unknown"
+    client_key = int.from_bytes(
+        hashlib.sha256(client_host.encode("utf-8")).digest()[:8], "big"
+    )
+    rate_limit.consume("auth.login", client_key, rate_limit.AUTH_LOGIN)
+
     user = AuthService.authenticate_user(
         db,
         payload.email.lower(),
@@ -272,9 +280,10 @@ def change_password(
 
 @router.post("/refresh")
 def refresh_token(
-    refresh_token: str,
+    payload: RefreshTokenRequest,
     db: Session = Depends(get_db),
 ):
+    refresh_token = payload.refresh_token
     payload = decode_refresh_token(refresh_token)
     if payload is None:
         raise HTTPException(

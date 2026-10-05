@@ -1,6 +1,17 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 import re
+from zoneinfo import ZoneInfo
+
+
+KENYA_TIMEZONE = ZoneInfo("Africa/Nairobi")
+
+
+def kenya_today(now: datetime | None = None) -> date:
+    instant = now or datetime.now(timezone.utc)
+    if instant.tzinfo is None:
+        instant = instant.replace(tzinfo=timezone.utc)
+    return instant.astimezone(KENYA_TIMEZONE).date()
 
 
 LITURGICAL_COLORS = {

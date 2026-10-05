@@ -12,13 +12,15 @@ import {
   View,
   Linking,
 } from "react-native";
+import { useLocalSearchParams } from "expo-router";
 import { api } from "@/lib/api";
 import { API_URL } from "@/config/api";
 import { cacheResource } from "@/services/offlineStore";
 import { favoriteService, Favorite } from "@/services/favoriteService";
 import { ReportButton } from "@/components/ReportButton";
 import { Ionicons } from "@expo/vector-icons";
-import { CHOIR_CATEGORY_SECTIONS } from "@/config/choirCategories";
+import { canonicaliseCategory, CHOIR_CATEGORY_SECTIONS } from "@/config/choirCategories";
+import { safeExternalUrl } from "@/lib/externalUrl";
 
 interface ChoirResource {
   id: number;
@@ -44,6 +46,23 @@ interface ChoirResource {
 // below is a browse filter, not a category a resource can be tagged with, so
 // it is kept here rather than in the shared config.
 const ALL_FILTER = "All";
+
+/**
+ * Resolve a `?category=` param to a canonical label, or to the browse filter.
+ *
+ * An absent param, the literal "All", or a value that is not one of the 27
+ * canonical categories all fall back to showing every resource, rather than
+ * sending an unrecognised value to the API and rendering nothing.
+ */
+function resolveCategoryParam(value: string | undefined | null): string {
+  if (!value) {
+    return ALL_FILTER;
+  }
+  if (value.trim().toLowerCase() === ALL_FILTER.toLowerCase()) {
+    return ALL_FILTER;
+  }
+  return canonicaliseCategory(value.trim()) ?? ALL_FILTER;
+}
 
 const seasons = [
   "All Seasons",
@@ -116,11 +135,16 @@ const tempoMarkers = [
 ];
 
 export default function Choir() {
+  // Home's category grid and deep links navigate here with `?category=`. The
+  // screen used to ignore this param entirely and always start on "All", so the
+  // tap appeared to do nothing.
+  const { category: categoryParam } = useLocalSearchParams<{ category?: string }>();
+
   const [resources, setResources] = useState<ChoirResource[]>([]);
   const [filtered, setFiltered] = useState<ChoirResource[]>([]);
 
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState(ALL_FILTER);
+  const [category, setCategory] = useState(() => resolveCategoryParam(categoryParam));
   const [season, setSeason] = useState("All Seasons");
   const [language, setLanguage] = useState("All Languages");
   const [fileType, setFileType] = useState("All Types");
@@ -142,6 +166,13 @@ export default function Choir() {
   useEffect(() => {
     loadFavorites();
   }, []);
+
+  // Keep the filter in step with the param. This covers returning to an already
+  // mounted tab screen, where only the param changes and state would otherwise
+  // keep the previous filter.
+  useEffect(() => {
+    void Promise.resolve().then(() => setCategory(resolveCategoryParam(categoryParam)));
+  }, [categoryParam]);
 
   async function loadFavorites() {
     try {
@@ -263,10 +294,27 @@ export default function Choir() {
     }
 
     try {
+      // `safeExternalUrl` refuses any scheme other than http(s). `new URL` alone
+      // would happily accept `file:`, `data:` or an app deep link stored in
+      // `file_url` and hand it to the OS handler.
+      const directUrl =
+        resource.parish_id == null
+          ? safeExternalUrl(resource.file_url, API_URL)
+          : null;
+
       const fileUri =
         resource.parish_id == null
-          ? new URL(resource.file_url, API_URL).toString()
+          ? directUrl
           : await cacheResource(resource);
+
+      if (!fileUri) {
+        Alert.alert(
+          "Unavailable",
+          "This resource does not have a usable link."
+        );
+        return;
+      }
+
       const supported =
         await Linking.canOpenURL(fileUri);
 

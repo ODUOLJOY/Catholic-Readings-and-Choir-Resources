@@ -10,6 +10,29 @@ export const api = axios.create({
 
 let refreshPromise: Promise<string> | null = null;
 
+type SessionListener = (sessionActive: boolean) => void;
+const sessionListeners = new Set<SessionListener>();
+
+/**
+ * Observe session validity changes so the UI can show a logged-out state.
+ *
+ * Previously a session that was cleared by a failed refresh was invisible to the
+ * rest of the app: screens kept rendering as if signed in and just displayed
+ * whatever error the next request produced.
+ */
+export function onSessionChange(listener: SessionListener): () => void {
+	sessionListeners.add(listener);
+	return () => {
+		sessionListeners.delete(listener);
+	};
+}
+
+function emitSessionChange(sessionActive: boolean) {
+	for (const listener of sessionListeners) {
+		listener(sessionActive);
+	}
+}
+
 async function clearStoredSession() {
 	await AsyncStorage.multiRemove([
 		"access_token",
@@ -17,6 +40,7 @@ async function clearStoredSession() {
 		"user",
 		"user_role",
 	]);
+	emitSessionChange(false);
 }
 
 async function refreshAccessToken(): Promise<string> {
@@ -25,8 +49,8 @@ async function refreshAccessToken(): Promise<string> {
 		throw new Error("No refresh token available.");
 	}
 
-	const response = await api.post("/api/auth/refresh", null, {
-		params: { refresh_token: refreshToken },
+	const response = await api.post("/api/auth/refresh", {
+		refresh_token: refreshToken,
 	});
 	const accessToken = response.data?.access_token;
 
@@ -71,6 +95,15 @@ api.interceptors.response.use(
 
 		request._retry = true;
 
+		// A logged-out visitor has nothing to refresh. Without this guard every
+		// protected request from a signed-out session produced a pointless
+		// refresh attempt that failed with "No refresh token available.", which
+		// surfaced as the error the member saw instead of the real 401.
+		const hasRefreshToken = await AsyncStorage.getItem("refresh_token");
+		if (!hasRefreshToken) {
+			return Promise.reject(error);
+		}
+
 		try {
 			if (!refreshPromise) {
 				refreshPromise = refreshAccessToken().finally(() => {
@@ -81,6 +114,7 @@ api.interceptors.response.use(
 			const accessToken = await refreshPromise;
 			request.headers = request.headers ?? {};
 			request.headers.Authorization = `Bearer ${accessToken}`;
+			emitSessionChange(true);
 			return api(request);
 		} catch (refreshError) {
 			if (
@@ -88,6 +122,7 @@ api.interceptors.response.use(
 				refreshError.response &&
 				[400, 401, 403].includes(refreshError.response.status)
 			) {
+				// The stored session is genuinely no longer usable.
 				await clearStoredSession();
 			}
 			return Promise.reject(refreshError);

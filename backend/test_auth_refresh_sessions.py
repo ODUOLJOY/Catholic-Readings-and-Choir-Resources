@@ -81,7 +81,7 @@ def test_refresh_rotates_and_invalidates_previous_token(client):
     original_refresh = first["refresh_token"]
 
     refreshed = client.post(
-        "/api/auth/refresh", params={"refresh_token": original_refresh}
+        "/api/auth/refresh", json={"refresh_token": original_refresh}
     )
     assert refreshed.status_code == 200
     body = refreshed.json()
@@ -90,12 +90,12 @@ def test_refresh_rotates_and_invalidates_previous_token(client):
     assert body["refresh_token"] != original_refresh
 
     reused = client.post(
-        "/api/auth/refresh", params={"refresh_token": original_refresh}
+        "/api/auth/refresh", json={"refresh_token": original_refresh}
     )
     assert reused.status_code == 401
 
     rotated = client.post(
-        "/api/auth/refresh", params={"refresh_token": body["refresh_token"]}
+        "/api/auth/refresh", json={"refresh_token": body["refresh_token"]}
     )
     assert rotated.status_code == 200
 
@@ -104,12 +104,16 @@ def test_refresh_rejects_invalid_and_wrong_token_types(client):
     data = register_and_login(client)
 
     assert (
-        client.post("/api/auth/refresh", params={"refresh_token": "not-a-token"}).status_code
+        client.post("/api/auth/refresh", json={"refresh_token": "not-a-token"}).status_code
         == 401
     )
     assert (
+        client.post("/api/auth/refresh", params={"refresh_token": data["refresh_token"]}).status_code
+        == 422
+    )
+    assert (
         client.post(
-            "/api/auth/refresh", params={"refresh_token": data["access_token"]}
+            "/api/auth/refresh", json={"refresh_token": data["access_token"]}
         ).status_code
         == 401
     )
@@ -133,7 +137,7 @@ def test_logout_revokes_refresh_session(client):
     assert logout.status_code == 200
 
     refresh = client.post(
-        "/api/auth/refresh", params={"refresh_token": data["refresh_token"]}
+        "/api/auth/refresh", json={"refresh_token": data["refresh_token"]}
     )
     assert refresh.status_code == 401
 
@@ -153,7 +157,7 @@ def test_logout_all_revokes_every_session(client):
 
     for token in (first["refresh_token"], second["refresh_token"]):
         assert (
-            client.post("/api/auth/refresh", params={"refresh_token": token}).status_code
+            client.post("/api/auth/refresh", json={"refresh_token": token}).status_code
             == 401
         )
 
@@ -165,7 +169,7 @@ def test_refresh_rejects_disabled_account(client, db_session):
     db_session.commit()
 
     response = client.post(
-        "/api/auth/refresh", params={"refresh_token": data["refresh_token"]}
+        "/api/auth/refresh", json={"refresh_token": data["refresh_token"]}
     )
     assert response.status_code == 403
 
@@ -177,7 +181,7 @@ def test_expired_refresh_session_is_rejected(client, db_session):
     db_session.commit()
 
     response = client.post(
-        "/api/auth/refresh", params={"refresh_token": data["refresh_token"]}
+        "/api/auth/refresh", json={"refresh_token": data["refresh_token"]}
     )
     assert response.status_code == 401
 
@@ -207,6 +211,6 @@ def test_change_password_revokes_sessions(client):
     assert changed.status_code == 200
 
     response = client.post(
-        "/api/auth/refresh", params={"refresh_token": data["refresh_token"]}
+        "/api/auth/refresh", json={"refresh_token": data["refresh_token"]}
     )
     assert response.status_code == 401

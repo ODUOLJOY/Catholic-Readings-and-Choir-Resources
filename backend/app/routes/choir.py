@@ -233,7 +233,13 @@ def get_resource_file(
     return StreamingResponse(
         _file_chunks(file_stream),
         media_type=mimetypes.guess_type(filename)[0] or "application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            # The media type is derived from the uploaded extension. `nosniff`
+            # stops a browser from ignoring that type and re-interpreting an
+            # uploaded file as something else.
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 

@@ -10,6 +10,11 @@ from app.models.user import User, UserRole, UserStatus
 from app.models.community import CommunityAuditLog
 from app.models.choir import ChoirResource
 from app.models.readings import Reading
+from app.schemas.admin import (
+    AdminAuditLogResponse,
+    PaginatedAdminUsersResponse,
+    PaginatedAuditLogResponse,
+)
 from app.services.authorization_enhanced import (
     can_manage_user,
     can_assign_role,
@@ -88,7 +93,7 @@ def admin_dashboard(
     return stats
 
 
-@router.get("/users")
+@router.get("/users", response_model=PaginatedAdminUsersResponse)
 def list_users(
     search: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
@@ -284,7 +289,7 @@ def moderation_queue(
     }
 
 
-@router.get("/audit-logs")
+@router.get("/audit-logs", response_model=PaginatedAuditLogResponse)
 def audit_logs(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=100),

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.services.calendar import get_calendar_info
+from app.services.calendar import get_calendar_info, kenya_today
 from app.services.hierarchy_liturgy import get_liturgical_info_for_user
 from app.routes.admin import require_admin
 from app.routes.auth_dependency import get_current_user
@@ -23,7 +23,7 @@ def get_today_liturgy(
     db: Session = Depends(get_db),
 ):
     """Get liturgical information and reading references for today."""
-    return get_liturgy_by_date(date.today(), region, db)
+    return get_liturgy_by_date(kenya_today(), region, db)
 
 
 @router.get("/my/today")
@@ -32,7 +32,7 @@ def get_my_today_liturgy(
     current_user: User = Depends(get_current_user),
 ):
     """Get liturgical information for today based on user's hierarchy (authenticated)."""
-    return get_liturgy_for_user(date.today(), current_user, db)
+    return get_liturgy_for_user(kenya_today(), current_user, db)
 
 
 @router.get("/my/date/{target_date}")

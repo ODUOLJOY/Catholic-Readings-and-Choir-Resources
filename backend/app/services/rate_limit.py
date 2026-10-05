@@ -37,6 +37,7 @@ class Limit:
 # Abuse-sensitive ceilings. Ordinary parish conversation stays comfortably
 # inside these numbers.
 MESSAGE_SEND = Limit(max_events=30, window_seconds=60)
+AUTH_LOGIN = Limit(max_events=10, window_seconds=60)
 CONVERSATION_CREATE = Limit(max_events=20, window_seconds=300)
 SUGGESTION_SUBMIT = Limit(max_events=5, window_seconds=3600)
 SUGGESTION_REPLY = Limit(max_events=30, window_seconds=60)

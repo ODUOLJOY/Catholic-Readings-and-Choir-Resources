@@ -23,6 +23,7 @@ from app.models.parish import Parish
 from app.models.user import User
 from app.routes.auth_dependency import get_current_user
 from app.services.authorization import manageable_choir_parish_ids
+from app.services.file_signatures import SIGNATURE_CHECK_BYTES, valid_file_signature
 from app.services.private_storage import (
     open_resource_file,
     put_private_file,
@@ -90,30 +91,6 @@ EXPECTED_MIME_TYPES = {
     "mov": {"video/quicktime"},
     "mkv": {"video/x-matroska", "application/x-matroska"},
 }
-
-
-def _valid_file_header(extension: str, header: bytes) -> bool:
-    if extension == "pdf":
-        return header.startswith(b"%PDF-")
-    if extension in {"jpg", "jpeg"}:
-        return header.startswith(b"\xff\xd8\xff")
-    if extension == "png":
-        return header.startswith(b"\x89PNG\r\n\x1a\n")
-    if extension == "webp":
-        return header.startswith(b"RIFF") and header[8:12] == b"WEBP"
-    if extension == "wav":
-        return header.startswith(b"RIFF") and header[8:12] == b"WAVE"
-    if extension == "mp3":
-        return header.startswith(b"ID3") or (
-            len(header) >= 2 and header[0] == 0xFF and header[1] & 0xE0 == 0xE0
-        )
-    if extension in {"m4a", "mp4", "mov"}:
-        return len(header) >= 8 and header[4:8] == b"ftyp"
-    if extension == "aac":
-        return len(header) >= 2 and header[0] == 0xFF and header[1] & 0xF6 == 0xF0
-    if extension == "mkv":
-        return header.startswith(b"\x1a\x45\xdf\xa3")
-    return False
 
 
 def _validate_content_type(extension: str, content_type: str | None) -> None:
@@ -217,10 +194,12 @@ async def upload_resource(
                         status_code=400,
                         detail="File exceeds maximum allowed size.",
                     )
-                if len(header) < 16:
-                    header.extend(chunk[:16 - len(header)])
+                if len(header) < SIGNATURE_CHECK_BYTES:
+                    header.extend(
+                        chunk[: SIGNATURE_CHECK_BYTES - len(header)]
+                    )
                 destination.write(chunk)
-        if not _valid_file_header(extension, bytes(header)):
+        if not valid_file_signature(extension, bytes(header)):
             raise HTTPException(
                 status_code=400,
                 detail="File content does not match the declared file type.",
@@ -260,7 +239,11 @@ async def upload_resource(
         db.add(resource)
         db.flush()
         resource.storage_key = resource_storage_key(resource)
-        resource.file_url = f"{str(request.base_url).rstrip('/')}/api/choir/{resource.id}/file"
+        # Built from the configured BASE_URL, never from `request.base_url`.
+        # The Host header is caller-controlled, and this value is persisted and
+        # later handed to every member who opens the resource, so deriving it from
+        # the request would store an attacker-chosen URL permanently.
+        resource.file_url = f"{settings.BASE_URL.rstrip('/')}/api/choir/{resource.id}/file"
         put_private_file(
             filepath,
             resource.storage_key,

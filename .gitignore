@@ -22,6 +22,13 @@ build/
 venv/
 .venv/
 __pycache__/
+# Any stray interpreter environment, not just the two names above: a directory
+# named `venv312match/` sat untracked at the repository root with ~6,300 files
+# and was one `git add -A` away from being committed.
+venv*/
+*venv*/
+# local editor / tooling settings
+.poolside/
 
 # local databases
 *.db

@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
-import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, View, Pressable, Alert } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, TextInput, View, Pressable, Alert } from "react-native";
 import { router } from "expo-router";
 import { api } from "@/lib/api";
+import { requestErrorMessage } from "@/lib/requestFailure";
 import { Ionicons } from "@expo/vector-icons";
 import { favoriteService, Favorite } from "@/services/favoriteService";
+import { ErrorState } from "@/components/ScreenStates";
 
 type Saint = { id: number; name: string; feast_date?: string; country?: string; patronage?: string; short_description?: string };
 
@@ -11,24 +13,43 @@ export default function Saints() {
   const [items, setItems] = useState<Saint[]>([]); 
   const [query, setQuery] = useState(""); 
   const [loading, setLoading] = useState(true); 
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
 
-  useEffect(() => { 
-    void load(); 
-  }, []); 
-
-  async function load(value = query) { 
+  const load = useCallback(async (value = query) => { 
     try { 
-      setLoading(true); 
-      const [saintsRes, favoritesRes] = await Promise.all([
-        value.trim() ? api.get(`/api/saints/search/${encodeURIComponent(value.trim())}`) : api.get("/api/saints/"),
-        favoriteService.getFavorites()
-      ]);
+      setLoading(true);
+      setError(null);
+      // Favourites are fetched separately and cannot fail this screen.
+      // `/api/favorites` needs a session, so pairing it in one `Promise.all`
+      // meant a signed-out visitor's 401 discarded the saints response beside it
+      // and the screen claimed "No saints found."
+      const saintsRes = value.trim()
+        ? await api.get(`/api/saints/search/${encodeURIComponent(value.trim())}`)
+        : await api.get("/api/saints/");
       setItems(Array.isArray(saintsRes.data) ? saintsRes.data : []); 
-      setFavorites(favoritesRes);
+      setFavorites(await favoriteService.getFavoritesOptional());
+    } catch (requestError: unknown) {
+      // Previously there was no `catch` at all, so the rejection was unhandled
+      // and the screen rendered its empty copy for a server it never reached.
+      setItems([]);
+      setError(requestErrorMessage(requestError, "Could not load saints."));
     } finally { 
       setLoading(false); 
+      setRefreshing(false);
     } 
+  }, [query]);
+
+  useEffect(() => { 
+    void Promise.resolve().then(() => load("")); 
+    // Loads once on mount; the search field drives later loads explicitly.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); 
+
+  async function onRefresh() {
+    setRefreshing(true);
+    await load();
   }
 
   async function toggleFavorite(saint: Saint) {
@@ -43,7 +64,7 @@ export default function Saints() {
         const newFav = await favoriteService.createFavorite('saint', saint.id);
         setFavorites([...favorites, newFav]);
       }
-    } catch (error: any) {
+    } catch {
       Alert.alert("Error", "Could not toggle favorite");
     }
   }
@@ -51,11 +72,26 @@ export default function Saints() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Saints</Text>
-      <TextInput style={styles.input} placeholder="Search saints" value={query} onChangeText={setQuery} onSubmitEditing={() => load()} />
+      <TextInput
+        style={styles.input}
+        placeholder="Search saints"
+        value={query}
+        onChangeText={setQuery}
+        onSubmitEditing={() => void load()}
+        returnKeyType="search"
+        accessibilityLabel="Search saints"
+      />
       {loading ? <ActivityIndicator color="#0B6623" /> : 
         <FlatList 
           data={items} 
           keyExtractor={(item) => String(item.id)} 
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => void onRefresh()}
+              tintColor="#0B6623"
+            />
+          }
           renderItem={({ item }) => {
             const isFavorited = favorites.some(f => f.resource_type === 'saint' && f.target_resource_id === item.id);
             return (
@@ -63,7 +99,7 @@ export default function Saints() {
               <View style={styles.card}>
                 <View style={styles.cardHeader}>
                   <Text style={styles.name}>{item.name}</Text>
-                  <Pressable onPress={() => toggleFavorite(item)}>
+                  <Pressable onPress={() => void toggleFavorite(item)} accessibilityRole="button">
                     <Ionicons name={isFavorited ? "bookmark" : "bookmark-outline"} size={24} color="#0B6623" />
                   </Pressable>
                 </View>
@@ -75,7 +111,15 @@ export default function Saints() {
             </Pressable>
             );
           }} 
-          ListEmptyComponent={<Text style={styles.empty}>No saints found.</Text>} 
+          ListEmptyComponent={
+            error ? (
+              <ErrorState message={error} onRetry={() => void load()} />
+            ) : (
+              <Text style={styles.empty}>
+                {query.trim() ? "No saints match that search." : "No saints available yet."}
+              </Text>
+            )
+          }
         />
       }
     </View>

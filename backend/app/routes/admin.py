@@ -9,6 +9,7 @@ from app.models.readings import Reading
 from app.models.choir import ChoirResource
 from app.models.user import User
 from app.models.parish_request import ParishRequest
+from app.models.report import ContentReport
 from app.models.locations import Diocese, Deanery
 from app.models.parish import Parish
 from app.models.community import CommunityAuditLog, RoleAssignment
@@ -16,6 +17,10 @@ from app.auth.security import decode_token
 from app.core.dependencies import get_current_user
 from app.routes.auth_dependency import require_super_admin
 from app.schemas.user import UserAdminResponse
+from app.services.file_signatures import (
+    SIGNATURE_CHECK_BYTES as _SIGNATURE_CHECK_BYTES,
+    valid_file_signature as _valid_file_header,
+)
 from app.services.authorization import (
     can_manage_choir_resource_scope,
     manageable_choir_parish_ids,
@@ -72,7 +77,14 @@ def dashboard(
         "pending_uploads": db.query(Reading).filter(
             Reading.approved == False
         ).count(),
-        "pending_reports": 0,  # TODO: implement when Report model is created
+        # The ContentReport model exists (app/routes/report.py already filters on
+        # these statuses), so this was counted from a hard-coded zero under a
+        # "TODO: implement when Report model is created" comment. A moderation
+        # queue that always reports zero makes the dashboard actively misleading:
+        # an administrator sees nothing to do while reports pile up.
+        "pending_reports": db.query(ContentReport).filter(
+            ContentReport.status.in_(["pending", "under_review"])
+        ).count(),
         "parish_requests": db.query(ParishRequest).filter(ParishRequest.status == "pending").count(),
     }
 
@@ -482,15 +494,41 @@ async def upload_file(
     MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
     file_size = 0
     chunk_size = 8192
-    
-    with destination.open("wb") as buffer:
-        while chunk := await file.read(chunk_size):
-            file_size += len(chunk)
-            if file_size > MAX_FILE_SIZE:
-                # Delete partial file
-                destination.unlink(missing_ok=True)
-                raise HTTPException(400, "File size exceeds maximum allowed size (50MB).")
-            buffer.write(chunk)
+    header = b""
+
+    try:
+        with destination.open("wb") as buffer:
+            while chunk := await file.read(chunk_size):
+                file_size += len(chunk)
+                if file_size > MAX_FILE_SIZE:
+                    raise HTTPException(
+                        400,
+                        "File size exceeds maximum allowed size (50MB).",
+                    )
+                if len(header) < _SIGNATURE_CHECK_BYTES:
+                    header += chunk[: _SIGNATURE_CHECK_BYTES - len(header)]
+                buffer.write(chunk)
+
+        # The extension and MIME type above are both supplied by the client, so
+        # neither proves anything about the bytes. Any file that passes the header
+        # check and is then served from the mounted /uploads directory becomes
+        # attacker's content on our own origin: a ".jpg" that is really HTML
+        # executes as script in a browser that ignores the declared type. The
+        # choir upload route already enforces this. An empty upload has no header
+        # at all and is rejected by the same check.
+        if not header or not _valid_file_header(extension, header):
+            raise HTTPException(
+                400,
+                f"File contents do not match the {extension} type.",
+            )
+    except HTTPException:
+        # Deleting outside the `with` block matters: the handle is still open
+        # there, and unlinking an open file fails outright on Windows.
+        destination.unlink(missing_ok=True)
+        raise
+    except OSError:
+        destination.unlink(missing_ok=True)
+        raise
     
     # Log upload for audit
     _audit_admin_action(

@@ -54,11 +54,17 @@ export default function Favorites() {
 
   function openResource(item: any) {
     if (item.type === 'reading') {
-      router.push({ pathname: "/reading-detail", params: { date: item.reading_date } });
+      // Both keys are passed: `date` is what the reading endpoint prefers, and
+      // `id` keeps the screen working if a row somehow arrives without a date
+      // instead of leaving the detail screen with nothing to load.
+      router.push({
+        pathname: "/reading-detail",
+        params: { date: item.reading_date, id: String(item.id) },
+      });
     } else if (item.type === 'saint') {
-      router.push({ pathname: "/saint-detail", params: { id: item.id } });
+      router.push({ pathname: "/saint-detail", params: { id: String(item.id) } });
     } else if (item.type === 'choir') {
-      router.push({ pathname: "/choir-detail", params: { id: item.id } });
+      router.push({ pathname: "/choir-detail", params: { id: String(item.id) } });
     }
   }
 

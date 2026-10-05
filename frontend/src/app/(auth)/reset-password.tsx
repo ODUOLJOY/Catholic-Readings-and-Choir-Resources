@@ -10,6 +10,7 @@ import {
   TextInput,
   View,
   ActivityIndicator,
+  type ViewStyle,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -120,6 +121,27 @@ export default function ResetPasswordScreen() {
   );
 }
 
+/**
+ * react-native-web maps the deprecated `shadow*` props to a no-op and logs
+ * "shadow* props are deprecated, use boxShadow" for every render, so the web
+ * build gets its shadow from `boxShadow` instead. The cast is required because
+ * the bundled react-native-web 0.21 type definitions predate `boxShadow`.
+ */
+const webCardShadow = {
+  boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
+} as unknown as ViewStyle;
+
+const cardShadow = Platform.select({
+  web: webCardShadow,
+  android: { elevation: 3 },
+  default: {
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+  } as ViewStyle,
+});
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#f9f9f9" },
   container: { padding: 24, paddingTop: 60 },
@@ -130,11 +152,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     padding: 20,
     borderRadius: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    ...cardShadow,
   },
   label: { fontSize: 16, marginBottom: 8, color: "#333" },
   input: {

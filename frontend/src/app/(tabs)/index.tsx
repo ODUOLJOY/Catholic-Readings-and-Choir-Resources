@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { router } from "expo-router";
 import {
+  RefreshControl,
   ScrollView,
   View,
   Text,
@@ -13,27 +14,81 @@ import {
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
 import { api } from "@/lib/api";
+import { authService } from "@/services/authService";
+import { isAdminRole } from "@/lib/roles";
+import { CHOIR_CATEGORIES } from "@/config/choirCategories";
+
+type TodayLiturgy = {
+  date: string;
+  celebration: { name: string; rank: string };
+  liturgical: { colour: string; season: string };
+  readings: { type: string; display_reference: string }[];
+};
 
 export default function Home() {
-  const [liturgy, setLiturgy] = useState<any>(null);
+  const [liturgy, setLiturgy] = useState<TodayLiturgy | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  const loadLiturgy = useCallback(async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      const response = await api.get("/api/v1/liturgy/today");
+      setLiturgy(response.data);
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
 
   useEffect(() => {
-    api.get("/api/v1/liturgy/today")
-      .then((res) => {
-        setLiturgy(res.data);
+    void Promise.resolve().then(loadLiturgy);
+  }, [loadLiturgy]);
+
+  // The Admin shortcut is hidden until a stored role says the member may use it.
+  // The same check gates the Admin tab; the server enforces it regardless.
+  useEffect(() => {
+    let active = true;
+    void authService
+      .getRole()
+      .then((role) => {
+        if (active) {
+          setIsAdmin(isAdminRole(role));
+        }
       })
-      .catch((err) => {
-        console.error("Failed to load liturgy:", err);
-      })
-      .finally(() => setLoading(false));
+      .catch(() => {
+        if (active) {
+          setIsAdmin(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
   }, []);
+
+  async function onRefresh() {
+    setRefreshing(true);
+    await loadLiturgy();
+  }
 
   return (
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => void onRefresh()}
+          tintColor="#0B6623"
+          colors={["#0B6623"]}
+        />
+      }
     >
       {/* HEADER */}
       <View style={styles.header}>
@@ -59,25 +114,31 @@ export default function Home() {
       {/* TODAY'S CELEBRATION */}
       {loading ? (
         <ActivityIndicator size="large" color="#0B6623" />
-      ) : liturgy && (
+      ) : error ? (
+        <View style={styles.heroError}>
+          <Text style={styles.errorText}>Unable to load today&apos;s liturgy.</Text>
+          <Pressable onPress={() => void loadLiturgy()}>
+            <Text style={styles.retryText}>Retry</Text>
+          </Pressable>
+        </View>
+      ) : liturgy ? (
         <View style={styles.hero}>
-          <Text style={styles.heroTitle}>{liturgy.calendar.celebration}</Text>
+          <Text style={styles.heroTitle}>{liturgy.celebration.name}</Text>
           <Text style={styles.heroText}>
-            {liturgy.calendar.date} | {liturgy.calendar.color} | {liturgy.calendar.season}
+            {liturgy.date} | {liturgy.liturgical.colour} | {liturgy.liturgical.season}
           </Text>
-          {liturgy.calendar.selected_reading_set && (
+          {liturgy.readings.length > 0 && (
             <View style={styles.readingsSection}>
               <Text style={styles.sectionTitle}>Readings</Text>
-              <Text style={styles.readingItem}>1st: {liturgy.calendar.selected_reading_set.first_reading}</Text>
-              <Text style={styles.readingItem}>Psalm: {liturgy.calendar.selected_reading_set.psalm}</Text>
-              {liturgy.calendar.selected_reading_set.second_reading && (
-                <Text style={styles.readingItem}>2nd: {liturgy.calendar.selected_reading_set.second_reading}</Text>
-              )}
-              <Text style={styles.readingItem}>Gospel: {liturgy.calendar.selected_reading_set.gospel}</Text>
+              {liturgy.readings.map((reading, index) => (
+                <Text key={`${reading.type}-${index}`} style={styles.readingItem}>
+                  {reading.type.replaceAll("_", " ")}: {reading.display_reference}
+                </Text>
+              ))}
             </View>
           )}
         </View>
-      )}
+      ) : null}
 
       <Pressable
         style={styles.mainCard}
@@ -93,6 +154,31 @@ export default function Home() {
           </Text>
         </View>
         <Ionicons name="chevron-forward" size={24} color="#777" />
+      </Pressable>
+
+      {/* EXPLORE */}
+      <Pressable
+        style={styles.mainCard}
+        onPress={() => router.push("/explore")}
+      >
+        <View style={styles.iconCircle}>
+          <Ionicons name="search-outline" size={28} color="#0B6623" />
+        </View>
+        <View style={styles.cardContent}>
+          <Text style={styles.cardTitle}>
+            Explore &amp; Search
+          </Text>
+
+          <Text style={styles.cardText}>
+            Search readings, saints and choir resources together.
+          </Text>
+        </View>
+
+        <Ionicons
+          name="chevron-forward"
+          size={24}
+          color="#777"
+        />
       </Pressable>
 
       {/* DAILY READINGS */}
@@ -114,7 +200,7 @@ export default function Home() {
           </Text>
 
           <Text style={styles.cardText}>
-            {liturgy?.reading?.feast || "Today's readings"}
+            {liturgy?.celebration.name || "Today's readings"}
           </Text>
         </View>
 
@@ -176,8 +262,7 @@ export default function Home() {
           </Text>
 
           <Text style={styles.cardText}>
-            Access your saved readings and choir
-            resources even when offline.
+            Manage choir resources you have downloaded.
           </Text>
         </View>
 
@@ -224,24 +309,13 @@ export default function Home() {
       </Text>
 
       <View style={styles.categoryGrid}>
-        {[
-          "Entrance",
-          "Kyrie & Gloria",
-          "Psalms",
-          "Gospel Acclamation",
-          "Offertory",
-          "Communion",
-          "Thanksgiving",
-          "Exit",
-          "Lent",
-          "Advent",
-          "Christmas",
-          "Easter",
-          "Pentecost",
-          "Marian",
-          "Wedding",
-          "Funeral",
-        ].map((category) => (
+        {/* Canonical 27 categories, in the specified order. This grid previously
+            carried its own 16-item hand-written list: eleven canonical
+            categories were unreachable from Home (Sadaka, Agnus Dei,
+            Benediction, Holy Week, Ordinary Time, Rosary, Baptism, Saints,
+            Latin, Choir Practice, Others) and the order did not match the rest
+            of the app. */}
+        {CHOIR_CATEGORIES.map((category) => (
           <Pressable
             key={category}
             style={styles.category}
@@ -266,20 +340,23 @@ export default function Home() {
       </View>
 
       {/* ADMIN */}
-      <Pressable
-        style={styles.adminButton}
-        onPress={() => router.push("/admin")}
-      >
-        <MaterialCommunityIcons
-          name="shield-account"
-          size={22}
-          color="#fff"
-        />
+      {isAdmin ? (
+        <Pressable
+          style={styles.adminButton}
+          onPress={() => router.push("/admin")}
+          accessibilityRole="button"
+        >
+          <MaterialCommunityIcons
+            name="shield-account"
+            size={22}
+            color="#fff"
+          />
 
-        <Text style={styles.adminText}>
-          Admin Panel
-        </Text>
-      </Pressable>
+          <Text style={styles.adminText}>
+            Admin Panel
+          </Text>
+        </Pressable>
+      ) : null}
     </ScrollView>
   );
 }
@@ -327,6 +404,26 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 24,
     marginBottom: 20,
+  },
+
+  heroError: {
+    backgroundColor: "#FFF4F2",
+    borderColor: "#E9B6AE",
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+  },
+
+  errorText: {
+    color: "#7D2720",
+    fontSize: 15,
+    marginBottom: 8,
+  },
+
+  retryText: {
+    color: "#0B6623",
+    fontWeight: "700",
   },
 
   heroTitle: {

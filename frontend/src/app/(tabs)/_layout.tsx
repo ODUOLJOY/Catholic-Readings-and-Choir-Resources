@@ -2,6 +2,7 @@ import { Tabs, useRouter } from "expo-router";
 import { FontAwesome5, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import { authService } from "@/services/authService";
+import { isAdminRole } from "@/lib/roles";
 
 export default function TabsLayout() {
   const router = useRouter();
@@ -20,10 +21,7 @@ export default function TabsLayout() {
     void checkSetup();
   }, [router]);
 
-  const isAdmin =
-    role === "admin" ||
-    role === "super_admin" ||
-    role === "superadmin";
+  const isAdmin = isAdminRole(role);
 
   // The Admin tab is only surfaced to users whose role grants administration
   // privileges. Privilege is also enforced server-side on every protected

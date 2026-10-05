@@ -1,7 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   RefreshControl,
   StyleSheet,
@@ -14,9 +13,10 @@ import {
   Ionicons,
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Href, router } from "expo-router";
+import { router } from "expo-router";
 import { api } from "@/lib/api";
+import { requestErrorMessage } from "@/lib/requestFailure";
+import { ErrorState } from "@/components/ScreenStates";
 
 interface SearchResult {
   id?: number | string;
@@ -74,63 +74,77 @@ export default function ExploreScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searched, setSearched] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    searchEverything("");
-  }, []);
+  // No search runs on mount. The previous mount call passed an empty query, which
+  // every one of the three backends accepts: `ilike('%%%')` matched every published
+  // reading, every saint, and every content row, so opening Explore cost three
+  // full-table scans before the member had typed anything.
 
   async function searchEverything(query = search) {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setResults([]);
+      setSearched(false);
+      setError(null);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setSearched(true);
+      setError(null);
 
-      const [readingRes, saintRes, contentRes] = await Promise.all([
-        api.get("/api/readings/search/", { params: { q: query.trim() } }),
-        api.get(`/api/saints/search/${query.trim()}`),
-        api.get(`/api/content/search/${query.trim()}`),
+      // Each source settles independently. `Promise.all` meant a single failing
+      // endpoint discarded the other two results and raised an alert, so one
+      // unavailable collection silently emptied the entire search.
+      const [readingOutcome, saintOutcome, contentOutcome] = await Promise.allSettled([
+        api.get("/api/readings/search/", { params: { q: trimmed } }),
+        api.get(`/api/saints/search/${encodeURIComponent(trimmed)}`),
+        api.get(`/api/content/search/${encodeURIComponent(trimmed)}`),
       ]);
 
-      const readings = (Array.isArray(readingRes.data) ? readingRes.data : []).map(
-        (reading: any) => ({
-          id: reading.id,
-          title: reading.feast || reading.saint_of_day || "Daily Reading",
-          type: "Reading",
-          description: reading.reflection || reading.gospel,
-          reference: reading.first_reading_reference,
-        })
-      );
+      const readings =
+        readingOutcome.status === "fulfilled" && Array.isArray(readingOutcome.value.data)
+          ? readingOutcome.value.data.map((reading: any) => ({
+              id: reading.id,
+              reading_date: reading.reading_date,
+              title: reading.feast || reading.saint_of_day || "Daily Reading",
+              type: "Reading",
+              description: reading.reflection || reading.gospel,
+              reference: reading.first_reading_reference,
+            }))
+          : [];
 
-      const saints = (Array.isArray(saintRes.data) ? saintRes.data : []).map(
-        (saint: any) => ({
-          id: saint.id,
-          title: saint.name,
-          type: "Saint",
-          description: saint.biography,
-        })
-      );
+      const saints =
+        saintOutcome.status === "fulfilled" && Array.isArray(saintOutcome.value.data)
+          ? saintOutcome.value.data.map((saint: any) => ({
+              id: saint.id,
+              title: saint.name,
+              type: "Saint",
+              description: saint.biography,
+            }))
+          : [];
 
-      const content = (Array.isArray(contentRes.data) ? contentRes.data : []).map(
-        (item: any) => ({
-          id: item.id,
-          title: item.title,
-          type: "Choir Resource",
-          description: item.body,
-        })
-      );
+      const content =
+        contentOutcome.status === "fulfilled" && Array.isArray(contentOutcome.value.data)
+          ? contentOutcome.value.data.map((item: any) => ({
+              id: item.id,
+              title: item.title,
+              type: "Choir Resource",
+              description: item.body,
+            }))
+          : [];
 
       setResults([...readings, ...saints, ...content]);
-    } catch (error: any) {
-      console.log(
-        "Search error:",
-        error?.response?.data || error
-      );
 
-      setResults([]);
-
-      Alert.alert(
-        "Search Error",
-        "Unable to search Catholic resources."
-      );
+      // Only complain when nothing at all could be searched; a partial result set
+      // is still useful to the member.
+      if ([readingOutcome, saintOutcome, contentOutcome].every((o) => o.status === "rejected")) {
+        setError(requestErrorMessage(readingOutcome, "Unable to search Catholic resources."));
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -197,22 +211,20 @@ export default function ExploreScreen() {
           if (item.type === "Reading") {
             router.push({
               pathname: "/reading-detail",
-              params: { id: item.id },
+              params: { id: String(item.id) },
             } as any);
           } else if (item.type === "Saint") {
             router.push({
               pathname: "/saint-detail",
-              params: { id: item.id },
+              params: { id: String(item.id) },
             } as any);
           } else if (item.type === "Choir Resource") {
-            // Need to implement or link to choir detail
-            // For now, let's navigate to choir tab with params if possible, 
-            // but the requirement says "navigate to the correct detail screen"
-            // I will assume for now it's not implemented yet and mark it PARTIAL or implement a basic one.
-            // Actually I should implement it.
+            // Choir search results carry the resource id, which is what
+            // `choir-detail` reads. Passing the id alone used to leave that
+            // screen's `id` guard unsatisfied and it rendered an empty view.
             router.push({
               pathname: "/choir-detail",
-              params: { id: item.id },
+              params: { id: String(item.id) },
             } as any);
           }
         }}
@@ -374,6 +386,13 @@ export default function ExploreScreen() {
               </View>
             )}
 
+            {error ? (
+              <ErrorState
+                message={error}
+                onRetry={() => void searchEverything(search)}
+              />
+            ) : null}
+
             {loading && (
               <View style={styles.loading}>
                 <ActivityIndicator
@@ -389,24 +408,24 @@ export default function ExploreScreen() {
           </>
         }
         ListEmptyComponent={
-          !loading ? (
+          !loading && !error ? (
             <View style={styles.empty}>
               <View style={styles.emptyIcon}>
                 <MaterialCommunityIcons
-                  name="magnify-close"
+                  name={searched ? "magnify-close" : "magnify"}
                   size={45}
                   color="#0B6623"
                 />
               </View>
 
               <Text style={styles.emptyTitle}>
-                No results found
+                {searched ? "No results found" : "Search the app"}
               </Text>
 
               <Text style={styles.emptyText}>
-                Try searching for a reading, saint,
-                feast, hymn, choir song or Catholic
-                resource.
+                {searched
+                  ? "Try a different reading, saint, feast, hymn, choir song or Catholic resource."
+                  : "Look across daily readings, saints and choir resources at once, or use the quick access links below."}
               </Text>
             </View>
           ) : null

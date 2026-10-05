@@ -12,7 +12,12 @@ REQUIRED_LEGACY_COLUMNS = {
 }
 
 
-def verify_legacy_schema(connection: Connection) -> None:
+def missing_legacy_schema(connection: Connection) -> list[str]:
+    """Return the absent legacy tables/columns, or ``[]`` when the schema is present.
+
+    Split out from :func:`verify_legacy_schema` so the baseline bootstrap can ask
+    "is anything missing?" without the raising behaviour.
+    """
     inspector = inspect(connection)
     existing_tables = set(inspector.get_table_names())
     missing: list[str] = []
@@ -27,6 +32,11 @@ def verify_legacy_schema(connection: Connection) -> None:
             f"{table_name}.{column}"
             for column in sorted(required_columns - existing_columns)
         )
+    return missing
+
+
+def verify_legacy_schema(connection: Connection) -> None:
+    missing = missing_legacy_schema(connection)
     if missing:
         raise RuntimeError(
             "Migration preflight failed; expected the existing application "

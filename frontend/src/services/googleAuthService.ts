@@ -23,7 +23,12 @@ export const googleAuthService = {
       const response = await api.get("/api/auth/google/config");
       return Boolean(response.data?.enabled);
     } catch {
-      return false;
+      // Never silently hide Google sign-in on a transient failure (network,
+      // 503, CORS). Returning true keeps the "Continue with Google" button
+      // visible so the user receives a clear error when they tap it, instead
+      // of the entire option vanishing. A definitive enabled:false response is
+      // still honoured by the path above.
+      return true;
     }
   },
 

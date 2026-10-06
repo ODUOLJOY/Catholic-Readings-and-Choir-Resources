@@ -37,6 +37,12 @@ const quickActions = [
     route: "/(tabs)/readings",
   },
   {
+    title: "Daily Missal",
+    description: "Today's full readings, missal view",
+    icon: "book-open-variant",
+    route: "/reading-detail",
+  },
+  {
     title: "Saints",
     description: "Saints and feast days",
     icon: "account-star",

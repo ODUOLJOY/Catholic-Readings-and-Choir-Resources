@@ -13,6 +13,7 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth.security import decode_access_token
@@ -72,37 +73,65 @@ def get_optional_user(
 
 
 @router.get("/categories")
-def get_categories() -> dict:
-    """Canonical choir-resource categories (public mirror of the library nav).
+def get_categories(
+    db: Session = Depends(get_db),
+    token: str | None = Depends(optional_bearer),
+) -> dict:
+    """Canonical choir-resource categories with live, visibility-aware counts.
 
     Returns the 27 categories in their required three-section order, plus a flat
     ordered list. No authentication: anonymous visitors must be able to browse
     the library navigation and the upload/edit category selector.
+
+    The catalog itself (``sections`` / ``categories``) is returned exactly as it
+    always has been, because it is the shared contract with the upload category
+    selector and the library navigation. The counts are *added* alongside it:
+
+    - ``counts``  -- ``{canonical label: visible resource count}`` for all 27,
+                    including the ones with nothing in them.
+    - ``total``   -- the number of visible resources across all categories.
+
+    Every count is computed with the *same* published/approved and
+    parish-visibility predicate as ``GET /api/choir/``, so a count is what the
+    member will actually see when they open that category. Rows are grouped by
+    the stored label and then folded through :func:`normalize_category`, so a
+    legacy row labelled ``"Gloria"`` counts under ``"Kyrie & Gloria"`` instead of
+    disappearing.
     """
+    current_user = get_optional_user(token if isinstance(token, str) else None, db)
+    visible = _visible_resources_query(db, current_user)
+    rows = (
+        visible.with_entities(ChoirResource.category, func.count(ChoirResource.id))
+        .group_by(ChoirResource.category)
+        .all()
+    )
+
+    counts: dict[str, int] = {label: 0 for label in CHOIR_CATEGORIES}
+    for stored_label, total in rows:
+        canonical = normalize_category(stored_label)
+        if canonical in counts:
+            counts[canonical] += int(total)
+
     return {
         "sections": [
             {"title": title, "categories": list(categories)}
             for title, categories in CHOIR_CATEGORY_SECTIONS
         ],
         "categories": list(CHOIR_CATEGORIES),
+        "counts": counts,
+        "total": sum(counts.values()),
     }
 
 
-@router.get("/")
-def get_resources(
-    category: str | None = None,
-    language: str | None = None,
-    query: str | None = None,
-    voice_part: str | None = None,
-    season: str | None = None,
-    key_signature: str | None = None,
-    tempo: str | None = None,
-    composer: str | None = None,
-    alternative_title: str | None = None,
-    db: Session = Depends(get_db),
-    token: str | None = Depends(optional_bearer),
-):
-    current_user = get_optional_user(token if isinstance(token, str) else None, db)
+def _visible_resources_query(db: Session, current_user: User | None):
+    """Base query for choir resources the given user is allowed to see.
+
+    Shared by the list endpoint, the category counts and every caller that needs
+    "what this member can browse". Keeping one implementation is what guarantees
+    the per-category counts on the library page agree with the rows the list
+    endpoint returns for the same category -- previously these were separate
+    queries that could drift apart.
+    """
     query_obj = db.query(ChoirResource).filter(
         ChoirResource.is_approved == True,
         ChoirResource.is_published == True,
@@ -121,12 +150,32 @@ def get_resources(
     if current_user is not None:
         visible_parishes.update(manageable_choir_parish_ids(db, current_user))
     if visible_parishes:
-        query_obj = query_obj.filter(
+        return query_obj.filter(
             (ChoirResource.parish_id.is_(None))
             | ChoirResource.parish_id.in_(visible_parishes)
         )
-    else:
-        query_obj = query_obj.filter(ChoirResource.parish_id.is_(None))
+    return query_obj.filter(ChoirResource.parish_id.is_(None))
+
+
+@router.get("/")
+def get_resources(
+    category: str | None = None,
+    categories: str | None = None,
+    language: str | None = None,
+    query: str | None = None,
+    voice_part: str | None = None,
+    season: str | None = None,
+    key_signature: str | None = None,
+    tempo: str | None = None,
+    composer: str | None = None,
+    alternative_title: str | None = None,
+    sort: str | None = None,
+    limit: int | None = None,
+    db: Session = Depends(get_db),
+    token: str | None = Depends(optional_bearer),
+):
+    current_user = get_optional_user(token if isinstance(token, str) else None, db)
+    query_obj = _visible_resources_query(db, current_user)
 
     if category:
         # The browse screen sends a canonical label (e.g. ``"Kyrie & Gloria"``).
@@ -144,6 +193,26 @@ def get_resources(
 
     if language:
         query_obj = query_obj.filter(ChoirResource.language == language)
+
+    if categories:
+        # A comma-separated set of canonical labels. The browse page uses it for
+        # the "Prepare for Mass" shelf, which spans the nine parts of the Mass
+        # ordinary: nine separate requests would each paginate differently and
+        # could show a part as empty while it actually has a resource. The legacy
+        # alias remapping used by the single `category` filter is applied per
+        # label here too, so a row still stored as "Gloria" is not dropped.
+        #
+        # Unrecognised labels are ignored rather than fatal: a stale client
+        # should still get the parts it asked for correctly. If nothing valid
+        # remains, the filter matches nothing, mirroring `category`.
+        requested = [part.strip() for part in categories.split(",") if part.strip()]
+        matching_labels: set[str] = set()
+        for label in requested:
+            matching_labels |= categories_matching_filter(label)
+        if matching_labels:
+            query_obj = query_obj.filter(ChoirResource.category.in_(matching_labels))
+        else:
+            query_obj = query_obj.filter(ChoirResource.category.in_(set()))
         
     if query:
         query_obj = query_obj.filter(
@@ -171,9 +240,42 @@ def get_resources(
             ChoirResource.alternative_title.ilike(f"%{alternative_title}%")
         )
 
-    return query_obj.order_by(
-        ChoirResource.created_at.desc()
-    ).all()
+    # Ordering is explicit rather than implicit so the library page can ask for a
+    # ranked shelf ("most loved" by real download_count) and a newest shelf from
+    # the same endpoint instead of sorting a full fetch in the client. `nulls
+    # last` keeps resources that have never been downloaded from outranking real
+    # ones, and the secondary key makes paging stable for equal counts.
+    sort_key = (sort or "recent").strip().lower()
+    if sort_key == "popular":
+        order_by = (
+            ChoirResource.download_count.desc().nullslast(),
+            ChoirResource.rating.desc().nullslast(),
+            ChoirResource.created_at.desc(),
+            ChoirResource.id.desc(),
+        )
+    elif sort_key == "title":
+        order_by = (ChoirResource.title.asc(), ChoirResource.id.asc())
+    elif sort_key in {"recent", "newest"}:
+        order_by = (ChoirResource.created_at.desc(), ChoirResource.id.desc())
+    else:
+        raise HTTPException(
+            status_code=422,
+            detail="Sort must be one of: recent, popular, title.",
+        )
+
+    query_obj = query_obj.order_by(*order_by)
+
+    # `limit` is for shelf queries ("give me 6 featured rows"), not pagination: it
+    # is clamped so a client cannot ask for an unbounded response.
+    if limit is not None:
+        if limit < 1 or limit > 200:
+            raise HTTPException(
+                status_code=422,
+                detail="Limit must be between 1 and 200.",
+            )
+        return query_obj.limit(limit).all()
+
+    return query_obj.all()
 
 
 @router.get("/{resource_id}")

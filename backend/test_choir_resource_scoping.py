@@ -630,13 +630,23 @@ EXPECTED_CATEGORY_SECTIONS = [
 ]
 
 
-def test_choir_categories_endpoint_returns_the_27_in_order():
+def test_choir_categories_endpoint_returns_the_27_in_order(db: Session):
     """GET /api/choir/categories is public and returns exactly the 27 canonical
-    categories in the required three-section order (no extras, no duplicates)."""
-    with TestClient(app) as client:
-        resp = client.get("/api/choir/categories")
-        assert resp.status_code == 200, resp.text
-        body = resp.json()
+    categories in the required three-section order (no extras, no duplicates).
+
+    The endpoint now reports live counts, so it reads the database. It is
+    overridden here rather than falling through to the configured database so
+    this stays a shape test against an empty library instead of an assertion
+    about whatever happens to be deployed.
+    """
+    app.dependency_overrides[get_db] = lambda: db
+    try:
+        with TestClient(app) as client:
+            resp = client.get("/api/choir/categories")
+            assert resp.status_code == 200, resp.text
+            body = resp.json()
+    finally:
+        app.dependency_overrides.pop(get_db, None)
 
     assert body["categories"] == [
         label
@@ -653,6 +663,11 @@ def test_choir_categories_endpoint_returns_the_27_in_order():
         assert section["categories"] == expected[1]
     # Flat list is the exact concatenation of the sectioned lists.
     assert [c for s in sections for c in s["categories"]] == body["categories"]
+
+    # Counts are additive: all 27 keys, all zero against an empty library.
+    assert list(body["counts"]) == list(CHOIR_CATEGORIES)
+    assert set(body["counts"].values()) == {0}
+    assert body["total"] == 0
 
 
 def test_normalize_category_is_the_canonical_compatibility_mapping():

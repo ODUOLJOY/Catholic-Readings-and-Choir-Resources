@@ -4,6 +4,7 @@ import { ActivityIndicator, View } from "react-native";
 
 import { authService } from "@/services/authService";
 import { onSessionChange } from "@/lib/api";
+import { ChoirPlayerProvider } from "@/components/choir/ChoirPlayerProvider";
 
 export default function RootLayout() {
   const [authenticated, setAuthenticated] = useState(false);
@@ -60,14 +61,19 @@ export default function RootLayout() {
   }
 
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        animation: "slide_from_right",
-      }}
-    >
-      <Stack.Screen name="(tabs)" />
-      <Stack.Screen name="reading-detail" />
-    </Stack>
+    // The choir player is mounted here so an active resource survives
+    // navigation between the library and a detail page. It renders nothing when
+    // no choir resource is active.
+    <ChoirPlayerProvider>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          animation: "slide_from_right",
+        }}
+      >
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="reading-detail" />
+      </Stack>
+    </ChoirPlayerProvider>
   );
 }

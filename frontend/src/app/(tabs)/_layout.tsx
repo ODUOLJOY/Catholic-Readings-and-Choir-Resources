@@ -14,7 +14,15 @@ export default function TabsLayout() {
       const fetchedRole = await authService.getRole();
       setRole(fetchedRole ?? null);
 
-      if (user && !user.profile_setup_completed) {
+      // Administrators are routed straight to the admin surface from the login
+      // flow and must not be intercepted by the profile-setup guard here. Only
+      // regular users are gated on onboarding; admin endpoints remain guarded
+      // server-side, so this is a UI-affordance change only.
+      if (
+        user &&
+        !user.profile_setup_completed &&
+        !isAdminRole(fetchedRole ?? null)
+      ) {
         router.replace("/profile-setup");
       }
     }

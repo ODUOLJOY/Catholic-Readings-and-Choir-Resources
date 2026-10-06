@@ -1,1206 +1,1277 @@
-import { useEffect, useState } from "react";
+/**
+ * Choir library.
+ *
+ * Replaces a single screen of filter chips above a flat list. The page is now
+ * built around what a choir actually does on a Tuesday: find out what the
+ * Church is celebrating, pick the music for the parts of Mass that are still
+ * missing, and reach the practice material. So the order is
+ *
+ *   hero -> today's celebration -> search -> the 27 categories -> prepare for
+ *   Mass -> featured -> practice -> recently added -> recently loved
+ *
+ * Everything on it is a real answer from the API. The category counts come from
+ * `GET /api/choir/categories`, the shelves from `GET /api/choir/`, the
+ * celebration from `GET /api/v1/liturgy/today`. When a service is unreachable
+ * the affected block says so and offers a retry -- it never substitutes
+ * placeholder resources, counts or a guessed season.
+ */
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
-  FlatList,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
+  useWindowDimensions,
   View,
-  Linking,
 } from "react-native";
-import { useLocalSearchParams } from "expo-router";
-import { api } from "@/lib/api";
-import { API_URL } from "@/config/api";
-import { cacheResource } from "@/services/offlineStore";
-import { favoriteService, Favorite } from "@/services/favoriteService";
-import { ReportButton } from "@/components/ReportButton";
 import { Ionicons } from "@expo/vector-icons";
-import { canonicaliseCategory, CHOIR_CATEGORY_SECTIONS } from "@/config/choirCategories";
-import { safeExternalUrl } from "@/lib/externalUrl";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
-interface ChoirResource {
-  id: number;
+import { ChoirResourceCard } from "@/components/choir/ChoirResourceCard";
+import { useChoirPlayer } from "@/components/choir/ChoirPlayerProvider";
+import {
+  ChoirRadius,
+  ChoirShadow,
+  ChoirSpace,
+  ChoirTheme,
+  ChoirType,
+  MaxChoirContentWidth,
+  MinTouchTarget,
+  liturgicalAccent,
+} from "@/constants/choirTheme";
+import { useLiturgicalToday } from "@/hooks/useLiturgicalToday";
+import { favoriteService, type Favorite } from "@/services/favoriteService";
+import { listCachedResources } from "@/services/offlineStore";
+import {
+  fetchCategories,
+  fetchResources,
+  MASS_ORDINARY_ORDER,
+  normaliseResource,
+  type ChoirCategoriesResponse,
+  type ChoirResource,
+  type ChoirSort,
+} from "@/services/choirService";
+import { classifyRequestFailure } from "@/lib/requestFailure";
+import { ErrorState } from "@/components/ScreenStates";
+import { canonicaliseCategory } from "@/config/choirCategories";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+type Shelf = {
+  key: string;
   title: string;
-  category: string;
-  description: string;
-  file_type: string;
-  file_url: string;
-  created_at: string;
+  subtitle?: string;
+  resources: ChoirResource[];
+  error?: string;
+  loading?: boolean;
+};
 
-  // Optional fields supported by the expanded backend
-  language?: string;
-  season?: string;
-  composer?: string;
-  key_signature?: string;
-  tempo?: string;
-  duration?: string;
-  voice_part?: string;
-  parish_id?: number | null;
-}
-
-// Canonical 27 categories live in @/config/choirCategories. The "All" option
-// below is a browse filter, not a category a resource can be tagged with, so
-// it is kept here rather than in the shared config.
-const ALL_FILTER = "All";
+const PRACTICE_CATEGORY = "Choir Practice";
+/** Icons for the three grouped sections. */
+const SECTION_ICON: Record<string, React.ComponentProps<typeof Ionicons>["name"]> = {
+  "Mass Ordinary and Celebration Songs": "musical-notes",
+  "Liturgical Seasons": "calendar",
+  "Other Choir Categories": "heart",
+};
 
 /**
- * Resolve a `?category=` param to a canonical label, or to the browse filter.
- *
- * An absent param, the literal "All", or a value that is not one of the 27
- * canonical categories all fall back to showing every resource, rather than
- * sending an unrecognised value to the API and rendering nothing.
+ * An icon per category, chosen from the label. This is presentation only -- it
+ * never decides what a category contains or whether a resource exists.
  */
-function resolveCategoryParam(value: string | undefined | null): string {
-  if (!value) {
-    return ALL_FILTER;
+function iconForCategory(category: string): React.ComponentProps<typeof Ionicons>["name"] {
+  if (MASS_ORDINARY_ORDER.includes(category as (typeof MASS_ORDINARY_ORDER)[number])) {
+    return "musical-notes";
   }
-  if (value.trim().toLowerCase() === ALL_FILTER.toLowerCase()) {
-    return ALL_FILTER;
+  if (category === "Marian" || category === "Rosary") {
+    return "flower";
   }
-  return canonicaliseCategory(value.trim()) ?? ALL_FILTER;
+  if (category === "Wedding" || category === "Baptism" || category === "Funeral") {
+    return "ribbon";
+  }
+  if (category === "Latin") {
+    return "language";
+  }
+  if (category === "Choir Practice") {
+    return "school";
+  }
+  if (category === "Saints") {
+    return "star";
+  }
+  if (category === "Benediction" || category === "Adoration") {
+    return "sunny";
+  }
+  return "folder-open";
 }
 
-const seasons = [
-  "All Seasons",
-  "Advent",
-  "Christmas",
-  "Lent",
-  "Holy Week",
-  "Triduum",
-  "Easter",
-  "Pentecost",
-  "Ordinary Time",
-];
-
-const languages = [
-  "All Languages",
-  "English",
-  "Swahili",
-  "Latin",
-  "Other",
-];
-
-const fileTypes = [
-  "All Types",
-  "Audio",
-  "PDF",
-  "Video",
-  "Lyrics",
-  "Sheet Music",
-];
-
-// Voices / parts for choral resources
-const voiceParts = [
-  "All Voices",
-  "Soprano",
-  "Alto",
-  "Tenor",
-  "Bass",
-  "SATB",
-];
-
-// Common Western key signatures (ASCII sharp/flat spelling)
-const keySignatures = [
-  "All Keys",
-  "C",
-  "G",
-  "D",
-  "A",
-  "E",
-  "B",
-  "F#",
-  "Bb",
-  "Eb",
-  "Ab",
-  "Db",
-  "Gb",
-  "F",
-];
-
-// Tempo / metre markings
-const tempoMarkers = [
-  "All Tempos",
-  "Largo",
-  "Andante",
-  "Moderato",
-  "Allegro",
-  "Presto",
-  "Slow",
-  "Moderate",
-  "Fast",
-];
-
 export default function Choir() {
-  // Home's category grid and deep links navigate here with `?category=`. The
-  // screen used to ignore this param entirely and always start on "All", so the
-  // tap appeared to do nothing.
   const { category: categoryParam } = useLocalSearchParams<{ category?: string }>();
+  const router = useRouter();
+  const { width } = useWindowDimensions();
+  const isWide = width >= 900;
+  const player = useChoirPlayer();
 
-  const [resources, setResources] = useState<ChoirResource[]>([]);
-  const [filtered, setFiltered] = useState<ChoirResource[]>([]);
-
-  const [search, setSearch] = useState("");
-  const [category, setCategory] = useState(() => resolveCategoryParam(categoryParam));
-  const [season, setSeason] = useState("All Seasons");
-  const [language, setLanguage] = useState("All Languages");
-  const [fileType, setFileType] = useState("All Types");
-  const [voicePart, setVoicePart] = useState("All Voices");
-  const [keySignature, setKeySignature] = useState("All Keys");
-  const [tempo, setTempo] = useState("All Tempos");
-
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [categories, setCategories] = useState<ChoirCategoriesResponse | null>(null);
+  const [categoriesError, setCategoriesError] = useState<string | null>(null);
+  const [categoriesOffline, setCategoriesOffline] = useState(false);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
 
-  const [showSeasons, setShowSeasons] = useState(false);
-  const [showLanguages, setShowLanguages] = useState(false);
-  const [showFileTypes, setShowFileTypes] = useState(false);
-  const [showVoicePart, setShowVoicePart] = useState(false);
-  const [showKeySignature, setShowKeySignature] = useState(false);
-  const [showTempo, setShowTempo] = useState(false);
+  const [search, setSearch] = useState("");
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [sort, setSort] = useState<ChoirSort>("recent");
 
-  useEffect(() => {
-    loadFavorites();
-  }, []);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [notice, setNotice] = useState<{ tone: "info" | "error"; message: string } | null>(null);
+  const [searchResults, setSearchResults] = useState<ChoirResource[] | null>(null);
+  const [searchBusy, setSearchBusy] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
-  // Keep the filter in step with the param. This covers returning to an already
-  // mounted tab screen, where only the param changes and state would otherwise
-  // keep the previous filter.
+  const liturgy = useLiturgicalToday();
+
+  // Home's category grid deep-links here with `?category=`.
   useEffect(() => {
-    void Promise.resolve().then(() => setCategory(resolveCategoryParam(categoryParam)));
+    const raw = typeof categoryParam === "string" ? categoryParam.trim() : "";
+    // Home's category grid deep-links here with `?category=`. The label is
+    // canonicalised first: an unrecognised or legacy value must fall back to
+    // browsing everything rather than being sent to the API as-is, where an
+    // unknown filter matches nothing and the page looks simply empty.
+    const next = raw ? (canonicaliseCategory(raw) ?? null) : null;
+    // Deferred into a microtask: this mirrors the rest of the app's navigation
+    // param handling and keeps the state update out of the effect body.
+    void Promise.resolve().then(() => setActiveCategory(next));
   }, [categoryParam]);
 
-  async function loadFavorites() {
-    try {
-        const favs = await favoriteService.getFavorites();
-        setFavorites(favs);
-    } catch (error) {
-        console.error("Failed to load favorites", error);
+  const loadCategories = useCallback(async () => {
+    const result = await fetchCategories();
+    if (result.kind === "ok") {
+      setCategories(result.data);
+      setCategoriesError(null);
+      setCategoriesOffline(result.offline === true);
+    } else {
+      setCategoriesError(result.failure.message);
     }
-  }
+  }, []);
 
-  async function toggleFavorite(item: ChoirResource) {
-    const isFavorited = favorites.some(f => f.resource_type === 'choir' && f.target_resource_id === item.id);
-    const favorite = favorites.find(f => f.resource_type === 'choir' && f.target_resource_id === item.id);
-    
-    try {
-      if (isFavorited && favorite) {
-        await favoriteService.deleteFavorite(favorite.id);
-        setFavorites(favorites.filter(f => f.id !== favorite.id));
-      } else {
-        const newFav = await favoriteService.createFavorite('choir', item.id);
-        setFavorites([...favorites, newFav]);
-      }
-    } catch (error: any) {
-      Alert.alert("Error", "Could not toggle favorite");
-    }
-  }
+  const loadFavorites = useCallback(async () => {
+    // `getFavoritesOptional` never rejects: an anonymous visitor simply has no
+    // bookmarks, which is not an error worth an alert.
+    const favs = await favoriteService.getFavoritesOptional();
+    setFavorites(favs);
+  }, []);
 
-  // Server-side fetch whenever a server-side facet (or text search) changes.
   useEffect(() => {
-    loadResources();
-  }, [
-    search,
-    category,
-    language,
-    season,
-    voicePart,
-    keySignature,
-    tempo,
-  ]);
+    void (async () => {
+      await Promise.all([loadCategories(), loadFavorites()]);
+      setInitialLoading(false);
+    })();
+  }, [loadCategories, loadFavorites]);
 
-  // Client-side post-filter applied to the server result set (file_type only).
-  useEffect(() => {
-    filterResources();
-  }, [resources, fileType]);
+  const isFavorited = useCallback(
+    (id: number) =>
+      favorites.some((f) => f.resource_type === "choir" && f.target_resource_id === id),
+    [favorites],
+  );
 
-  async function loadResources() {
-    try {
-      setLoading(true);
-
-      const params: Record<string, string> = {};
-      if (search.trim()) {
-        params.query = search.trim();
-      }
-      if (category !== ALL_FILTER) {
-        params.category = category;
-      }
-      if (language !== "All Languages") {
-        params.language = language;
-      }
-      if (season !== "All Seasons") {
-        params.season = season;
-      }
-      if (voicePart !== "All Voices") {
-        params.voice_part = voicePart;
-      }
-      if (keySignature !== "All Keys") {
-        params.key_signature = keySignature;
-      }
-      if (tempo !== "All Tempos") {
-        params.tempo = tempo;
-      }
-
-      const response = await api.get("/api/choir/", { params });
-
-      const data =
-        Array.isArray(response.data)
-          ? response.data
-          : response.data?.items || [];
-
-      setResources(data);
-    } catch (error) {
-      Alert.alert("Error", "Unable to load choir resources.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }
-
-  // Client-side post-filter. All database-capable facets (search, category,
-  // season, language, voice part, key signature and tempo) are applied by
-  // loadResources via server-side query parameters. Only the file-type facet
-  // remains here because file_type stores a raw extension (e.g. mp3) and is
-  // matched with a substring include for parity with prior behaviour.
-  function filterResources() {
-    let data = [...resources];
-
-    if (fileType !== "All Types") {
-      const ft = fileType.toLowerCase();
-      data = data.filter((item) =>
-        item.file_type?.toLowerCase().includes(ft)
+  const toggleFavorite = useCallback(
+    async (resource: ChoirResource) => {
+      const existing = favorites.find(
+        (f) => f.resource_type === "choir" && f.target_resource_id === resource.id,
       );
-    }
+      try {
+        if (existing) {
+          await favoriteService.deleteFavorite(existing.id);
+          setFavorites((current) => current.filter((f) => f.id !== existing.id));
+          setNotice({ tone: "info", message: `Removed “${resource.title}” from bookmarks.` });
+        } else {
+          const created = await favoriteService.createFavorite("choir", resource.id);
+          setFavorites((current) => [...current, created]);
+          setNotice({ tone: "info", message: `Saved “${resource.title}” to bookmarks.` });
+        }
+      } catch (error) {
+        const failure = classifyRequestFailure(error, {
+          fallbackNotFound: "That resource is not available.",
+          fallbackMessage: "Could not reach the server. Check your connection and try again.",
+        });
+        // Reported in place. Navigating away here -- to /login, or worse to an
+        // unrelated screen -- would throw away the member's place in the library
+        // and hide the only actionable message. A signed-out visitor gets told
+        // to sign in; the sign-in link is a separate, deliberate action.
+        setNotice({
+          tone: "error",
+          message:
+            failure.kind === "unauthorized"
+              ? "Sign in to bookmark choir resources."
+              : failure.message,
+        });
+      }
+    },
+    [favorites],
+  );
 
-    setFiltered(data);
-  }
+  // --- Shelves -------------------------------------------------------------
+  // Each shelf is one bounded request. A shelf that fails renders its own
+  // message and retry; the rest of the page stays usable.
 
-  async function refresh() {
-    setRefreshing(true);
-    await loadResources();
-  }
+  const [massShelf, setMassShelf] = useState<Shelf | null>(null);
+  const [featuredShelf, setFeaturedShelf] = useState<Shelf | null>(null);
+  const [practiceShelf, setPracticeShelf] = useState<Shelf | null>(null);
+  const [recentShelf, setRecentShelf] = useState<Shelf | null>(null);
+  const [seasonShelf, setSeasonShelf] = useState<Shelf | null>(null);
+  const [offlineShelf, setOfflineShelf] = useState<Shelf | null>(null);
 
-  async function openFile(resource: ChoirResource) {
-    if (!resource.file_url) {
-      Alert.alert(
-        "Unavailable",
-        "This resource does not have a file."
-      );
+  /**
+   * Files this device holds a local copy of.
+   *
+   * Built from `offlineStore` rather than from a cached API list on purpose:
+   * the library endpoint is permission-scoped, so a stored list could show a
+   * member something their account no longer has access to. These are items
+   * the member explicitly saved.
+   */
+  const loadOfflineShelf = useCallback(async () => {
+    const entries = await listCachedResources();
+    if (!entries.length) {
+      setOfflineShelf(null);
       return;
     }
+    setOfflineShelf({
+      key: "offline",
+      title: "Saved on this device",
+      subtitle: "Plays without a connection",
+      resources: entries.map((entry) =>
+        normaliseResource({
+          id: entry.id,
+          title: entry.title,
+          file_url: entry.fileUrl,
+          is_downloaded: true,
+        }),
+      ),
+    });
+  }, []);
 
-    try {
-      // `safeExternalUrl` refuses any scheme other than http(s). `new URL` alone
-      // would happily accept `file:`, `data:` or an app deep link stored in
-      // `file_url` and hand it to the OS handler.
-      const directUrl =
-        resource.parish_id == null
-          ? safeExternalUrl(resource.file_url, API_URL)
-          : null;
+  const loadShelf = useCallback(
+    async (
+      set: (shelf: Shelf) => void,
+      key: string,
+      title: string,
+      subtitle: string | undefined,
+      filters: Parameters<typeof fetchResources>[0],
+    ) => {
+      set({ key, title, subtitle, resources: [], loading: true });
+      const result = await fetchResources(filters);
+      if (result.kind === "ok") {
+        set({ key, title, subtitle, resources: result.data });
+      } else {
+        set({ key, title, subtitle, resources: [], error: result.failure.message });
+      }
+    },
+    [],
+  );
 
-      const fileUri =
-        resource.parish_id == null
-          ? directUrl
-          : await cacheResource(resource);
+  const loadAllShelves = useCallback(async () => {
+    const jobs: Promise<void>[] = [
+      loadOfflineShelf(),
+      loadShelf(setFeaturedShelf, "featured", "Most loved by choirs", "Ranked by real downloads", {
+        sort: "popular",
+        limit: 6,
+      }),
+      loadShelf(setRecentShelf, "recent", "Recently added", undefined, {
+        sort: "recent",
+        limit: 8,
+      }),
+      loadShelf(setMassShelf, "mass", "Prepare for Mass", "The ordinary, in the order it is sung", {
+        categories: [...MASS_ORDINARY_ORDER],
+        sort: "title",
+      }),
+      loadShelf(setPracticeShelf, "practice", "Choir practice", "Rehearsal and formation material", {
+        category: PRACTICE_CATEGORY,
+        sort: "recent",
+        limit: 4,
+      }),
+    ];
 
-      if (!fileUri) {
-        Alert.alert(
-          "Unavailable",
-          "This resource does not have a usable link."
-        );
+    // Only ask for a season shelf once the liturgy service has actually named a
+    // season the library carries. This is not a hard-coded season.
+    const seasonCategory = liturgy.status === "ready" ? liturgy.value.seasonCategory : null;
+    if (seasonCategory) {
+      jobs.push(
+        loadShelf(
+          setSeasonShelf,
+          "season",
+          `For ${liturgy.value?.season ?? seasonCategory}`,
+          undefined,
+          { category: seasonCategory, sort: "popular", limit: 6 },
+        ),
+      );
+    } else {
+      setSeasonShelf(null);
+    }
+
+    await Promise.all(jobs);
+  }, [loadShelf, loadOfflineShelf, liturgy]);
+
+  useEffect(() => {
+    if (initialLoading) {
+      return;
+    }
+    // Deferred so the shelf state updates land outside the effect body. The
+    // effect re-runs when `liturgy` resolves, which is what fills the season
+    // shelf once the calendar has actually named a season.
+    void Promise.resolve().then(() => loadAllShelves());
+  }, [initialLoading, loadAllShelves]);
+
+  // --- Search / browse results ---------------------------------------------
+
+  const resultsRequestId = useRef(0);
+
+  const runBrowse = useCallback(async () => {
+    const token = ++resultsRequestId.current;
+    if (!activeCategory && !search.trim()) {
+      setSearchResults(null);
+      setSearchError(null);
+      return;
+    }
+    setSearchBusy(true);
+    const result = await fetchResources({
+      category: activeCategory,
+      query: search.trim() || null,
+      sort,
+    });
+    // Ignore a response that a newer keystroke has already superseded.
+    if (token !== resultsRequestId.current) {
+      return;
+    }
+    setSearchBusy(false);
+    if (result.kind === "ok") {
+      setSearchResults(result.data);
+      setSearchError(null);
+    } else {
+      setSearchResults([]);
+      setSearchError(result.failure.message);
+    }
+  }, [activeCategory, search, sort]);
+
+  // Debounced so typing does not fire a request per keystroke.
+  useEffect(() => {
+    if (initialLoading) {
+      return;
+    }
+    const handle = setTimeout(() => void runBrowse(), 300);
+    return () => clearTimeout(handle);
+  }, [runBrowse, initialLoading]);
+
+  const openCategory = useCallback((category: string | null) => {
+    setActiveCategory(category);
+  }, []);
+
+  const clearAll = useCallback(() => {
+    setActiveCategory(null);
+    setSearch("");
+    setSort("recent");
+  }, []);
+
+  const hasQuery = Boolean(activeCategory) || search.trim().length > 0;
+  const gridColumns = isWide ? 4 : width >= 620 ? 3 : 2;
+
+  const browseTitle = useMemo(() => {
+    if (search.trim()) {
+      return `Results for "${search.trim()}"`;
+    }
+    return activeCategory ?? "All resources";
+  }, [activeCategory, search]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([loadCategories(), loadFavorites(), loadAllShelves()]);
+    setRefreshing(false);
+  }, [loadAllShelves, loadCategories, loadFavorites]);
+
+  // Authorised contributors only. `require_admin` is enforced server-side on the
+  // upload route; this only decides whether to offer the affordance.
+  const [canContribute, setCanContribute] = useState(false);
+  useEffect(() => {
+    void (async () => {
+      const stored = await AsyncStorage.multiGet(["user", "user_role"]).catch(() => null);
+      if (!stored) {
+        setCanContribute(false);
         return;
       }
+      const map = Object.fromEntries(stored);
+      const role = map.user_role ?? "";
+      setCanContribute(role === "admin" || role === "super_admin");
+    })();
+  }, []);
 
-      const supported =
-        await Linking.canOpenURL(fileUri);
-
-      if (!supported) {
-        Alert.alert(
-          "Cannot Open",
-          "This resource cannot be opened on this device."
-        );
-        return;
-      }
-
-      await Linking.openURL(fileUri);
-    } catch {
-      Alert.alert(
-        "Error",
-        "Unable to open this resource."
+  const renderShelf = (shelf: Shelf | null) => {
+    if (!shelf || shelf.loading) {
+      return (
+        <View style={styles.shelfLoading}>
+          <ActivityIndicator color={ChoirTheme.green} />
+          <Text style={styles.shelfLoadingText}>{shelf?.title ?? "Loading"}</Text>
+        </View>
       );
     }
-  }
-
-  async function downloadResource(resource: ChoirResource) {
-    try {
-      await cacheResource(resource);
-      await api.post(`/api/downloads/${resource.id}`);
-      Alert.alert("Downloaded", "This resource is available offline and recorded in your downloads.");
-    } catch (error: any) {
-      Alert.alert(
-        "Download Failed",
-        error?.response?.data?.detail ||
-          "The file could not be downloaded. Check your connection and try again."
+    if (shelf.error) {
+      return (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{shelf.title}</Text>
+          <ErrorState
+            message={shelf.error}
+            onRetry={() => void loadAllShelves()}
+            retryLabel="Reload"
+          />
+        </View>
       );
     }
-  }
-
-  function getFileIcon(fileType: string) {
-    const type = fileType?.toLowerCase() || "";
-
-    if (type.includes("audio")) return "🎵";
-    if (type.includes("video")) return "🎬";
-    if (type.includes("pdf")) return "📄";
-    if (type.includes("sheet")) return "🎼";
-    if (type.includes("lyrics")) return "📝";
-
-    return "🎶";
-  }
-
-  function renderItem({
-    item,
-  }: {
-    item: ChoirResource;
-  }) {
+    if (shelf.resources.length === 0) {
+      // An empty shelf is stated, not padded. Saying "no choir practice material
+      // yet" is honest; showing a skeleton card would not be.
+      return (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{shelf.title}</Text>
+          <Text style={styles.shelfEmpty}>
+            Nothing published here yet. An authorized contributor can add the first one.
+          </Text>
+        </View>
+      );
+    }
     return (
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <Text style={styles.icon}>
-            {getFileIcon(item.file_type)}
-          </Text>
-
-          <View style={styles.titleContainer}>
-            <Text style={styles.songTitle}>
-              {item.title}
-            </Text>
-
-            <Text style={styles.category}>
-              {item.category}
-            </Text>
-          </View>
-          <TouchableOpacity onPress={() => toggleFavorite(item)}>
-            <Ionicons name={favorites.some(f => f.resource_type === 'choir' && f.target_resource_id === item.id) ? "bookmark" : "bookmark-outline"} size={24} color="#0B6623" />
-          </TouchableOpacity>
-        </View>
-
-        {item.description ? (
-          <Text style={styles.description}>
-            {item.description}
-          </Text>
-        ) : null}
-
-        <View style={styles.tags}>
-          <Text style={styles.tag}>
-            {item.file_type?.toUpperCase()}
-          </Text>
-
-          {item.language ? (
-            <Text style={styles.tag}>
-              {item.language}
-            </Text>
-          ) : null}
-
-          {item.season ? (
-            <Text style={styles.tag}>
-              {item.season}
-            </Text>
-          ) : null}
-
-          {item.voice_part ? (
-            <Text style={styles.tag}>
-              {item.voice_part}
-            </Text>
-          ) : null}
-        </View>
-
-        {item.composer ? (
-          <Text style={styles.metadata}>
-            Composer: {item.composer}
-          </Text>
-        ) : null}
-
-        {item.key_signature ? (
-          <Text style={styles.metadata}>
-            Key: {item.key_signature}
-          </Text>
-        ) : null}
-
-        {item.tempo ? (
-          <Text style={styles.metadata}>
-            Tempo: {item.tempo}
-          </Text>
-        ) : null}
-
-        {item.duration ? (
-          <Text style={styles.metadata}>
-            Duration: {item.duration}
-          </Text>
-        ) : null}
-
-        <TouchableOpacity
-          style={styles.button}
-          onPress={() =>
-            openFile(item)
-          }
-        >
-          <Text style={styles.buttonText}>
-            Open Resource
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.secondaryButton}
-          onPress={() => downloadResource(item)}
-        >
-          <Text style={styles.secondaryButtonText}>
-            Save Download
-          </Text>
-        </TouchableOpacity>
-        <ReportButton resourceType="choir" resourceId={item.id} />
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>{shelf.title}</Text>
+        {shelf.subtitle ? <Text style={styles.sectionSubtitle}>{shelf.subtitle}</Text> : null}
+        {shelf.resources.map((resource) => (
+          <ChoirResourceCard
+            key={resource.id}
+            resource={resource}
+            isFavorited={isFavorited(resource.id)}
+            onToggleFavorite={toggleFavorite}
+            onPlay={(resource) => void player.play(resource)}
+            compact={isWide}
+          />
+        ))}
       </View>
     );
-  }
+  };
 
-  function closeAllDropdowns() {
-    setShowSeasons(false);
-    setShowLanguages(false);
-    setShowFileTypes(false);
-    setShowVoicePart(false);
-    setShowKeySignature(false);
-    setShowTempo(false);
-  }
-
-  function toggleDropdown(
-    isOpen: boolean,
-    setIsOpen: (isOpen: boolean) => void
-  ) {
-    if (isOpen) {
-      setIsOpen(false);
-    } else {
-      closeAllDropdowns();
-      setIsOpen(true);
-    }
-  }
-
-  function renderFilterButton(
-    label: string,
-    active: boolean,
-    onPress: () => void
-  ) {
+  if (initialLoading) {
     return (
-      <TouchableOpacity
-        style={[
-          styles.filterButton,
-          active && styles.filterButtonActive,
-        ]}
-        onPress={onPress}
-      >
-        <Text
-          style={[
-            styles.filterText,
-            active && styles.filterTextActive,
-          ]}
-        >
-          {label}
-        </Text>
-      </TouchableOpacity>
-    );
-  }
-
-  if (loading) {
-    return (
-      <View style={styles.loading}>
-        <ActivityIndicator
-          size="large"
-          color="#0B6623"
-        />
-
-        <Text style={styles.loadingText}>
-          Loading choir resources...
-        </Text>
+      <View style={styles.fullBleed}>
+        <ScrollView contentContainerStyle={styles.page}>
+          <View style={styles.content}>
+            <ActivityIndicator size="large" color={ChoirTheme.green} />
+            <Text style={styles.loadingText}>Opening the choir library…</Text>
+          </View>
+        </ScrollView>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>
-        Choir Resources
-      </Text>
-
-      <Text style={styles.subtitle}>
-        Catholic Mass Songs, Hymns & Choir Resources
-      </Text>
-
-      <TextInput
-        placeholder="Search songs, hymns, composers..."
-        placeholderTextColor="#888"
-        style={styles.search}
-        value={search}
-        onChangeText={setSearch}
-      />
-
+    <View style={styles.fullBleed}>
       <ScrollView
-        style={styles.categoriesScroll}
-        contentContainerStyle={styles.categoriesContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* "All" is a browse filter, not a resource category. It sits above the
-            three sections so users can clear the category filter in one tap. */}
-        <View style={styles.categoryRow}>
-          <TouchableOpacity
-            style={[
-              styles.categoryButton,
-              category === ALL_FILTER && styles.categoryActive,
-            ]}
-            onPress={() => setCategory(ALL_FILTER)}
-          >
-            <Text
-              style={[
-                styles.categoryText,
-                category === ALL_FILTER && styles.categoryTextActive,
-              ]}
-            >
-              {ALL_FILTER}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {CHOIR_CATEGORY_SECTIONS.map((section) => (
-          <View key={section.title} style={styles.categorySection}>
-            <Text style={styles.categorySectionTitle}>
-              {section.title}
-            </Text>
-            <View style={styles.categoryRow}>
-              {section.categories.map((item) => {
-                const active = category === item;
-                return (
-                  <TouchableOpacity
-                    key={item}
-                    style={[
-                      styles.categoryButton,
-                      active && styles.categoryActive,
-                    ]}
-                    onPress={() => setCategory(item)}
-                  >
-                    <Text
-                      style={[
-                        styles.categoryText,
-                        active && styles.categoryTextActive,
-                      ]}
-                    >
-                      {item}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-        ))}
-      </ScrollView>
-
-      <View style={styles.filterRow}>
-        {renderFilterButton(
-          season,
-          season !== "All Seasons",
-          () => toggleDropdown(showSeasons, setShowSeasons)
-        )}
-
-        {renderFilterButton(
-          language,
-          language !== "All Languages",
-          () => toggleDropdown(showLanguages, setShowLanguages)
-        )}
-
-        {renderFilterButton(
-          fileType,
-          fileType !== "All Types",
-          () => toggleDropdown(showFileTypes, setShowFileTypes)
-        )}
-
-        {renderFilterButton(
-          voicePart,
-          voicePart !== "All Voices",
-          () => toggleDropdown(showVoicePart, setShowVoicePart)
-        )}
-
-        {renderFilterButton(
-          keySignature,
-          keySignature !== "All Keys",
-          () => toggleDropdown(showKeySignature, setShowKeySignature)
-        )}
-
-        {renderFilterButton(
-          tempo,
-          tempo !== "All Tempos",
-          () => toggleDropdown(showTempo, setShowTempo)
-        )}
-      </View>
-
-      {showSeasons && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.dropdown}
-        >
-          {seasons.map((item) => (
-            <TouchableOpacity
-              key={item}
-              style={[
-                styles.dropdownItem,
-                season === item &&
-                  styles.dropdownActive,
-              ]}
-              onPress={() => {
-                setSeason(item);
-                setShowSeasons(false);
-              }}
-            >
-              <Text
-                style={
-                  season === item
-                    ? styles.dropdownActiveText
-                    : styles.dropdownText
-                }
-              >
-                {item}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      )}
-
-      {showLanguages && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.dropdown}
-        >
-          {languages.map((item) => (
-            <TouchableOpacity
-              key={item}
-              style={[
-                styles.dropdownItem,
-                language === item &&
-                  styles.dropdownActive,
-              ]}
-              onPress={() => {
-                setLanguage(item);
-                setShowLanguages(false);
-              }}
-            >
-              <Text
-                style={
-                  language === item
-                    ? styles.dropdownActiveText
-                    : styles.dropdownText
-                }
-              >
-                {item}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      )}
-
-      {showFileTypes && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.dropdown}
-        >
-          {fileTypes.map((item) => (
-            <TouchableOpacity
-              key={item}
-              style={[
-                styles.dropdownItem,
-                fileType === item &&
-                  styles.dropdownActive,
-              ]}
-              onPress={() => {
-                setFileType(item);
-                setShowFileTypes(false);
-              }}
-            >
-              <Text
-                style={
-                  fileType === item
-                    ? styles.dropdownActiveText
-                    : styles.dropdownText
-                }
-              >
-                {item}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      )}
-
-      {showVoicePart && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.dropdown}
-        >
-          {voiceParts.map((item) => (
-            <TouchableOpacity
-              key={item}
-              style={[
-                styles.dropdownItem,
-                voicePart === item && styles.dropdownActive,
-              ]}
-              onPress={() => {
-                setVoicePart(item);
-                setShowVoicePart(false);
-              }}
-            >
-              <Text
-                style={
-                  voicePart === item
-                    ? styles.dropdownActiveText
-                    : styles.dropdownText
-                }
-              >
-                {item}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      )}
-
-      {showKeySignature && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.dropdown}
-        >
-          {keySignatures.map((item) => (
-            <TouchableOpacity
-              key={item}
-              style={[
-                styles.dropdownItem,
-                keySignature === item && styles.dropdownActive,
-              ]}
-              onPress={() => {
-                setKeySignature(item);
-                setShowKeySignature(false);
-              }}
-            >
-              <Text
-                style={
-                  keySignature === item
-                    ? styles.dropdownActiveText
-                    : styles.dropdownText
-                }
-              >
-                {item}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      )}
-
-      {showTempo && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.dropdown}
-        >
-          {tempoMarkers.map((item) => (
-            <TouchableOpacity
-              key={item}
-              style={[
-                styles.dropdownItem,
-                tempo === item && styles.dropdownActive,
-              ]}
-              onPress={() => {
-                setTempo(item);
-                setShowTempo(false);
-              }}
-            >
-              <Text
-                style={
-                  tempo === item
-                    ? styles.dropdownActiveText
-                    : styles.dropdownText
-                }
-              >
-                {item}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      )}
-
-      <View style={styles.resultHeader}>
-        <Text style={styles.resultCount}>
-          {filtered.length} resource
-          {filtered.length === 1 ? "" : "s"}
-        </Text>
-
-        {(category !== ALL_FILTER ||
-          season !== "All Seasons" ||
-          language !== "All Languages" ||
-          fileType !== "All Types" ||
-          voicePart !== "All Voices" ||
-          keySignature !== "All Keys" ||
-          tempo !== "All Tempos" ||
-          search.trim().length > 0) && (
-          <TouchableOpacity
-            onPress={() => {
-              setCategory(ALL_FILTER);
-              setSeason("All Seasons");
-              setLanguage("All Languages");
-              setFileType("All Types");
-              setVoicePart("All Voices");
-              setKeySignature("All Keys");
-              setTempo("All Tempos");
-              setSearch("");
-            }}
-          >
-            <Text style={styles.clear}>
-              Clear Filters
-            </Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) =>
-          item.id.toString()
-        }
-        renderItem={renderItem}
-        contentContainerStyle={
-          filtered.length === 0
-            ? styles.emptyContainer
-            : undefined
-        }
+        contentContainerStyle={styles.page}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={refresh}
-            colors={["#0B6623"]}
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={ChoirTheme.green} />
         }
-        ListEmptyComponent={
-          <View style={styles.emptyBox}>
-            <Text style={styles.emptyIcon}>
-              🎵
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={[styles.content, isWide && styles.contentWide]}>
+          {/* --- Hero: compact by design; the library is the page, not the title. --- */}
+          <View style={styles.hero}>
+            <Text style={styles.heroEyebrow}>Choir Ministry</Text>
+            <Text style={styles.heroTitle}>Sacred Music Library</Text>
+            <Text style={styles.heroSubtitle}>
+              Mass parts, hymnals, psalm settings, scores and rehearsal material for the choir.
             </Text>
+            {categories ? (
+              <Text style={styles.heroStat}>
+                {categories.total} published resource{categories.total === 1 ? "" : "s"}
+              </Text>
+            ) : null}
+          </View>
 
-            <Text style={styles.empty}>
-              No choir resources found.
-            </Text>
+          {/* --- Today's celebration: entirely server-driven. --- */}
+          {liturgy.status === "loading" ? (
+            <View style={[styles.liturgyCard, styles.liturgyCardLoading]}>
+              <ActivityIndicator color={ChoirTheme.green} />
+              <Text style={styles.liturgyLoadingText}>Loading today’s celebration…</Text>
+            </View>
+          ) : liturgy.status === "ready" && liturgy.value ? (
+            <TodayCelebration
+              celebration={liturgy.value.celebration}
+              rank={liturgy.value.rank}
+              season={liturgy.value.season}
+              week={liturgy.value.week}
+              colour={liturgy.value.colour}
+              sundayCycle={liturgy.value.sundayCycle}
+              fromCache={liturgy.value.fromCache}
+              seasonCategory={liturgy.value.seasonCategory}
+              onRetry={liturgy.reload}
+            />
+          ) : (
+            <View style={styles.liturgyCard}>
+              <Text style={styles.liturgyTitle}>Today’s celebration unavailable</Text>
+              <Text style={styles.liturgyBody}>
+                The liturgical calendar could not be reached, so nothing is suggested for today
+                rather than a guessed season.
+              </Text>
+              <Pressable style={styles.retryButton} onPress={liturgy.reload} accessibilityRole="button">
+                <Text style={styles.retryText}>Try again</Text>
+              </Pressable>
+            </View>
+          )}
 
-            <Text style={styles.emptyHint}>
-              Try another category, season, voice part,
-              key signature, tempo, language, or search term.
+          {/* --- Inline notice: bookmark results and other in-place outcomes --- */}
+          {notice ? (
+            <View
+              style={[
+                styles.notice,
+                notice.tone === "error" ? styles.noticeError : styles.noticeInfo,
+              ]}
+              accessibilityLiveRegion="polite"
+            >
+              <Ionicons
+                name={
+                  notice.tone === "error"
+                    ? "alert-circle-outline"
+                    : "information-circle-outline"
+                }
+                size={16}
+                color={notice.tone === "error" ? ChoirTheme.danger : ChoirTheme.green}
+              />
+              <Text
+                style={[
+                  styles.noticeText,
+                  notice.tone === "error" ? styles.noticeTextError : styles.noticeTextInfo,
+                ]}
+              >
+                {notice.message}
+              </Text>
+              {notice.tone === "error" && notice.message.startsWith("Sign in") ? (
+                <Pressable
+                  onPress={() => router.push("/login")}
+                  accessibilityRole="button"
+                  style={styles.noticeAction}
+                >
+                  <Text style={styles.noticeActionText}>Sign in</Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  onPress={() => setNotice(null)}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel="Dismiss message"
+                  style={styles.noticeDismiss}
+                >
+                  <Ionicons name="close" size={16} color={ChoirTheme.inkFaint} />
+                </Pressable>
+              )}
+            </View>
+          ) : null}
+
+          {/* --- Search --- */}
+          <View style={styles.searchWrap}>
+            <Ionicons name="search" size={18} color={ChoirTheme.inkFaint} style={styles.searchIcon} />
+            <TextInput
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Search songs, composers, texts…"
+              placeholderTextColor={ChoirTheme.inkFaint}
+              style={styles.searchInput}
+              accessibilityLabel="Search the choir library"
+              returnKeyType="search"
+              autoCorrect={false}
+            />
+            {search.length > 0 ? (
+              <Pressable
+                onPress={() => setSearch("")}
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel="Clear search"
+                style={styles.searchClear}
+              >
+                <Ionicons name="close-circle" size={18} color={ChoirTheme.inkFaint} />
+              </Pressable>
+            ) : null}
+          </View>
+
+          {hasQuery ? (
+            /* --- Focused browse results replace the shelves --- */
+            <View style={styles.section}>
+              <View style={styles.browseHeader}>
+                <Text style={styles.sectionTitle}>{browseTitle}</Text>
+                <View style={styles.browseActions}>
+                  <SortToggle value={sort} onChange={setSort} />
+                  <Pressable
+                    onPress={clearAll}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Clear all filters"
+                  >
+                    <Text style={styles.clearLink}>Clear</Text>
+                  </Pressable>
+                </View>
+              </View>
+
+              {searchBusy ? (
+                <View style={styles.shelfLoading}>
+                  <ActivityIndicator color={ChoirTheme.green} />
+                </View>
+              ) : searchError ? (
+                <ErrorState
+                  message={searchError}
+                  onRetry={() => void runBrowse()}
+                />
+              ) : searchResults && searchResults.length === 0 ? (
+                <View style={styles.emptyBox}>
+                  <Ionicons name="search-outline" size={34} color={ChoirTheme.inkFaint} />
+                  <Text style={styles.emptyTitle}>No resources match</Text>
+                  <Text style={styles.emptyBody}>
+                    Nothing published matches these filters. Try a different category, or clear
+                    the search.
+                  </Text>
+                </View>
+              ) : (
+                searchResults?.map((resource) => (
+                  <ChoirResourceCard
+                    key={resource.id}
+                    resource={resource}
+                    isFavorited={isFavorited(resource.id)}
+                    onToggleFavorite={toggleFavorite}
+                    onPlay={(resource) => void player.play(resource)}
+                    compact={isWide}
+                  />
+                ))
+              )}
+            </View>
+          ) : (
+            <>
+              {/* --- The 27 categories, grouped and counted --- */}
+              {categoriesError ? (
+                <ErrorState message={categoriesError} onRetry={() => void loadCategories()} />
+              ) : categories ? (
+                <View>
+                  {categoriesOffline ? (
+                    /* Say so, rather than showing stale counts as if they were live. */
+                    <View style={styles.offlineBanner} accessibilityLiveRegion="polite">
+                      <Ionicons name="cloud-offline-outline" size={16} color={ChoirTheme.inkMuted} />
+                      <Text style={styles.offlineBannerText}>
+                        Offline — showing the categories saved on this device. Counts may be out of date.
+                      </Text>
+                    </View>
+                  ) : null}
+                  {categories.sections.map((section) => (
+                  <View key={section.title} style={styles.section}>
+                    <View style={styles.sectionHead}>
+                      <Ionicons
+                        name={SECTION_ICON[section.title] ?? "folder-open"}
+                        size={18}
+                        color={ChoirTheme.gold}
+                      />
+                      <Text style={styles.sectionTitle}>{section.title}</Text>
+                    </View>
+                    <View style={[styles.categoryGrid, { gap: ChoirSpace.sm }]}>
+                      {section.categories.map((category) => {
+                        const count = categories.counts[category] ?? 0;
+                        return (
+                          <Pressable
+                            key={category}
+                            onPress={() => openCategory(category)}
+                            accessibilityRole="button"
+                            accessibilityLabel={`${category}, ${count} resource${
+                              count === 1 ? "" : "s"
+                            }`}
+                            style={({ pressed }) => [
+                              styles.categoryTile,
+                              // Tiles are laid out in a fixed column count so the
+                              // rows line up instead of stretching a flex-wrap row.
+                              { width: `${100 / gridColumns}%` },
+                              count === 0 && styles.categoryTileEmpty,
+                              pressed && styles.categoryTilePressed,
+                            ]}
+                          >
+                            <View style={styles.categoryTileInner}>
+                              <Ionicons
+                                name={iconForCategory(category)}
+                                size={20}
+                                color={count === 0 ? ChoirTheme.inkFaint : ChoirTheme.green}
+                              />
+                              <Text
+                                style={[
+                                  styles.categoryTileLabel,
+                                  count === 0 && styles.categoryTileLabelEmpty,
+                                ]}
+                                numberOfLines={2}
+                              >
+                                {category}
+                              </Text>
+                              <Text style={styles.categoryTileCount}>
+                                {count} resource{count === 1 ? "" : "s"}
+                              </Text>
+                            </View>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                  ))}
+                </View>
+              ) : null}
+
+              {/* --- Shelves --- */}
+              {offlineShelf ? renderShelf(offlineShelf) : null}
+              {seasonShelf ? renderShelf(seasonShelf) : null}
+              {renderShelf(massShelf)}
+              {renderShelf(featuredShelf)}
+              {renderShelf(practiceShelf)}
+              {renderShelf(recentShelf)}
+
+              {/* --- Contributor action, only when authorised --- */}
+              {canContribute ? (
+                <Pressable
+                  onPress={() => router.push("/admin/upload")}
+                  accessibilityRole="button"
+                  style={styles.contribute}
+                >
+                  <Ionicons name="cloud-upload-outline" size={22} color={ChoirTheme.white} />
+                  <View style={styles.contributeText}>
+                    <Text style={styles.contributeTitle}>Add a choir resource</Text>
+                    <Text style={styles.contributeBody}>
+                      Upload a score, recording or lyric sheet for review.
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={ChoirTheme.white} />
+                </Pressable>
+              ) : null}
+            </>
+          )}
+
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>
+              Music and texts remain the property of their authors and publishers.
             </Text>
           </View>
-        }
-      />
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+/** Today's celebration, with the accent taken from the real liturgical colour. */
+function TodayCelebration({
+  celebration,
+  rank,
+  season,
+  week,
+  colour,
+  sundayCycle,
+  fromCache,
+  seasonCategory,
+  onRetry,
+}: {
+  celebration: string | null;
+  rank: string | null;
+  season: string | null;
+  week: number | null;
+  colour: string | null;
+  sundayCycle: string | null;
+  fromCache: boolean;
+  seasonCategory: string | null;
+  onRetry: () => void;
+}) {
+  const accent = liturgicalAccent(colour);
+  const parts = [
+    season,
+    week != null ? `Week ${week}` : null,
+    sundayCycle ? `Cycle ${sundayCycle}` : null,
+  ].filter((part): part is string => Boolean(part));
+
+  return (
+    <View
+      style={[styles.liturgyCard, { borderLeftColor: accent.accent, backgroundColor: accent.tint }]}
+    >
+      <View style={styles.liturgyHeader}>
+        <Ionicons name="sunny-outline" size={18} color={accent.accent} />
+        <Text style={styles.liturgyEyebrow}>Today’s Celebration</Text>
+        {fromCache ? (
+          <View style={styles.offlinePill}>
+            <Text style={styles.offlinePillText}>Offline</Text>
+          </View>
+        ) : null}
+      </View>
+
+      <Text style={styles.liturgyTitle}>{celebration ?? "Ordinary Time"}</Text>
+
+      {parts.length > 0 ? (
+        <View style={styles.liturgyMetaRow}>
+          {parts.map((part) => (
+            <View key={part} style={[styles.liturgyPill, { borderColor: accent.accent }]}>
+              <Text style={[styles.liturgyPillText, { color: accent.accent }]}>{part}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      <Text style={styles.liturgyBody}>
+        {seasonCategory
+          ? `The library carries ${seasonCategory} material for this season.`
+          : "Choose a category below to prepare music for this celebration."}
+      </Text>
+
+      {rank ? <Text style={styles.liturgyRank}>Rank: {rank}</Text> : null}
+    </View>
+  );
+}
+
+function SortToggle({
+  value,
+  onChange,
+}: {
+  value: ChoirSort;
+  onChange: (sort: ChoirSort) => void;
+}) {
+  const options: { value: ChoirSort; label: string }[] = [
+    { value: "recent", label: "Newest" },
+    { value: "popular", label: "Most loved" },
+    { value: "title", label: "A–Z" },
+  ];
+  return (
+    <View style={styles.sortGroup} accessibilityRole="radiogroup">
+      {options.map((option) => {
+        const selected = value === option.value;
+        return (
+          <Pressable
+            key={option.value}
+            onPress={() => onChange(option.value)}
+            accessibilityRole="radio"
+            accessibilityState={{ selected }}
+            style={[styles.sortOption, selected && styles.sortOptionActive]}
+          >
+            <Text style={[styles.sortOptionText, selected && styles.sortOptionTextActive]}>
+              {option.label}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  fullBleed: {
     flex: 1,
-    backgroundColor: "#fff",
-    paddingHorizontal: 15,
-    paddingTop: 15,
+    backgroundColor: ChoirTheme.canvas,
+  },
+  page: {
+    paddingBottom: ChoirSpace.xxl * 2,
+  },
+  content: {
+    paddingHorizontal: ChoirSpace.lg,
+    paddingTop: ChoirSpace.lg,
+    alignSelf: "center",
+    width: "100%",
+  },
+  contentWide: {
+    maxWidth: MaxChoirContentWidth,
   },
 
-  loading: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#fff",
+  hero: {
+    marginBottom: ChoirSpace.lg,
+  },
+  heroEyebrow: {
+    fontSize: ChoirType.micro,
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+    color: ChoirTheme.gold,
+    fontWeight: "700",
+  },
+  heroTitle: {
+    fontSize: ChoirType.hero,
+    fontWeight: "800",
+    color: ChoirTheme.greenDark,
+    marginTop: ChoirSpace.xs,
+  },
+  heroSubtitle: {
+    fontSize: ChoirType.body,
+    color: ChoirTheme.inkMuted,
+    marginTop: ChoirSpace.sm,
+    lineHeight: 22,
+    maxWidth: 620,
+  },
+  heroStat: {
+    fontSize: ChoirType.meta,
+    color: ChoirTheme.inkFaint,
+    marginTop: ChoirSpace.sm,
+    fontWeight: "600",
   },
 
-  loadingText: {
-    marginTop: 12,
-    color: "#666",
-  },
-
-  title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#0B6623",
-  },
-
-  subtitle: {
-    color: "#666",
-    marginTop: 4,
-    marginBottom: 15,
-  },
-
-  search: {
+  liturgyCard: {
+    borderRadius: ChoirRadius.md,
+    borderLeftWidth: 4,
     borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 15,
-    backgroundColor: "#fafafa",
-    fontSize: 15,
+    borderColor: ChoirTheme.border,
+    padding: ChoirSpace.lg,
+    marginBottom: ChoirSpace.lg,
+    backgroundColor: ChoirTheme.surface,
+  },
+  liturgyCardLoading: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: ChoirSpace.md,
+    borderLeftColor: ChoirTheme.green,
+  },
+  liturgyLoadingText: {
+    color: ChoirTheme.inkMuted,
+    fontSize: ChoirType.meta,
+  },
+  liturgyHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: ChoirSpace.sm,
+  },
+  liturgyEyebrow: {
+    fontSize: ChoirType.micro,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    fontWeight: "700",
+    color: ChoirTheme.inkMuted,
+    flex: 1,
+  },
+  offlinePill: {
+    backgroundColor: ChoirTheme.goldTint,
+    borderRadius: ChoirRadius.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  offlinePillText: {
+    fontSize: ChoirType.micro,
+    fontWeight: "700",
+    color: ChoirTheme.gold,
+  },
+  liturgyTitle: {
+    fontSize: ChoirType.section,
+    fontWeight: "700",
+    color: ChoirTheme.ink,
+    marginTop: ChoirSpace.sm,
+  },
+  liturgyMetaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: ChoirSpace.xs,
+    marginTop: ChoirSpace.md,
+  },
+  liturgyPill: {
+    borderWidth: 1,
+    borderRadius: ChoirRadius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  liturgyPillText: {
+    fontSize: ChoirType.micro,
+    fontWeight: "700",
+  },
+  liturgyBody: {
+    fontSize: ChoirType.meta,
+    color: ChoirTheme.inkMuted,
+    marginTop: ChoirSpace.md,
+    lineHeight: 20,
+  },
+  liturgyRank: {
+    fontSize: ChoirType.micro,
+    color: ChoirTheme.inkFaint,
+    marginTop: ChoirSpace.sm,
+  },
+  retryButton: {
+    marginTop: ChoirSpace.md,
+    alignSelf: "flex-start",
+    backgroundColor: ChoirTheme.green,
+    paddingHorizontal: ChoirSpace.lg,
+    paddingVertical: ChoirSpace.sm,
+    borderRadius: ChoirRadius.sm,
+    minHeight: MinTouchTarget,
+    justifyContent: "center",
+  },
+  retryText: {
+    color: ChoirTheme.white,
+    fontWeight: "700",
+    fontSize: ChoirType.meta,
+  },
+
+  notice: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: ChoirSpace.sm,
+    borderRadius: ChoirRadius.sm,
+    borderWidth: 1,
+    padding: ChoirSpace.md,
+    marginBottom: ChoirSpace.lg,
+  },
+  noticeInfo: {
+    backgroundColor: ChoirTheme.greenTint,
+    borderColor: "#BEDCC7",
+  },
+  noticeError: {
+    backgroundColor: ChoirTheme.dangerTint,
+    borderColor: "#F3C2BD",
+  },
+  noticeText: {
+    flex: 1,
+    fontSize: ChoirType.meta,
+    lineHeight: 19,
+  },
+  noticeTextInfo: {
+    color: ChoirTheme.greenDark,
+  },
+  noticeTextError: {
+    color: ChoirTheme.danger,
+  },
+  noticeAction: {
+    minHeight: MinTouchTarget,
+    minWidth: MinTouchTarget,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  noticeActionText: {
+    color: ChoirTheme.danger,
+    fontWeight: "700",
+    fontSize: ChoirType.meta,
+  },
+  noticeDismiss: {
+    minHeight: MinTouchTarget,
+    minWidth: MinTouchTarget,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  searchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: ChoirTheme.surface,
+    borderRadius: ChoirRadius.pill,
+    borderWidth: 1,
+    borderColor: ChoirTheme.border,
+    paddingHorizontal: ChoirSpace.lg,
+    minHeight: MinTouchTarget + 6,
+    marginBottom: ChoirSpace.xl,
+    ...ChoirShadow,
+  },
+  searchIcon: {
+    marginRight: ChoirSpace.sm,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: ChoirType.body,
+    color: ChoirTheme.ink,
+    paddingVertical: ChoirSpace.md,
+  },
+  searchClear: {
+    padding: ChoirSpace.xs,
+  },
+
+  section: {
+    marginBottom: ChoirSpace.xxl,
+  },
+  sectionHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: ChoirSpace.sm,
+    marginBottom: ChoirSpace.sm,
+  },
+  offlineBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: ChoirSpace.sm,
+    padding: ChoirSpace.md,
+    marginBottom: ChoirSpace.lg,
+    borderRadius: ChoirRadius.sm,
+    backgroundColor: ChoirTheme.surfaceMuted,
+    borderWidth: 1,
+    borderColor: ChoirTheme.border,
+  },
+  offlineBannerText: {
+    flex: 1,
+    fontSize: ChoirType.micro,
+    color: ChoirTheme.inkMuted,
+    lineHeight: 17,
   },
 
   sectionTitle: {
-    fontSize: 16,
+    fontSize: ChoirType.section,
     fontWeight: "700",
-    marginBottom: 10,
-    color: "#333",
+    color: ChoirTheme.greenDark,
+  },
+  sectionSubtitle: {
+    fontSize: ChoirType.meta,
+    color: ChoirTheme.inkFaint,
+    marginTop: 2,
+    marginBottom: ChoirSpace.md,
   },
 
-  categoriesScroll: {
-    marginBottom: 15,
-  },
-
-  categoriesContent: {
-    paddingBottom: 4,
-  },
-
-  categorySection: {
-    marginTop: 10,
-  },
-
-  categorySectionTitle: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#0B6623",
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-    marginBottom: 8,
-  },
-
-  categoryRow: {
+  browseHeader: {
     flexDirection: "row",
-    flexWrap: "wrap",
-  },
-
-  categoryButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#0B6623",
-    marginRight: 8,
-    marginBottom: 8,
-    backgroundColor: "#fff",
-  },
-
-  categoryActive: {
-    backgroundColor: "#0B6623",
-  },
-
-  categoryText: {
-    color: "#0B6623",
-    fontWeight: "600",
-  },
-
-  categoryTextActive: {
-    color: "#fff",
-  },
-
-  filterRow: {
-    flexDirection: "row",
-    marginBottom: 10,
-  },
-
-  filterButton: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginRight: 8,
-    backgroundColor: "#fff",
-  },
-
-  filterButtonActive: {
-    backgroundColor: "#0B6623",
-    borderColor: "#0B6623",
-  },
-
-  filterText: {
-    color: "#444",
-    fontSize: 13,
-    fontWeight: "600",
-  },
-
-  filterTextActive: {
-    color: "#fff",
-  },
-
-  dropdown: {
-    marginBottom: 10,
-  },
-
-  dropdownItem: {
-    paddingHorizontal: 13,
-    paddingVertical: 9,
-    borderRadius: 18,
-    backgroundColor: "#f1f1f1",
-    marginRight: 8,
-  },
-
-  dropdownActive: {
-    backgroundColor: "#0B6623",
-  },
-
-  dropdownText: {
-    color: "#333",
-  },
-
-  dropdownActiveText: {
-    color: "#fff",
-    fontWeight: "700",
-  },
-
-  resultHeader: {
-    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 10,
+    flexWrap: "wrap",
+    gap: ChoirSpace.sm,
+    marginBottom: ChoirSpace.md,
   },
-
-  resultCount: {
-    color: "#666",
-    fontWeight: "600",
-  },
-
-  clear: {
-    color: "#C62828",
-    fontWeight: "700",
-  },
-
-  card: {
-    backgroundColor: "#fafafa",
-    padding: 16,
-    borderRadius: 14,
-    marginBottom: 15,
-    borderWidth: 1,
-    borderColor: "#eee",
-
-    elevation: 2,
-  },
-
-  cardHeader: {
+  browseActions: {
     flexDirection: "row",
     alignItems: "center",
+    gap: ChoirSpace.md,
   },
-
-  icon: {
-    fontSize: 30,
-    marginRight: 12,
-  },
-
-  titleContainer: {
-    flex: 1,
-  },
-
-  songTitle: {
-    fontSize: 19,
+  clearLink: {
+    color: ChoirTheme.danger,
     fontWeight: "700",
-    color: "#222",
+    fontSize: ChoirType.meta,
   },
-
-  category: {
-    color: "#0B6623",
-    marginTop: 4,
+  sortGroup: {
+    flexDirection: "row",
+    backgroundColor: ChoirTheme.surfaceMuted,
+    borderRadius: ChoirRadius.pill,
+    padding: 3,
+    gap: 2,
+  },
+  sortOption: {
+    paddingHorizontal: ChoirSpace.md,
+    paddingVertical: 6,
+    borderRadius: ChoirRadius.pill,
+    minHeight: 34,
+    justifyContent: "center",
+  },
+  sortOptionActive: {
+    backgroundColor: ChoirTheme.surface,
+  },
+  sortOptionText: {
+    fontSize: ChoirType.micro,
     fontWeight: "700",
+    color: ChoirTheme.inkMuted,
+  },
+  sortOptionTextActive: {
+    color: ChoirTheme.green,
   },
 
-  description: {
-    marginTop: 12,
-    marginBottom: 10,
-    color: "#555",
-    lineHeight: 20,
-  },
-
-  tags: {
+  categoryGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    marginBottom: 8,
   },
-
-  tag: {
-    backgroundColor: "#e9f3ec",
-    color: "#0B6623",
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 15,
-    marginRight: 6,
-    marginBottom: 5,
-    fontSize: 11,
-    fontWeight: "700",
+  categoryTile: {
+    padding: ChoirSpace.xs,
   },
-
-  metadata: {
-    color: "#666",
-    marginTop: 3,
-    fontSize: 13,
-  },
-
-  button: {
-    backgroundColor: "#0B6623",
-    padding: 13,
-    borderRadius: 10,
-    marginTop: 14,
-  },
-
-  buttonText: {
-    color: "#fff",
-    textAlign: "center",
-    fontWeight: "700",
-  },
-
-  secondaryButton: {
+  categoryTileInner: {
+    backgroundColor: ChoirTheme.surface,
+    borderRadius: ChoirRadius.md,
     borderWidth: 1,
-    borderColor: "#0B6623",
-    padding: 12,
-    borderRadius: 10,
-    marginTop: 8,
+    borderColor: ChoirTheme.border,
+    paddingVertical: ChoirSpace.lg,
+    paddingHorizontal: ChoirSpace.md,
+    minHeight: 118,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: ChoirSpace.xs,
+    ...ChoirShadow,
   },
-
-  secondaryButtonText: {
-    color: "#0B6623",
-    textAlign: "center",
+  categoryTileEmpty: {
+    backgroundColor: ChoirTheme.surfaceMuted,
+    borderStyle: "dashed",
+    borderColor: ChoirTheme.borderStrong,
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  categoryTilePressed: {
+    opacity: 0.8,
+  },
+  categoryTileLabel: {
+    fontSize: ChoirType.meta,
     fontWeight: "700",
+    color: ChoirTheme.ink,
+    textAlign: "center",
+  },
+  categoryTileLabelEmpty: {
+    color: ChoirTheme.inkMuted,
+  },
+  categoryTileCount: {
+    fontSize: ChoirType.micro,
+    color: ChoirTheme.inkFaint,
   },
 
-  emptyContainer: {
-    flexGrow: 1,
+  shelfLoading: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: ChoirSpace.md,
+    paddingVertical: ChoirSpace.lg,
+  },
+  shelfLoadingText: {
+    color: ChoirTheme.inkMuted,
+    fontSize: ChoirType.meta,
+  },
+  shelfEmpty: {
+    color: ChoirTheme.inkMuted,
+    fontSize: ChoirType.meta,
+    lineHeight: 20,
+    backgroundColor: ChoirTheme.surfaceMuted,
+    borderRadius: ChoirRadius.sm,
+    padding: ChoirSpace.lg,
   },
 
   emptyBox: {
     alignItems: "center",
-    marginTop: 60,
-    paddingHorizontal: 30,
+    paddingVertical: ChoirSpace.xxl * 1.5,
+    paddingHorizontal: ChoirSpace.lg,
+    gap: ChoirSpace.sm,
   },
-
-  emptyIcon: {
-    fontSize: 45,
-    marginBottom: 12,
+  emptyTitle: {
+    fontSize: ChoirType.cardTitle,
+    fontWeight: "700",
+    color: ChoirTheme.ink,
   },
-
-  empty: {
+  emptyBody: {
+    fontSize: ChoirType.meta,
+    color: ChoirTheme.inkMuted,
     textAlign: "center",
-    color: "#888",
-    fontSize: 17,
-    fontWeight: "600",
-  },
-
-  emptyHint: {
-    textAlign: "center",
-    color: "#aaa",
-    marginTop: 8,
     lineHeight: 20,
+  },
+
+  loadingText: {
+    marginTop: ChoirSpace.md,
+    color: ChoirTheme.inkMuted,
+    fontSize: ChoirType.meta,
+  },
+
+  contribute: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: ChoirSpace.md,
+    backgroundColor: ChoirTheme.green,
+    borderRadius: ChoirRadius.md,
+    padding: ChoirSpace.lg,
+    marginBottom: ChoirSpace.xxl,
+    minHeight: MinTouchTarget + 20,
+  },
+  contributeText: {
+    flex: 1,
+  },
+  contributeTitle: {
+    color: ChoirTheme.white,
+    fontWeight: "700",
+    fontSize: ChoirType.body,
+  },
+  contributeBody: {
+    color: "#D8EBDD",
+    fontSize: ChoirType.micro,
+    marginTop: 2,
+  },
+
+  footer: {
+    borderTopWidth: 1,
+    borderTopColor: ChoirTheme.border,
+    paddingTop: ChoirSpace.lg,
+  },
+  footerText: {
+    fontSize: ChoirType.micro,
+    color: ChoirTheme.inkFaint,
+    lineHeight: 18,
   },
 });

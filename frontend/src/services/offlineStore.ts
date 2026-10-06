@@ -44,6 +44,26 @@ export async function getCachedResource(resourceId: number) {
   return new File(item.uri).exists ? item.uri : null;
 }
 
+/**
+ * Every resource this device currently holds a local copy of.
+ *
+ * Used by the library screen to offer an offline shelf. Entries whose file has
+ * since been removed outside the app are dropped here rather than shown as
+ * available and then failing to open.
+ */
+export async function listCachedResources() {
+  const entries = await readCache();
+  const alive: CachedResource[] = [];
+  for (const entry of entries) {
+    const file = new File(entry.uri);
+    if (await file.exists) alive.push(entry);
+  }
+  if (alive.length !== entries.length) {
+    await AsyncStorage.setItem(KEY, JSON.stringify(alive));
+  }
+  return alive;
+}
+
 export async function removeCachedResource(resourceId: number) {
   const cached = await readCache();
   const item = cached.find((entry) => entry.id === resourceId);

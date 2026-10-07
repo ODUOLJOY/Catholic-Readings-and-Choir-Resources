@@ -87,6 +87,15 @@ if settings.AUTO_CREATE_TABLES:
 # Credentials are enabled, so a wildcard origin is refused rather than silently
 # downgrading every request to a non-credentialed one.
 _allowed_origins = [origin for origin in settings.ALLOWED_ORIGINS if origin != "*"]
+# `FRONTEND_URL` is the canonical origin of the production frontend (it also
+# drives Google redirect-URI derivation in services/google_auth.allowed_redirect_uris
+# and password-reset/verify-email links in services/email.py). Trusting it here as
+# a CORS origin keeps a single source of truth so the allow-list cannot drift from
+# the front-end URL after a Dashboard env change -- the exact defect that left the
+# deployed web app blocked by CORS after FRONTEND_URL was corrected.
+_frontend_origin = (settings.FRONTEND_URL or "").strip().rstrip("/")
+if _frontend_origin.startswith(("http://", "https://")) and _frontend_origin not in _allowed_origins:
+    _allowed_origins.append(_frontend_origin)
 if "*" in settings.ALLOWED_ORIGINS:
     logger.warning(
         "ALLOWED_ORIGINS contains '*'; it is ignored because credentialed CORS "

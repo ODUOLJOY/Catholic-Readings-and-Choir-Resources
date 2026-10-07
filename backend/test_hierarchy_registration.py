@@ -298,6 +298,7 @@ def test_non_admin_cannot_list_inactive_rows(db, chain):
     user = User(
         full_name="Plain",
         email="plain@example.org",
+        username="plain",
         hashed_password="x",
         role="user",
         is_active=True,
@@ -317,6 +318,7 @@ def test_admin_can_list_inactive_rows(db, chain):
     admin = User(
         full_name="Boss",
         email="boss@example.org",
+        username="boss",
         hashed_password="x",
         role="admin",
         is_active=True,
@@ -343,6 +345,7 @@ def test_summary_endpoint_requires_admin(db):
     plain = User(
         full_name="Plain",
         email="plain2@example.org",
+        username="plain2",
         hashed_password="x",
         role="user",
         is_active=True,

@@ -73,6 +73,7 @@ def make_user(db, email="member@example.org", *, is_active=True):
     user = User(
         full_name="Member",
         email=email,
+        username=email.split("@")[0],
         hashed_password="not-a-real-password-hash",
         is_active=is_active,
     )
@@ -85,6 +86,7 @@ def make_admin(db, email="admin@example.org"):
     user = User(
         full_name="Admin",
         email=email,
+        username=email.split("@")[0],
         hashed_password="not-a-real-password-hash",
         role="admin",
         is_active=True,
@@ -278,6 +280,8 @@ def test_inconsistent_parish_with_foreign_diocese_is_rejected(db, chain):
         code="KE-NRB-NBI-OTHER-STRAY",
         deanery_id=chain["deanery"].id,
         diocese_id=other["diocese"].id,
+        country_id=chain["country"].id,
+        country=chain["country"].name,
     )
     db.add(stray)
     db.commit()

@@ -314,6 +314,31 @@ DEANERY_ROWS = [
     ("KE-KSM-KTL", "Tartar Deanery", "https://catholickitale.org", VERIFIED),
     ("KE-KSM-KTL", "Kapenguria Deanery", "https://catholickitale.org", VERIFIED),
     ("KE-KSM-KTL", "Ortun Deanery", "https://catholickitale.org", VERIFIED),
+
+    # Lodwar -- official /parishes sub-page lists 4 deanery groups by Dean name.
+    ("KE-KSM-LOD", "North Deanery", "https://dioceseoflodwar.org/parishes", VERIFIED),
+    ("KE-KSM-LOD", "Central Deanery", "https://dioceseoflodwar.org/parishes", VERIFIED),
+    ("KE-KSM-LOD", "Lake Deanery", "https://dioceseoflodwar.org/parishes", VERIFIED),
+    ("KE-KSM-LOD", "South Deanery", "https://dioceseoflodwar.org/parishes", VERIFIED),
+
+    # Kapsabet -- official site lists 7 deaneries with dean priests.
+    ("KE-KSM-KAP", "Kaiboi Deanery", "https://www.dioceseofkapsabet.org", VERIFIED),
+    ("KE-KSM-KAP", "Ndalat Deanery", "https://www.dioceseofkapsabet.org", VERIFIED),
+    ("KE-KSM-KAP", "Ol'Lessos Deanery", "https://www.dioceseofkapsabet.org", VERIFIED),
+    ("KE-KSM-KAP", "Chepterit Deanery", "https://www.dioceseofkapsabet.org", VERIFIED),
+    ("KE-KSM-KAP", "Cathedral Deanery", "https://www.dioceseofkapsabet.org", VERIFIED),
+    ("KE-KSM-KAP", "Nandi Hills Deanery", "https://www.dioceseofkapsabet.org", VERIFIED),
+    ("KE-KSM-KAP", "Kobujoi Deanery", "https://www.dioceseofkapsabet.org", VERIFIED),
+
+    # Wote -- official site lists 8 deaneries with per-deanery sub-pages.
+    ("KE-NRB-WTE", "Wote Deanery", "https://catholicdioceseofwote.org/wote-deanery", VERIFIED),
+    ("KE-NRB-WTE", "Kathonzweni Deanery", "https://catholicdioceseofwote.org/kathonzweni-deanery", VERIFIED),
+    ("KE-NRB-WTE", "Kiambu Deanery", "https://catholicdioceseofwote.org/kiambu-deanery", VERIFIED),
+    ("KE-NRB-WTE", "Kibwezi Deanery", "https://catholicdioceseofwote.org/kibwezi-deanery", VERIFIED),
+    ("KE-NRB-WTE", "Nzaui Deanery", "https://catholicdioceseofwote.org/nzaui-deanery", VERIFIED),
+    ("KE-NRB-WTE", "Kilungu Deanery", "https://catholicdioceseofwote.org/kilungu-deanery", VERIFIED),
+    ("KE-NRB-WTE", "Kasikeu Deanery", "https://catholicdioceseofwote.org/kasikeu-deanery", VERIFIED),
+    ("KE-NRB-WTE", "Mbooni Deanery", "https://catholicdioceseofwote.org/mbooni-deanery", VERIFIED),
 ]
 
 
@@ -333,14 +358,28 @@ DEANERIES = [_deanery(*row) for row in DEANERY_ROWS]
 # ---------------------------------------------------------------------------
 # Parishes
 # ---------------------------------------------------------------------------
-# Only the Archdiocese of Nairobi publishes a complete deanery -> parish listing
-# on its official site. Every other diocese is left at deanery level with the
-# deanery marked VERIFIED and its parishes pending an official listing.
+# Parish data extracted from official diocesan websites. Each parish is
+# attributed to its deanery by matching the deanery name on the source site.
+# Where a deanery name is shared across dioceses (e.g. "Central Deanery" in
+# both Kitui and Lodwar, "Kiambu Deanery" in both Nairobi and Wote) a
+# diocese_code disambiguator is carried alongside.
 #
-# Nairobi: 17 deaneries / 127 parishes, matching the figure the Archdiocese
-# itself publishes on https://archdioceseofnairobi.org/
+# Verified deanery -> parish data:
+#   Nairobi  17 deaneries / 127 parishes (https://archdioceseofnairobi.org)
+#   Nyeri     8 deaneries /  52 parishes (https://www.adnyeri.org)
+#   Kitui     6 deaneries /  36 parishes (https://dioceseofkitui.org)
+#     (37th parish name corrupted in source HTML; not fabricated)
+#   Lodwar    4 deanery groups / 30 parishes (https://dioceseoflodwar.org/parishes)
+#   Wote      8 deaneries /  42 parishes (https://catholicdioceseofwote.org)
+#   Total verified: 287 parishes across 43 deaneries.
+#
+# Kapsabet: 7 verified deaneries from official site, but 39 parish names
+#   extracted from a site dropdown without deanery grouping — left as
+#   PENDING_PARISHES rather than falsely assigning parishes.
+# Ngong: 15 parish names visible on landing page (site claims 41), no
+#   deanery grouping — left as PENDING_PARISHES.
 
-# (deanery name, parish name, address)
+# (deanery name, parish name, address [, diocese_code])
 PARISH_ROWS = [
     ("Embakasi Deanery", "Divine Word Parish Kayole", "P.O Box, 433-00518 KAYOLE"),
     ("Embakasi Deanery", "St. Joachim & Anne Parish, Soweto", "P.O Box 11-00518 KAYOLE"),
@@ -383,15 +422,15 @@ PARISH_ROWS = [
     ("Kabete Deanery", "St. Joseph the Worker Parish, Kangemi", "P.O Box, 23408-00625 KANGEMI"),
     ("Kabete Deanery", "St. Raphael Kabete Parish, Kabete", "P.O Box, 23676-00625 NAIROBI"),
 
-    ("Kiambu Deanery", "St. Stephen Parish, Gachie", "P.O Box, 1026-00621 VILLAGE MARKET"),
-    ("Kiambu Deanery", "St. Joseph Parish, Gathanga", "P.O Box, 774-00219 KARURI"),
-    ("Kiambu Deanery", "St. Martin de Porres Parish, Karuri", "P.O Box 78-00219 KARURI"),
-    ("Kiambu Deanery", "Sts. Peter & Paul Parish, Kiambu", "P.O Box 8-00900 KIAMBU"),
-    ("Kiambu Deanery", "Our Lady of Victories Parish, Lioki", "P.O Box 44-00900 KIAMBU"),
-    ("Kiambu Deanery", "All Saints Parish, Riara", "P.O Box, 177-00900 KIAMBU"),
-    ("Kiambu Deanery", "Our Lady of the Holy Rosary Parish, Ting'ang'a", "P.O Box, 601-00900 KIAMBU"),
-    ("Kiambu Deanery", "Holy Rosary Parish, Ikinu", "P.O Box, 100-00900 KIAMBU"),
-    ("Kiambu Deanery", "Holy Family Parish, Mugumo", "P.O Box, 2047-00900 KIAMBU"),
+    ("Kiambu Deanery", "St. Stephen Parish, Gachie", "P.O Box, 1026-00621 VILLAGE MARKET", "KE-NRB-NBI"),
+    ("Kiambu Deanery", "St. Joseph Parish, Gathanga", "P.O Box, 774-00219 KARURI", "KE-NRB-NBI"),
+    ("Kiambu Deanery", "St. Martin de Porres Parish, Karuri", "P.O Box 78-00219 KARURI", "KE-NRB-NBI"),
+    ("Kiambu Deanery", "Sts. Peter & Paul Parish, Kiambu", "P.O Box 8-00900 KIAMBU", "KE-NRB-NBI"),
+    ("Kiambu Deanery", "Our Lady of Victories Parish, Lioki", "P.O Box 44-00900 KIAMBU", "KE-NRB-NBI"),
+    ("Kiambu Deanery", "All Saints Parish, Riara", "P.O Box, 177-00900 KIAMBU", "KE-NRB-NBI"),
+    ("Kiambu Deanery", "Our Lady of the Holy Rosary Parish, Ting'ang'a", "P.O Box, 601-00900 KIAMBU", "KE-NRB-NBI"),
+    ("Kiambu Deanery", "Holy Rosary Parish, Ikinu", "P.O Box, 100-00900 KIAMBU", "KE-NRB-NBI"),
+    ("Kiambu Deanery", "Holy Family Parish, Mugumo", "P.O Box, 2047-00900 KIAMBU", "KE-NRB-NBI"),
 
     ("Kikuyu Deanery", "Immaculate Conception Parish, Gicharani", "P.O Box, 404-00902 KIKUYU"),
     ("Kikuyu Deanery", "St. Peter the Apostle Parish, Kikuyu", "P.O Box, 888-00902 KIKUYU"),
@@ -485,16 +524,232 @@ PARISH_ROWS = [
     ("Thika Deanery", "St. Bernadette Parish, Ngoingwa", "P.O. Box, 1499 THIKA"),
     ("Thika Deanery", "St. Achilles Kiwanuka Parish, Thika", None),
     ("Thika Deanery", "Holy Rosary Parish, Witeithie", None),
+
+    # Nyeri (KE-NRY-NYR) -- 52 parishes across 8 deaneries.
+    # Source: https://www.adnyeri.org
+    ("Nyeri Municipality Deanery", "St. Mary's Cathedral Parish", None, "KE-NRY-NYR"),
+    ("Nyeri Municipality Deanery", "St. Jude Parish", None, "KE-NRY-NYR"),
+    ("Nyeri Municipality Deanery", "King'ong'o Parish", None, "KE-NRY-NYR"),
+    ("Nyeri Municipality Deanery", "Mwenji Parish", None, "KE-NRY-NYR"),
+    ("Nyeri Municipality Deanery", "Kiamuiru Parish", None, "KE-NRY-NYR"),
+    ("Nyeri Municipality Deanery", "Mathari Institutions Chaplaincy", None, "KE-NRY-NYR"),
+    ("Nyeri Municipality Deanery", "St. Charles Lwanga Parish", None, "KE-NRY-NYR"),
+
+    ("Mukurwe-ini Deanery", "Mukurwe-ini Parish", None, "KE-NRY-NYR"),
+    ("Mukurwe-ini Deanery", "Kaheti Parish", None, "KE-NRY-NYR"),
+    ("Mukurwe-ini Deanery", "Kimondo Parish", None, "KE-NRY-NYR"),
+    ("Mukurwe-ini Deanery", "Gikondi Parish", None, "KE-NRY-NYR"),
+
+    ("Othaya Deanery", "Othaya Parish", None, "KE-NRY-NYR"),
+    ("Othaya Deanery", "Kariko Parish", None, "KE-NRY-NYR"),
+    ("Othaya Deanery", "Birithia Parish", None, "KE-NRY-NYR"),
+    ("Othaya Deanery", "Karima Parish", None, "KE-NRY-NYR"),
+    ("Othaya Deanery", "Kagicha Parish", None, "KE-NRY-NYR"),
+    ("Othaya Deanery", "Karuthi Parish", None, "KE-NRY-NYR"),
+    ("Othaya Deanery", "Kigumo Parish", None, "KE-NRY-NYR"),
+
+    ("Nanyuki Deanery", "Nanyuki Parish", None, "KE-NRY-NYR"),
+    ("Nanyuki Deanery", "Dol Dol Parish", None, "KE-NRY-NYR"),
+    ("Nanyuki Deanery", "Matanya Parish", None, "KE-NRY-NYR"),
+    ("Nanyuki Deanery", "St. Teresa Parish", None, "KE-NRY-NYR"),
+    ("Nanyuki Deanery", "Kalalu Parish", None, "KE-NRY-NYR"),
+
+    ("Narumoru Deanery", "Narumoru Town Parish", None, "KE-NRY-NYR"),
+    ("Narumoru Deanery", "Irigithathi Parish", None, "KE-NRY-NYR"),
+    ("Narumoru Deanery", "Thegu Parish", None, "KE-NRY-NYR"),
+    ("Narumoru Deanery", "Kiganjo Parish", None, "KE-NRY-NYR"),
+    ("Narumoru Deanery", "Munyu Parish", None, "KE-NRY-NYR"),
+
+    ("Karatina Deanery", "Karatina Parish", None, "KE-NRY-NYR"),
+    ("Karatina Deanery", "Miiri Parish", None, "KE-NRY-NYR"),
+    ("Karatina Deanery", "Giakaibei Parish", None, "KE-NRY-NYR"),
+    ("Karatina Deanery", "Gikumbo Parish", None, "KE-NRY-NYR"),
+    ("Karatina Deanery", "Gathugu Parish", None, "KE-NRY-NYR"),
+    ("Karatina Deanery", "Ngandu Parish", None, "KE-NRY-NYR"),
+    ("Karatina Deanery", "Kabiru-ini Parish", None, "KE-NRY-NYR"),
+    ("Karatina Deanery", "Kahira-ini Parish", None, "KE-NRY-NYR"),
+
+    ("Tetu Deanery", "Tetu Parish", None, "KE-NRY-NYR"),
+    ("Tetu Deanery", "Wamagana Parish", None, "KE-NRY-NYR"),
+    ("Tetu Deanery", "Kigogo-ini Parish", None, "KE-NRY-NYR"),
+    ("Tetu Deanery", "Itheguri Parish", None, "KE-NRY-NYR"),
+    ("Tetu Deanery", "Gititu Parish", None, "KE-NRY-NYR"),
+    ("Tetu Deanery", "Kagaita Parish", None, "KE-NRY-NYR"),
+    ("Tetu Deanery", "Giakanja Parish", None, "KE-NRY-NYR"),
+    ("Tetu Deanery", "Karangia Parish", None, "KE-NRY-NYR"),
+
+    ("Gatarakwa Deanery", "Mweiga Parish", None, "KE-NRY-NYR"),
+    ("Gatarakwa Deanery", "Endarasha Parish", None, "KE-NRY-NYR"),
+    ("Gatarakwa Deanery", "Gatarakwa Parish", None, "KE-NRY-NYR"),
+    ("Gatarakwa Deanery", "Karemeno Parish", None, "KE-NRY-NYR"),
+    ("Gatarakwa Deanery", "Mugunda Parish", None, "KE-NRY-NYR"),
+    ("Gatarakwa Deanery", "Sirima Parish", None, "KE-NRY-NYR"),
+    ("Gatarakwa Deanery", "Winyumiririe Parish", None, "KE-NRY-NYR"),
+    ("Gatarakwa Deanery", "Kamariki Parish", None, "KE-NRY-NYR"),
+
+    # Kitui (KE-NRB-KTI) -- 36 parishes across 6 deaneries.
+    # Source: https://dioceseofkitui.org (Southern Deanery 5th parish name
+    # is corrupted in source HTML: "St. Joseph's, voo" — excluded, not fabricated)
+    ("Northern Deanery", "St. Theresa, Kimangao", None, "KE-NRB-KTI"),
+    ("Northern Deanery", "St. Patrick's Kyuso", None, "KE-NRB-KTI"),
+    ("Northern Deanery", "Christ the King, Kamu'moongo", None, "KE-NRB-KTI"),
+    ("Northern Deanery", "St. Patrick's Nguni", None, "KE-NRB-KTI"),
+    ("Northern Deanery", "Good Shepherd, Mwingi", None, "KE-NRB-KTI"),
+
+    ("Western Deanery", "Queen of Apostles, Mbondoni", None, "KE-NRB-KTI"),
+    ("Western Deanery", "St. Peters the Rock, Kiio", None, "KE-NRB-KTI"),
+    ("Western Deanery", "St. Augustine's, Nguutani", None, "KE-NRB-KTI"),
+    ("Western Deanery", "St. Patrick's, Migwani", None, "KE-NRB-KTI"),
+    ("Western Deanery", "Christ the King, Katutu", None, "KE-NRB-KTI"),
+    ("Western Deanery", "St. James, Muthale", None, "KE-NRB-KTI"),
+    ("Western Deanery", "Blessed Sacrament, Kweluu", None, "KE-NRB-KTI"),
+    ("Western Deanery", "St. Joseph's Kanyaa", None, "KE-NRB-KTI"),
+    ("Western Deanery", "St. Theresa of the Child Jesus, Iiani", None, "KE-NRB-KTI"),
+
+    ("Central Deanery", "Holy Family, Kabati", None, "KE-NRB-KTI"),
+    ("Central Deanery", "St. Patrick's Mutune", None, "KE-NRB-KTI"),
+    ("Central Deanery", "Holy Spirit, Mulutu", None, "KE-NRB-KTI"),
+    ("Central Deanery", "St. Andrew's Kwa Vonza", None, "KE-NRB-KTI"),
+    ("Central Deanery", "Our Lady of Africa Cathedral", None, "KE-NRB-KTI"),
+    ("Central Deanery", "Our Lady of Protection, Museve", None, "KE-NRB-KTI"),
+    ("Central Deanery", "St. Paul's Kasyala", None, "KE-NRB-KTI"),
+
+    ("Southern Deanery", "St. Jude Mbitini", None, "KE-NRB-KTI"),
+    ("Southern Deanery", "St. Paul's Ikanga", None, "KE-NRB-KTI"),
+    ("Southern Deanery", "Holy Family, Mutomo", None, "KE-NRB-KTI"),
+    ("Southern Deanery", "Holy Spirit, Ikutha", None, "KE-NRB-KTI"),
+
+    ("Yatta Deanery", "St. Paul the Apostle, Kwa Kilui", None, "KE-NRB-KTI"),
+    ("Yatta Deanery", "Sacred Heart of Jesus, Kanyangi", None, "KE-NRB-KTI"),
+    ("Yatta Deanery", "St. Francis of Assisi, Kamutei", None, "KE-NRB-KTI"),
+    ("Yatta Deanery", "St. Joseph's Kavisuni", None, "KE-NRB-KTI"),
+
+    ("Eastern Deanery", "St. Mary's Miambani", None, "KE-NRB-KTI"),
+    ("Eastern Deanery", "Holy Spirit Catholic Parish, Zombe", None, "KE-NRB-KTI"),
+    ("Eastern Deanery", "St. Joseph's Mutito", None, "KE-NRB-KTI"),
+    ("Eastern Deanery", "St. Francis of Assisi, Mathuki", None, "KE-NRB-KTI"),
+    ("Eastern Deanery", "St. Mathias Mulumba, Endau", None, "KE-NRB-KTI"),
+    ("Eastern Deanery", "St. Joseph's Nuu", None, "KE-NRB-KTI"),
+    ("Eastern Deanery", "St. Michael, Mwambiu", None, "KE-NRB-KTI"),
+
+    # Lodwar (KE-KSM-LOD) -- 30 parishes across 4 deanery groups.
+    # Source: https://dioceseoflodwar.org/parishes
+    ("North Deanery", "St. John Parish, Lokichoggio", None, "KE-KSM-LOD"),
+    ("North Deanery", "St. Benedict Parish, Kalobeyei", None, "KE-KSM-LOD"),
+    ("North Deanery", "Our Lady of Sorrows Parish, Oropoi", None, "KE-KSM-LOD"),
+    ("North Deanery", "Holy Cross Parish, Kakuma Camp", None, "KE-KSM-LOD"),
+    ("North Deanery", "Good Shepherd Parish, Kakuma", None, "KE-KSM-LOD"),
+    ("North Deanery", "Sts. Titus and Timothy Parish, Kaeris", None, "KE-KSM-LOD"),
+    ("North Deanery", "St. Stephen Parish, Losajait", None, "KE-KSM-LOD"),
+
+    ("Central Deanery", "St. Augustine Cathedral", None, "KE-KSM-LOD"),
+    ("Central Deanery", "St. Michael Parish, Napetet", None, "KE-KSM-LOD"),
+    ("Central Deanery", "Holy Family Parish, Kanamkemer", None, "KE-KSM-LOD"),
+    ("Central Deanery", "Risen Christ Parish, Nakwamekwi", None, "KE-KSM-LOD"),
+    ("Central Deanery", "Holy Spirit Parish, Nawoitorong", None, "KE-KSM-LOD"),
+    ("Central Deanery", "St. Kizito Parish, Turkwel", None, "KE-KSM-LOD"),
+    ("Central Deanery", "St. Paul Mission, Namoruputh", None, "KE-KSM-LOD"),
+    ("Central Deanery", "St. Peter Parish, Lorugum", None, "KE-KSM-LOD"),
+    ("Central Deanery", "St. Gabriel Parish, Kangatotsa", None, "KE-KSM-LOD"),
+    ("Central Deanery", "St. Dominic Parish, Kerio", None, "KE-KSM-LOD"),
+
+    ("Lake Deanery", "Our Lady Queen of Peace Parish, Todonyang", None, "KE-KSM-LOD"),
+    ("Lake Deanery", "Sts. Ann & Joachim Parish, Kibich", None, "KE-KSM-LOD"),
+    ("Lake Deanery", "St. Mark Parish, Lokitaung", None, "KE-KSM-LOD"),
+    ("Lake Deanery", "St. James Parish, Kaikor", None, "KE-KSM-LOD"),
+    ("Lake Deanery", "St. Joseph Parish, Loarengak", None, "KE-KSM-LOD"),
+    ("Lake Deanery", "St. Paul Apostle Mission, Nariokotome", None, "KE-KSM-LOD"),
+    ("Lake Deanery", "St. Denis Parish, Kataboi", None, "KE-KSM-LOD"),
+    ("Lake Deanery", "Mary Mother of God Parish, Kalokol", None, "KE-KSM-LOD"),
+
+    ("South Deanery", "All Saints Parish, Kainuk", None, "KE-KSM-LOD"),
+    ("South Deanery", "Immaculate Conception Parish, Katilu", None, "KE-KSM-LOD"),
+    ("South Deanery", "St. Lawrence Parish, Nakwamoru", None, "KE-KSM-LOD"),
+    ("South Deanery", "Christ the King Parish, Lokichar", None, "KE-KSM-LOD"),
+    ("South Deanery", "St. Daniel Comboni Parish, Lokori", None, "KE-KSM-LOD"),
+
+    # Wote (KE-NRB-WTE) -- 42 parishes across 8 deaneries.
+    # Source: https://catholicdioceseofwote.org (per-deanery sub-pages)
+    ("Wote Deanery", "St. Joseph the Worker, Cathedral Parish", None, "KE-NRB-WTE"),
+    ("Wote Deanery", "St. Francis of Assisi, Mukuyuni Parish", None, "KE-NRB-WTE"),
+    ("Wote Deanery", "Our Lady of Assumption, Kaumoni Parish", None, "KE-NRB-WTE"),
+    ("Wote Deanery", "SS. Peter and Paul, Maviani Parish", None, "KE-NRB-WTE"),
+    ("Wote Deanery", "All Saints, Saga Parish", None, "KE-NRB-WTE"),
+    ("Wote Deanery", "Our Lady Queen of Peace, Kalawa Parish", None, "KE-NRB-WTE"),
+
+    ("Kathonzweni Deanery", "St. Martin de Porres, Kathonzweni Parish", None, "KE-NRB-WTE"),
+    ("Kathonzweni Deanery", "St. Joseph, Mbuvo Parish", None, "KE-NRB-WTE"),
+    ("Kathonzweni Deanery", "St. Dominic, Kitise Parish", None, "KE-NRB-WTE"),
+    ("Kathonzweni Deanery", "St. Teresa of Calcutta, Yinthungu Parish", None, "KE-NRB-WTE"),
+    ("Kathonzweni Deanery", "St. Francis of Assisi, Mavindini Parish", None, "KE-NRB-WTE"),
+
+    ("Kiambu Deanery", "St. Francis Xavier, Mwanyani Parish", None, "KE-NRB-WTE"),
+    ("Kiambu Deanery", "St. Teresa, Kwa Mwituni Parish", None, "KE-NRB-WTE"),
+    ("Kiambu Deanery", "St. Peter the Apostle, Kambu Parish", None, "KE-NRB-WTE"),
+    ("Kiambu Deanery", "St. Ann, Kavatini Parish", None, "KE-NRB-WTE"),
+    ("Kiambu Deanery", "St. Paul, Kinyamvunzi Parish", None, "KE-NRB-WTE"),
+
+    ("Kibwezi Deanery", "Our Lady of Calvary, Kibwezi Parish", None, "KE-NRB-WTE"),
+    ("Kibwezi Deanery", "St. Michael, Masaku Ndogo Parish", None, "KE-NRB-WTE"),
+    ("Kibwezi Deanery", "St. John the Baptist, Kathaka Parish", None, "KE-NRB-WTE"),
+    ("Kibwezi Deanery", "Christ the King, Kavete Parish", None, "KE-NRB-WTE"),
+    ("Kibwezi Deanery", "St. Peter, Makindu Parish", None, "KE-NRB-WTE"),
+    ("Kibwezi Deanery", "St. Francis of Assisi, Kaunguni Parish", None, "KE-NRB-WTE"),
+
+    ("Nzaui Deanery", "Sacred Heart, Mbitini Parish", None, "KE-NRB-WTE"),
+    ("Nzaui Deanery", "St. John the Evangelist, Emali Parish", None, "KE-NRB-WTE"),
+    ("Nzaui Deanery", "Good Shepherd, Kikumini Parish", None, "KE-NRB-WTE"),
+    ("Nzaui Deanery", "Christ the King, Matiliki Parish", None, "KE-NRB-WTE"),
+    ("Nzaui Deanery", "Mithini Parish", None, "KE-NRB-WTE"),
+
+    ("Kilungu Deanery", "SS. Peter and Paul, Kilungu Parish", None, "KE-NRB-WTE"),
+    ("Kilungu Deanery", "St. Joseph the Worker, Kyale Parish", None, "KE-NRB-WTE"),
+    ("Kilungu Deanery", "Corpus Christi, Ngulunyi Parish", None, "KE-NRB-WTE"),
+    ("Kilungu Deanery", "St. Francis of Assisi, Malili Parish", None, "KE-NRB-WTE"),
+    ("Kilungu Deanery", "St. Thomas Aquinas, Tangu-Salama Parish", None, "KE-NRB-WTE"),
+    ("Kilungu Deanery", "Church of the Annunciation, Kiongwani Parish", None, "KE-NRB-WTE"),
+
+    ("Kasikeu Deanery", "Church of the Resurrection, Kasikeu Parish", None, "KE-NRB-WTE"),
+    ("Kasikeu Deanery", "St. Boniface, Wautu Parish", None, "KE-NRB-WTE"),
+    ("Kasikeu Deanery", "St. Mary Goretti, Uvite Parish", None, "KE-NRB-WTE"),
+    ("Kasikeu Deanery", "St. Joseph the Worker, Sultan Hamud Parish", None, "KE-NRB-WTE"),
+
+    ("Mbooni Deanery", "Regina Mundi, Mbooni Parish", None, "KE-NRB-WTE"),
+    ("Mbooni Deanery", "Holy Trinity, Tawa Parish", None, "KE-NRB-WTE"),
+    ("Mbooni Deanery", "Holy Family, Mbumbuni Parish", None, "KE-NRB-WTE"),
+    ("Mbooni Deanery", "St. Philomena, Tulimi Parish", None, "KE-NRB-WTE"),
+    ("Mbooni Deanery", "Our Lady of Cana, Utangwe Parish", None, "KE-NRB-WTE"),
 ]
 
 _DEANERY_BY_NAME = {row["name"]: row for row in DEANERIES}
+# Composite-key lookup so deaneries with the same name across different
+# dioceses (e.g. "Central Deanery" in Kitui and Lodwar, "Kiambu Deanery"
+# in Nairobi and Wote) can be disambiguated.
+_DEANERY_BY_DIOCESE = {(row["name"], row["diocese_code"]): row for row in DEANERIES}
 
 
 def build_parishes() -> list[dict]:
-    """Return the parish rows, each resolved to its stable deanery code."""
+    """Return the parish rows, each resolved to its stable deanery code.
+
+    PARISH_ROWS entries are 3-tuples (deanery_name, parish_name, address) or
+    4-tuples (deanery_name, parish_name, address, diocese_code).  The optional
+    diocese_code disambiguates deaneries that share a name across dioceses
+    (e.g. "Central Deanery" in Kitui and Lodwar, "Kiambu Deanery" in Nairobi
+    and Wote).
+    """
     parishes: list[dict] = []
-    for deanery_name, parish_name, address in PARISH_ROWS:
-        deanery = _DEANERY_BY_NAME.get(deanery_name)
+    for row in PARISH_ROWS:
+        if len(row) == 4:
+            deanery_name, parish_name, address, diocese_code = row
+        else:
+            deanery_name, parish_name, address = row
+            diocese_code = None
+
+        deanery = None
+        if diocese_code is not None:
+            deanery = _DEANERY_BY_DIOCESE.get((deanery_name, diocese_code))
+        if deanery is None:
+            deanery = _DEANERY_BY_NAME.get(deanery_name)
         if deanery is None:
             raise KeyError(f"Unknown deanery in parish data: {deanery_name}")
         parishes.append(
@@ -525,7 +780,6 @@ DIOCESES_WITHOUT_OFFICIAL_DEANERY_DATA: dict[str, str] = {
     "KE-NRB-MKS": "KCCB links catholic-hierarchy.org only; no official diocesan site with deanery list.",
     "KE-NRB-NKR": "KCCB links catholic-hierarchy.org only; no official diocesan site with deanery list.",
     "KE-NRB-KRC": "KCCB links catholic-hierarchy.org only; no official diocesan site with deanery list.",
-    "KE-NRB-WTE": "Newly erected (2023); KCCB links catholic-hierarchy.org only.",
     "KE-NRY-MSB": "Official site publishes 17 parishes but no deanery grouping.",
     "KE-NRY-EMB": "KCCB links catholic-hierarchy.org only; no official diocesan site with deanery list.",
     "KE-NRY-NYH": "KCCB links catholic-hierarchy.org only; no official diocesan site with deanery list.",
@@ -534,11 +788,9 @@ DIOCESES_WITHOUT_OFFICIAL_DEANERY_DATA: dict[str, str] = {
     "KE-KSM-KSM": "KCCB links catholic-hierarchy.org only; no official archdiocesan site with deanery list.",
     "KE-KSM-ELD": "Official site has a deaneries page but publishes no deanery names.",
     "KE-KSM-KSI": "KCCB links catholic-hierarchy.org only; no official diocesan site with deanery list.",
-    "KE-KSM-LOD": "Official site returns HTTP 403; no verifiable listing.",
     "KE-KSM-KAK": "KCCB links catholic-hierarchy.org only; no official diocesan site with deanery list.",
     "KE-KSM-BUN": "KCCB links catholic-hierarchy.org only; no official diocesan site with deanery list.",
     "KE-KSM-HBY": "Official site is JavaScript-rendered; no static listing retrievable.",
-    "KE-KSM-KAP": "Newly erected (2025); KCCB links catholic-hierarchy.org only.",
     "KE-MBA-GRS": "Official site has a parishes page but publishes no deanery grouping.",
     "KE-MBA-MLD": "Official site unreachable at time of import.",
 }
@@ -546,12 +798,11 @@ DIOCESES_WITHOUT_OFFICIAL_DEANERY_DATA: dict[str, str] = {
 # Dioceses with verified deaneries whose parish lists are still pending.
 DIOCESES_WITH_DEANERIES_BUT_PENDING_PARISHES = (
     "KE-NRB-NGO",
-    "KE-NRB-KTI",
-    "KE-NRY-NYR",
     "KE-NRY-MER",
     "KE-NRY-MRG",
     "KE-MBA-MBA",
     "KE-KSM-KTL",
+    "KE-KSM-KAP",
 )
 
 

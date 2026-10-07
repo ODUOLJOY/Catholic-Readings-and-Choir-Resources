@@ -194,6 +194,7 @@ class Settings(BaseSettings):
         "http://localhost:3000",
         "https://catholic-readings-and-choir-resource-app.onrender.com",
         "https://catholic-readings-and-choir-resource-app.vercel.app",
+        "https://catholic-readings-and-choir-resourc.vercel.app",
         "https://stellular-clafoutis-ad641c.netlify.app",
     ]
 

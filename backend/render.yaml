@@ -67,7 +67,20 @@ services:
         value: production
 
       - key: FRONTEND_URL
-        value: https://stellular-clafoutis-ad641c.netlify.app
+        value: https://catholic-readings-and-choir-resourc.vercel.app
+
+      # Google Sign-In credentials. ID/secret are platform secrets and must be
+      # supplied in the Render dashboard (they are intentionally not committed).
+      # The redirect URI is derived from FRONTEND_URL in code
+      # (services/google_auth.allowed_redirect_uris), so the production
+      # `<FRONTEND_URL>/auth/google` callback is accepted automatically once
+      # GOOGLE_CLIENT_ID is set.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        value: https://catholic-readings-and-choir-resourc.vercel.app/auth/google
 
       # Explicit browser origins allowed to call this API with credentials.
       # Only deployed origins are listed: the local Expo web origin is matched
@@ -79,6 +92,7 @@ services:
         value: >-
           ["https://stellular-clafoutis-ad641c.netlify.app",
           "https://catholic-readings-and-choir-resource-app.vercel.app",
+          "https://catholic-readings-and-choir-resourc.vercel.app",
           "http://localhost:8081",
           "http://127.0.0.1:8081",
           "http://localhost:19006",

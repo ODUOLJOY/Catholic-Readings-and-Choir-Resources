@@ -239,3 +239,27 @@ def test_disallowed_origin_is_never_echoed(client):
     )
     assert response.status_code == 401
     assert "access-control-allow-origin" not in response.headers
+
+
+def test_lan_origin_allowed_only_when_opted_in(client):
+    """A phone/tablet on the same Wi-Fi may reach a 0.0.0.0-bound dev server only
+    when the operator explicitly sets ALLOW_LAN_ORIGINS=True. With the flag off
+    the private origin is rejected exactly like any other non-loopback origin.
+    """
+    from app.core.config import settings as _settings
+
+    lan_origin = "http://192.168.1.50:8081"
+    response = client.options(
+        "/api/auth/login",
+        headers={
+            "Origin": lan_origin,
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+
+    if _settings.ALLOW_LAN_ORIGINS:
+        assert response.status_code == 200
+        assert response.headers["access-control-allow-origin"] == lan_origin
+        assert response.headers["access-control-allow-credentials"] == "true"
+    else:
+        assert "access-control-allow-origin" not in response.headers

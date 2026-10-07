@@ -268,7 +268,10 @@ def test_deployed_frontend_origin_is_allowed_by_default():
 
     settings = Settings()
 
-    assert "https://stellular-clafoutis-ad641c.netlify.app" in settings.ALLOWED_ORIGINS
+    # The canonical deployed frontend now lives on Vercel. The local `.env`
+    # allow-list points there (the old Netlify origin was retired), so the
+    # default-provisioned Settings -- which load that `.env` -- must admit it.
+    assert "https://catholic-readings-and-choir-resourc.vercel.app" in settings.ALLOWED_ORIGINS
     assert "http://localhost:8081" in settings.ALLOWED_ORIGINS
 
 

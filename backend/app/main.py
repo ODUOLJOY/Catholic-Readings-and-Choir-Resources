@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.database import get_db, init_db
-from app.core.config import LOOPBACK_ORIGIN_RE, is_allowed_origin, settings
+from app.core.config import is_allowed_origin, origin_regex, settings
 from app.services.public_files import PublicFiles
 from app.services.migration_preflight import missing_legacy_schema
 from app.services.scheduler import scheduler as scheduler_service
@@ -105,7 +105,7 @@ if "*" in settings.ALLOWED_ORIGINS:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
-    allow_origin_regex=LOOPBACK_ORIGIN_RE,
+    allow_origin_regex=origin_regex(settings.ALLOW_LAN_ORIGINS),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -138,7 +138,7 @@ Only an origin that is explicitly allowed receives
     the header, which the browser reports as the same CORS fault the handler
     exists to prevent.
     """
-    if not is_allowed_origin(origin, _allowed_origins):
+    if not is_allowed_origin(origin, _allowed_origins, allow_lan=settings.ALLOW_LAN_ORIGINS):
         return {}
     return {
         "access-control-allow-origin": origin,

@@ -26,21 +26,66 @@ LOOPBACK_ORIGIN_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Private-use IPv4 ranges (RFC 1918) plus IPv4 link-local, on any port. Used only
+# when ALLOW_LAN_ORIGINS is enabled so a phone or tablet on the same Wi-Fi can
+# reach a 0.0.0.0-bound dev server (e.g. Origin: http://192.168.1.50:8081).
+# Loopback-only by default: a page on the public internet cannot claim a private
+# address, so this never widens the credential trust boundary to the internet --
+# only to the local LAN when the operator explicitly opts in.
+LAN_ORIGIN_RE = re.compile(
+    r"^https?://(?:"
+    r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}"
+    r"|172\.(?:1[6-9]|2[0-9]|3[01])\.\d{1,3}\.\d{1,3}"
+    r"|192\.168\.\d{1,3}\.\d{1,3}"
+    r"|169\.254\.\d{1,3}\.\d{1,3}"
+    r")(?::\d{1,5})?$",
+    re.IGNORECASE,
+)
 
-def is_allowed_origin(origin: str | None, allowed_origins: list[str]) -> bool:
+
+def origin_regex(allow_lan: bool = False) -> re.Pattern[str]:
+    """Combined ``allow_origin_regex`` value for CORSMiddleware.
+
+    Loopback is always matched on any port; private/LAN origins are added when
+    ``allow_lan`` is set. The result is fully anchored (``^...$``) so neither
+    half can match partially -- this prevents lookalike-host bypasses such as
+    ``localhost.attacker.example`` from clearing the loopback allowance.
+    """
+    if not allow_lan:
+        return LOOPBACK_ORIGIN_RE
+
+    def _strip_anchors(pat: str) -> str:
+        return pat[1:-1]
+
+    combined = "^(?:{}|{})$".format(
+        _strip_anchors(LOOPBACK_ORIGIN_RE.pattern),
+        _strip_anchors(LAN_ORIGIN_RE.pattern),
+    )
+    return re.compile(combined, re.IGNORECASE)
+
+
+def is_allowed_origin(
+    origin: str | None,
+    allowed_origins: list[str],
+    allow_lan: bool = False,
+) -> bool:
     """Report whether ``origin`` may be sent credentialed CORS headers.
 
-    An origin qualifies either by appearing in the configured allow-list or by
-    being a loopback address on any port. A wildcard never qualifies: echoing
-    ``*`` alongside credentials is invalid, and treating it as a match would
-    downgrade the credential restriction it exists to enforce.
+    An origin qualifies by appearing in the configured allow-list, by being a
+    loopback address on any port, or -- when ``allow_lan`` is set -- by being a
+    private/LAN address on any port (for local phone + tablet dev). A wildcard
+    never qualifies: echoing ``*`` alongside credentials is invalid, and
+    treating it as a match would downgrade the credential restriction it exists
+    to enforce.
     """
     if not origin:
         return False
     candidate = origin.strip().rstrip("/")
     if candidate == "*":
         return False
-    return candidate in allowed_origins or LOOPBACK_ORIGIN_RE.match(candidate) is not None
+    if candidate in allowed_origins or LOOPBACK_ORIGIN_RE.match(candidate) is not None:
+        return True
+    return bool(allow_lan and LAN_ORIGIN_RE.match(candidate) is not None)
 
 
 class Settings(BaseSettings):
@@ -232,6 +277,18 @@ class Settings(BaseSettings):
             if cleaned and cleaned not in merged:
                 merged.append(cleaned)
         return merged
+
+    # ------------------------------------------------------------------
+    # CORS: private/LAN origins for local phone + tablet dev testing.
+    #
+    # Defaults to False (secure). Set ALLOW_LAN_ORIGINS=True in the LOCAL
+    # `.env` only so a phone or tablet on the same Wi-Fi can reach a
+    # 0.0.0.0-bound dev server. NEVER enable in Render/production: that would
+    # widen credentialed CORS to the whole local network, and Render does not
+    # ship this `.env` (it is git-ignored) so the default-off behaviour is
+    # always what deploys.
+    # ------------------------------------------------------------------
+    ALLOW_LAN_ORIGINS: bool = False
 
     @field_validator("ALLOWED_HOSTS")
     @classmethod

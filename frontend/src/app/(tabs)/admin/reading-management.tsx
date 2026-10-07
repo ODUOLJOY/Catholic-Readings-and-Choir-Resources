@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { api } from "@/lib/api";
+import { requestErrorMessage } from "@/lib/requestFailure";
 
 type Reading = { id: number; reading_date: string; feast?: string; liturgical_season: string; published: boolean; first_reading_reference: string; first_reading: string; gospel_reference: string; gospel: string };
 
@@ -18,7 +19,7 @@ export default function ReadingManagement() {
       const response = await api.get("/api/readings/", { params: { page: 1, limit: 100 } });
       setItems(response.data?.items || []);
     } catch (error: any) {
-      Alert.alert("Readings unavailable", error?.response?.data?.detail || "Unable to load readings.");
+      Alert.alert("Readings unavailable", requestErrorMessage(error, "Unable to load readings."));
     } finally { setLoading(false); }
   }
 
@@ -28,7 +29,7 @@ export default function ReadingManagement() {
       else await api.post(`/api/readings/${id}/${action}`);
       await load();
     } catch (error: any) {
-      Alert.alert("Action failed", error?.response?.data?.detail || "Unable to update this reading.");
+      Alert.alert("Action failed", requestErrorMessage(error, "Unable to update this reading."));
     }
   }
 
@@ -47,7 +48,7 @@ export default function ReadingManagement() {
       setEditing(null);
       await load();
     } catch (error: any) {
-      Alert.alert("Save failed", error?.response?.data?.detail || "Unable to update this reading.");
+      Alert.alert("Save failed", requestErrorMessage(error, "Unable to update this reading."));
     } finally { setSaving(false); }
   }
 

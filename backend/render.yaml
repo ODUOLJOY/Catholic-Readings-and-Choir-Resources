@@ -26,7 +26,7 @@ services:
     #   python -m app.services.schema_bootstrap
     #   python -m app.services.permission_seed
     startCommand: |
-      python -m app.services.schema_bootstrap --check && python -m app.services.permission_seed --check && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+      python -m app.services.schema_bootstrap --check && python -m app.services.permission_seed --check && python -m app.bootstrap_super_admin && uvicorn app.main:app --host 0.0.0.0 --port $PORT
 
     autoDeploy: true
 
@@ -47,6 +47,9 @@ services:
 
       - key: BOOTSTRAP_SUPER_ADMIN_EMAIL
         value: parmenasoduol1318@gmail.com
+
+      - key: BOOTSTRAP_SUPER_ADMIN_PASSWORD
+        sync: false
 
       - key: SCHEDULED_JOB_TOKEN
         sync: false

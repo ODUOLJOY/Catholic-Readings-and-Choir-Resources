@@ -332,21 +332,38 @@ export default function Profile() {
         />
       </View>
 
-      {/* LOGOUT */}
-      <Pressable
-        style={styles.logoutButton}
-        onPress={logout}
-      >
-        <Ionicons
-          name="log-out-outline"
-          size={22}
-          color="#C62828"
-        />
+      {/* LOGOUT / SIGN IN */}
+      {user ? (
+        <Pressable
+          style={styles.logoutButton}
+          onPress={logout}
+        >
+          <Ionicons
+            name="log-out-outline"
+            size={22}
+            color="#C62828"
+          />
 
-        <Text style={styles.logoutText}>
-          Log Out
-        </Text>
-      </Pressable>
+          <Text style={styles.logoutText}>
+            Log Out
+          </Text>
+        </Pressable>
+      ) : (
+        <Pressable
+          style={styles.signInButton}
+          onPress={() => router.replace("/login")}
+        >
+          <Ionicons
+            name="log-in-outline"
+            size={22}
+            color="#0B6623"
+          />
+
+          <Text style={styles.signInText}>
+            Sign In
+          </Text>
+        </Pressable>
+      )}
 
       <Text style={styles.version}>
         Catholic Readings & Choir Resources
@@ -556,6 +573,23 @@ const styles = StyleSheet.create({
 
   logoutText: {
     color: "#C62828",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+
+  signInButton: {
+    backgroundColor: "#E8F5E9",
+    borderRadius: 12,
+    padding: 15,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginBottom: 20,
+  },
+
+  signInText: {
+    color: "#0B6623",
     fontSize: 16,
     fontWeight: "700",
   },

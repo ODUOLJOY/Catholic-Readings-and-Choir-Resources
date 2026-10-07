@@ -228,6 +228,45 @@ def _backfill_reading_references(bind) -> int:
     return len(payload)
 
 
+def _detach_dependent_foreign_keys(bind, referenced_table: str) -> list[tuple[str, str, str]]:
+    """Drop foreign keys on *other* tables that point at ``referenced_table``.
+
+    Returns ``(table, constraint_name, definition)`` so the caller can restore
+    them. Required because ``upgrade()`` creates ``reading_references`` -- which
+    references ``reading_sets`` -- before ``reading_sets`` is rebuilt, so the
+    drop below fails with ``DependentObjectsStillExist`` on any database where
+    both tables genuinely exist.
+
+    Definitions are read back through ``pg_get_constraintdef`` rather than being
+    reconstructed, so what is restored is byte-for-byte what was removed.
+    """
+    rows = bind.execute(
+        sa.text(
+            "SELECT n.nspname || '.' || cl.relname AS src, "
+            "con.conname AS name, "
+            "pg_get_constraintdef(con.oid) AS def "
+            "FROM pg_constraint con "
+            "JOIN pg_class cl ON cl.oid = con.conrelid "
+            "JOIN pg_namespace n ON n.oid = cl.relnamespace "
+            "WHERE con.contype = 'f' AND con.confrelid = to_regclass(:table)"
+        ),
+        {"table": referenced_table},
+    ).fetchall()
+
+    detached: list[tuple[str, str, str]] = []
+    for src, name, definition in rows:
+        bind.execute(sa.text(f'ALTER TABLE {src} DROP CONSTRAINT "{name}"'))
+        detached.append((src, name, definition))
+    return detached
+
+
+def _restore_foreign_keys(bind, detached: list[tuple[str, str, str]]) -> None:
+    for src, name, definition in detached:
+        bind.execute(
+            sa.text(f'ALTER TABLE {src} ADD CONSTRAINT "{name}" {definition}')
+        )
+
+
 def _recreate_reading_sets_table() -> None:
     """Rebuild ``reading_sets`` in the new shape without losing any rows.
 
@@ -284,8 +323,14 @@ def _recreate_reading_sets_table() -> None:
         )
     )
 
+    # Foreign keys from `reading_references` (created moments earlier) must be
+    # lifted off before the drop, then put back against the rebuilt table.
+    detached = _detach_dependent_foreign_keys(bind, "reading_sets")
+
     op.drop_table("reading_sets")
     op.rename_table("reading_sets_rebuilt", "reading_sets")
+
+    _restore_foreign_keys(bind, detached)
 
     op.create_index("ix_reading_sets_id", "reading_sets", ["id"])
     op.create_index("ix_reading_sets_liturgical_day_id", "reading_sets", ["liturgical_day_id"])

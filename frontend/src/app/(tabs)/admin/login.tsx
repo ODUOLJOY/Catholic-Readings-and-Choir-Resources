@@ -12,6 +12,7 @@ import {
   Ionicons,
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
+import { requestErrorMessage } from "@/lib/requestFailure";
 import { authService } from "@/services/authService";
 import { googleAuthService } from "@/services/googleAuthService";
 
@@ -49,6 +50,11 @@ export default function AdminLogin() {
       return;
     }
 
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+
     setError(null);
     setLoading(true);
 
@@ -70,8 +76,7 @@ export default function AdminLogin() {
 
       router.replace("/(tabs)/admin/dashboard");
     } catch (error: any) {
-      const detail = error?.response?.data?.detail;
-      setError(detail || "Unable to login.");
+      setError(requestErrorMessage(error, "Unable to login."));
     } finally {
       setLoading(false);
     }
@@ -98,8 +103,7 @@ export default function AdminLogin() {
 
       router.replace("/(tabs)/admin/dashboard");
     } catch (error: any) {
-      const detail = error?.response?.data?.detail;
-      setError(detail || "Unable to sign in with Google.");
+      setError(requestErrorMessage(error, "Unable to sign in with Google."));
     } finally {
       setGoogleLoading(false);
     }

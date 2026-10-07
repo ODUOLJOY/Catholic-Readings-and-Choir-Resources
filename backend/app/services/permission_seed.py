@@ -51,9 +51,10 @@ from app.models.permissions import (
 
 logger = logging.getLogger(__name__)
 
-# Recorded against seeded rows so an operator can tell them apart from grants a
-# human administrator made deliberately.
-SEED_GRANTED_BY = "system-seed"
+# ``granted_by`` is a foreign key to ``users.id``, so it cannot hold a marker
+# string. NULL is that marker: no person granted these rows, the deploy did.
+# Revision 20261006_03 relaxes the column to allow it.
+SEED_GRANTED_BY = None
 
 
 def seed_permissions(db: Session) -> dict[str, int]:

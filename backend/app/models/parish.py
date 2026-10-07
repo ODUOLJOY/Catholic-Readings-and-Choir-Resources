@@ -31,7 +31,7 @@ class Parish(Base, SourceMetadataMixin):
     id = Column(Integer, primary_key=True, index=True)
 
     name = Column(String(255), nullable=False, index=True)
-    code = Column(String(80), unique=True, nullable=False, index=True)
+    code = Column(String(200), unique=True, nullable=False, index=True)
 
     deanery_id = Column(
         Integer,
@@ -56,8 +56,9 @@ class Parish(Base, SourceMetadataMixin):
     )
 
     # Retained for backward compatibility with existing consumers. Prefer
-    # ``country_id``.
-    country = Column(String(100), nullable=True)
+    # ``country_id``. The DB column is NOT NULL; all parishes must specify a
+    # country (use "Kenya" / KE for the Kenyan hierarchy).
+    country = Column(String(100), nullable=False)
 
     county = Column(String(100), nullable=True)
 

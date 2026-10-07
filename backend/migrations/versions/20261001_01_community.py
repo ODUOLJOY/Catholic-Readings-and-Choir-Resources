@@ -1,7 +1,7 @@
 """Add scoped roles and community features.
 
 Revision ID: 20261001_01
-Revises:
+Revises: 20261006_01
 """
 from alembic import op
 
@@ -26,7 +26,10 @@ from app.models.community import (
 )
 
 revision = "20261001_01"
-down_revision = None
+# Chained onto the baseline repair rather than standing alone as a second root.
+# It was `None`, which alongside the repair revisions would have left Alembic
+# with multiple heads and made `upgrade head` refuse to run.
+down_revision = "20261006_01"
 branch_labels = None
 depends_on = None
 

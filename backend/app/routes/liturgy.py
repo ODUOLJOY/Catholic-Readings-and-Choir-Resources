@@ -13,6 +13,7 @@ from app.models.user import User
 from app.models.liturgical import LiturgicalDay
 from app.models.reading_reference import ReadingSet, ReadingReference
 from app.services.liturgical_sync import LiturgicalSyncService
+from app.services.missal_engine import MissalEngine
 
 router = APIRouter(prefix="/api/v1/liturgy", tags=["Liturgy"])
 
@@ -128,6 +129,30 @@ def get_liturgy_by_date(
         } if liturgical_day else None,
         "verification_status": calendar_info.get("verification_status", "unverified"),
     }
+
+
+@router.post("/date/{target_date}/sync", status_code=202)
+def sync_date_route(
+    target_date: date,
+    region: str = Query("KE"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Fetch and store verified liturgical data for a date from the online source.
+
+    Authorised content is sourced from Universalis and persisted through the
+    standard verified-import pipeline (see ``MissalEngine.sync_official_lectionary``).
+    Only the liturgical calendar and reading *references* are stored here, never
+    Bible text, which is a separately-licensed concern.
+    """
+    require_admin(current_user)
+    result = MissalEngine.sync_official_lectionary(db, region=region, target=target_date)
+    if not result["success"]:
+        raise HTTPException(
+            status_code=502,
+            detail="Online lectionary source unavailable; falling back to the calendar engine.",
+        )
+    return result
 
 
 def get_liturgy_for_user(

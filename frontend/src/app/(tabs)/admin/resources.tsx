@@ -12,6 +12,7 @@ import {
 } from "react-native";
 
 import { api } from "@/lib/api";
+import { requestErrorMessage } from "@/lib/requestFailure";
 import { CHOIR_CATEGORY_SECTIONS, canonicaliseCategory } from "@/config/choirCategories";
 
 type Resource = {
@@ -25,14 +26,8 @@ type Resource = {
   moderation_status?: string;
 };
 
-type ApiError = {
-  response?: { data?: { detail?: string } };
-  message?: string;
-};
-
 function errorMessage(error: unknown): string {
-  const apiError = error as ApiError;
-  return apiError.response?.data?.detail ?? apiError.message ?? "Unable to update resources.";
+  return requestErrorMessage(error, "Unable to update resources.");
 }
 
 export default function AdminResources() {

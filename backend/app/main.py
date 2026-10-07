@@ -1,4 +1,6 @@
 import logging
+import os
+import sys
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,6 +15,7 @@ from app.database import get_db, init_db
 from app.core.config import LOOPBACK_ORIGIN_RE, is_allowed_origin, settings
 from app.services.public_files import PublicFiles
 from app.services.migration_preflight import missing_legacy_schema
+from app.services.scheduler import scheduler as scheduler_service
 from app.routes import (
     admin,
     admin_v2,
@@ -300,3 +303,30 @@ def health(db: Session = Depends(get_db)):
         "database": "connected",
         "api": "running",
     }
+
+
+# ---------------------------------------------------------------------------
+# Background scheduler (daily lectionary sync)
+# ---------------------------------------------------------------------------
+# Started on application startup only. Under pytest the TestClient triggers
+# startup events, so we skip spawning the apscheduler background thread during
+# tests ('pytest' is loaded for the whole session) --
+# this keeps the existing green suite untouched. Set RUN_SCHEDULER=1 to force
+# the scheduler on (even under tests), or DISABLE_SCHEDULER=1 to opt out.
+@app.on_event("startup")
+def _start_scheduler() -> None:
+    if "pytest" in sys.modules and os.environ.get("RUN_SCHEDULER") != "1":
+        return
+    if os.environ.get("DISABLE_SCHEDULER") == "1":
+        return
+    scheduler_service.start()
+
+
+@app.on_event("shutdown")
+def _stop_scheduler() -> None:
+    if "pytest" in sys.modules and os.environ.get("RUN_SCHEDULER") != "1":
+        return
+    try:
+        scheduler_service.shutdown()
+    except Exception:
+        logger.debug("Scheduler was not running on shutdown.")

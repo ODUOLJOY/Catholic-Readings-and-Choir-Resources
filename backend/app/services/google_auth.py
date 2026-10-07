@@ -6,6 +6,7 @@ provider subject (``sub``) is the only value used to identify an external
 account; a caller-supplied email is never trusted on its own.
 """
 import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Optional
@@ -36,6 +37,16 @@ GOOGLE_ISSUERS = frozenset(
 GOOGLE_STATE_TYPE = "google_oauth_state"
 GOOGLE_STATE_TTL_SECONDS = 600
 GOOGLE_SCOPES = "openid email profile"
+
+# Loopback redirect URIs on any port are accepted for local development,
+# mirroring the CORS loopback policy in config.LOOPBACK_ORIGIN_RE.  A remote
+# host cannot claim a loopback origin, so this carries no additional security
+# risk and avoids the fragility of hardcoding the dynamic Expo dev-server port
+# (which changes between 8081, 8082, 8083, etc. on each restart).
+_LOOPBACK_REDIRECT_RE = re.compile(
+    r"^https?://(?:localhost|127\.0\.0\.1|\[::1\])(?::\d{1,5})?/auth/google$",
+    re.IGNORECASE,
+)
 
 
 class GoogleAuthError(RuntimeError):
@@ -131,7 +142,13 @@ def allowed_redirect_uris() -> set[str]:
 def validate_redirect_uri(redirect_uri: str) -> str:
     candidate = (redirect_uri or "").strip()
     allowed = allowed_redirect_uris()
-    if not candidate or candidate not in allowed:
+    if not candidate:
+        raise GoogleAuthError("A redirect URI is required.")
+    # Accept any loopback URI on any port — the Expo dev server picks a dynamic
+    # port on each restart, and a remote host cannot claim a loopback origin.
+    if _LOOPBACK_REDIRECT_RE.match(candidate):
+        return candidate
+    if candidate not in allowed:
         raise GoogleAuthError("The requested redirect URI is not allowed.")
     return candidate
 

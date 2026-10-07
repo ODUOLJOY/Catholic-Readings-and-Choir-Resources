@@ -17,6 +17,7 @@ import {
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
 import { api } from "@/lib/api";
+import { requestErrorMessage } from "@/lib/requestFailure";
 
 const seasons = [
   "Advent",
@@ -164,8 +165,10 @@ export default function AdminReadings() {
     } catch (error: any) {
       Alert.alert(
         "Save Failed",
-        error?.response?.data?.detail ||
+        requestErrorMessage(
+          error,
           "Unable to save the reading. Your form data is still available for retry."
+        )
       );
     } finally {
       setSaving(false);

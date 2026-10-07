@@ -46,6 +46,13 @@ class User(Base):
         nullable=False,
     )
 
+    username = Column(
+        String(150),
+        unique=True,
+        index=True,
+        nullable=False,
+    )
+
     hashed_password = Column(
         String(255),
         nullable=False,

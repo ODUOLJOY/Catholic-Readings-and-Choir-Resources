@@ -13,6 +13,7 @@ import {
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/lib/api";
+import { detailMessage } from "@/lib/requestFailure";
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState("");
@@ -39,7 +40,7 @@ export default function ForgotPasswordScreen() {
       );
     } catch (error: any) {
       let message =
-        error?.response?.data?.detail ||
+        detailMessage(error) ??
         "Failed to send reset email";
 
       if (error?.code === "ECONNABORTED") {

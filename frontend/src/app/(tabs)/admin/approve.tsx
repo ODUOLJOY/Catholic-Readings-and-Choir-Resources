@@ -12,6 +12,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { api } from "@/lib/api";
+import { requestErrorMessage } from "@/lib/requestFailure";
 
 interface PendingReading {
   kind: "reading";
@@ -148,8 +149,7 @@ export default function ApproveScreen() {
 
       Alert.alert(
         "Approval Failed",
-        error?.response?.data?.detail ||
-          "Unable to approve this reading."
+        requestErrorMessage(error, "Unable to approve this reading.")
       );
     } finally {
       setProcessingId(null);
@@ -205,8 +205,7 @@ export default function ApproveScreen() {
             } catch (error: any) {
               Alert.alert(
                 "Rejection Failed",
-                error?.response?.data?.detail ||
-                  "Unable to reject this reading."
+                requestErrorMessage(error, "Unable to reject this reading.")
               );
             } finally {
               setProcessingId(null);

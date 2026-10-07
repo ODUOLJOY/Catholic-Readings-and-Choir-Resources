@@ -16,6 +16,7 @@ import {
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
 import { api } from "@/lib/api";
+import { requestErrorMessage } from "@/lib/requestFailure";
 
 interface Saint {
   id: number;
@@ -230,8 +231,7 @@ export default function SaintsScreen() {
 
       Alert.alert(
         "Error",
-        error?.response?.data?.detail ||
-          "Unable to add saint."
+        requestErrorMessage(error, "Unable to add saint.")
       );
     } finally {
       setSaving(false);
@@ -285,8 +285,7 @@ export default function SaintsScreen() {
             } catch (error: any) {
               Alert.alert(
                 "Delete Failed",
-                error?.response?.data?.detail ||
-                  "Unable to delete saint."
+                requestErrorMessage(error, "Unable to delete saint.")
               );
             }
           },

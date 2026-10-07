@@ -15,6 +15,7 @@ import * as DocumentPicker from "expo-document-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { api } from "@/lib/api";
+import { requestErrorMessage } from "@/lib/requestFailure";
 import { CHOIR_CATEGORY_SECTIONS } from "@/config/choirCategories";
 
 // Canonical 27 categories imported from @/config/choirCategories so the
@@ -80,8 +81,10 @@ export default function UploadScreen() {
         }
       } catch (error: any) {
         setScopeLoadError(
-          error?.response?.data?.detail ||
+          requestErrorMessage(
+            error,
             "Your upload permissions could not be loaded. Retry after checking your connection."
+          )
         );
       } finally {
         setScopeLoading(false);
@@ -212,8 +215,10 @@ export default function UploadScreen() {
     } catch (error: any) {
       Alert.alert(
         "Upload Failed",
-        error?.response?.data?.detail ||
+        requestErrorMessage(
+          error,
           "The resource could not be uploaded. Please try again."
+        )
       );
     } finally {
       setUploading(false);
@@ -540,12 +545,12 @@ export default function UploadScreen() {
           onPress={upload}
           disabled={uploading || scopeLoading}
         >
-          {uploading ? (
+          {(uploading || scopeLoading) ? (
             <View style={styles.submitContent}>
               <ActivityIndicator color="#fff" />
 
               <Text style={styles.submitText}>
-                Submitting...
+                {uploading ? "Submitting..." : "Loading scopes…"}
               </Text>
             </View>
           ) : (

@@ -15,6 +15,7 @@ import {
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/lib/api";
+import { requestErrorMessage } from "@/lib/requestFailure";
 
 export default function ResetPasswordScreen() {
   const { token } = useLocalSearchParams<{ token: string }>();
@@ -52,10 +53,10 @@ export default function ResetPasswordScreen() {
         ]
       );
     } catch (error: any) {
-      let message =
-        error?.response?.data?.detail ||
-        "Failed to reset password";
-      Alert.alert("Error", message);
+      Alert.alert(
+        "Error",
+        requestErrorMessage(error, "Failed to reset password")
+      );
     } finally {
       setLoading(false);
     }

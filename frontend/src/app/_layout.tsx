@@ -73,6 +73,7 @@ export default function RootLayout() {
       >
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="reading-detail" />
+        <Stack.Screen name="missal" />
       </Stack>
     </ChoirPlayerProvider>
   );

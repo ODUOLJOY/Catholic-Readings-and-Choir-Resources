@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { api } from "@/lib/api";
+import { requestErrorMessage } from "@/lib/requestFailure";
 
 type Status = "verifying" | "success" | "error";
 
@@ -41,8 +42,10 @@ export default function VerifyEmailScreen() {
         if (!active) return;
         setStatus("error");
         setMessage(
-          error?.response?.data?.detail ??
-            "This verification link is invalid or has already been used.",
+          requestErrorMessage(
+            error,
+            "This verification link is invalid or has already been used."
+          ),
         );
       }
     }

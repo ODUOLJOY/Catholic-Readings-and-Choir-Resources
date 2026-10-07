@@ -37,11 +37,37 @@ interface AxiosLikeError {
   request?: unknown;
 }
 
-function detailOf(error: unknown): string | null {
+/**
+ * Read `detail` off a failed request and always come back with a string.
+ *
+ * FastAPI sends `detail` in three shapes:
+ *
+ * - a string, for failures the endpoint raised itself;
+ * - an **array of field errors** for any 422, e.g.
+ *   `[{ loc: ["body","password"], msg: "String should have at least 6 characters" }]`;
+ * - absent entirely, for a 500 that blew up before it could build a response.
+ *
+ * The array case is the one that mattered: screens rendered `detail` straight
+ * into `<Text>` or `Alert.alert`, so any validation failure handed React an
+ * array of objects and the screen died with "Objects are not valid as a React
+ * child". Rendering that message was the whole point of the field.
+ */
+export function detailMessage(error: unknown): string | null {
   const candidate = (error as AxiosLikeError | null)?.response?.data?.detail;
+
   if (typeof candidate === "string" && candidate.trim()) {
     return candidate.trim();
   }
+
+  if (Array.isArray(candidate)) {
+    for (const item of candidate) {
+      const message = (item as { msg?: unknown } | null)?.msg;
+      if (typeof message === "string" && message.trim()) {
+        return message.trim().replace(/^Value error, /i, "");
+      }
+    }
+  }
+
   return null;
 }
 
@@ -57,7 +83,7 @@ export function classifyRequestFailure(
   options: { fallbackNotFound: string; fallbackMessage?: string },
 ): RequestFailure {
   const status = (error as AxiosLikeError | null)?.response?.status;
-  const detail = detailOf(error);
+  const detail = detailMessage(error);
   const generic = options.fallbackMessage ?? "Could not reach the server. Check your connection and try again.";
 
   if (status === 404) {
@@ -96,7 +122,7 @@ export function classifyRequestFailure(
 
 /** Build a readable message from an unknown throw for list-screen error banners. */
 export function requestErrorMessage(error: unknown, fallback = "Something went wrong. Please try again."): string {
-  const detail = detailOf(error);
+  const detail = detailMessage(error);
   if (detail) {
     return detail;
   }

@@ -36,7 +36,11 @@ class RolePermission(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     role: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     permission_id: Mapped[int] = mapped_column(ForeignKey("permissions.id"), nullable=False)
-    granted_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    # NULL means "not granted by a person": `permission_seed` provisions the
+    # default grants with no actor to attribute them to, and an INT column
+    # referencing users.id cannot record the string marker that would say so.
+    # Mirrors RoleAssignment.revoked_by, which is nullable for the same reason.
+    granted_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     
     permission = relationship("Permission")

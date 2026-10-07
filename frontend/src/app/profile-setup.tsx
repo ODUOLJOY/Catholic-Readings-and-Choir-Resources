@@ -10,6 +10,7 @@ import {
 import { useRouter } from "expo-router";
 
 import { api } from "@/lib/api";
+import { requestErrorMessage } from "@/lib/requestFailure";
 import { authService } from "@/services/authService";
 import { hierarchyService } from "@/services/hierarchyService";
 import {
@@ -18,18 +19,8 @@ import {
   HierarchySelection,
 } from "@/components/HierarchyPicker";
 
-interface ApiError {
-  message?: string;
-  response?: { data?: { detail?: string } };
-}
-
 function errorMessage(error: unknown): string {
-  const apiError = error as ApiError;
-  return (
-    apiError.response?.data?.detail ??
-    apiError.message ??
-    "Something went wrong. Please try again."
-  );
+  return requestErrorMessage(error, "Something went wrong. Please try again.");
 }
 
 export default function ProfileSetup() {

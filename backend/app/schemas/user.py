@@ -40,6 +40,7 @@ class UserUpdate(BaseModel):
 
 class UserResponse(UserBase):
     id: int
+    username: Optional[str] = None
     role: str
     is_active: bool
     is_verified: bool

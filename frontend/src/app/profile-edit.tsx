@@ -11,6 +11,7 @@ import {
 import { router } from "expo-router";
 
 import { api } from "@/lib/api";
+import { requestErrorMessage } from "@/lib/requestFailure";
 import { authService } from "@/services/authService";
 
 interface Profile {
@@ -21,14 +22,8 @@ interface Profile {
   role?: string;
 }
 
-interface ApiError {
-  message?: string;
-  response?: { data?: { detail?: string } };
-}
-
 function getErrorMessage(error: unknown): string {
-  const apiError = error as ApiError;
-  return apiError.response?.data?.detail ?? apiError.message ?? "Unable to update your profile.";
+  return requestErrorMessage(error, "Unable to update your profile.");
 }
 
 export default function ProfileEdit() {

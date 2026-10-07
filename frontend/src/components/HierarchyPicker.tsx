@@ -15,6 +15,7 @@ import {
   ParishNode,
   hierarchyService,
 } from "@/services/hierarchyService";
+import { requestErrorMessage } from "@/lib/requestFailure";
 
 export type HierarchyStep =
   | "country"
@@ -64,15 +65,7 @@ const STEP_PLURAL: Record<HierarchyStep, string> = {
 };
 
 function errorMessage(error: unknown): string {
-  const apiError = error as {
-    response?: { data?: { detail?: string } };
-    message?: string;
-  };
-  return (
-    apiError?.response?.data?.detail ??
-    apiError?.message ??
-    "Could not load the Catholic directory."
-  );
+  return requestErrorMessage(error, "Could not load the Catholic directory.");
 }
 
 /**

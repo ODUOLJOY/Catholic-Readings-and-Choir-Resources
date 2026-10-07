@@ -38,7 +38,13 @@ class SchedulerService:
         db: Session = SessionLocal()
 
         try:
-            MissalEngine.sync_today(db)
+            # Try the authorised online lectionary first (Universalis ->
+            # import_verified_data). When the source is unreachable the engine
+            # fallback keeps today's liturgical header resolvable so the Missal
+            # page never shows a hard "Content unavailable" for the calendar.
+            result = MissalEngine.sync_official_lectionary(db)
+            if not result.get("success"):
+                MissalEngine.sync_today(db)
         finally:
             db.close()
 

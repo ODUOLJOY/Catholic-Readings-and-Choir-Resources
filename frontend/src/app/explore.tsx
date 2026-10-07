@@ -43,6 +43,12 @@ const quickActions = [
     route: "/reading-detail",
   },
   {
+    title: "Order of Mass",
+    description: "Full Mass structure for today",
+    icon: "book-open-page-variant",
+    route: "/missal",
+  },
+  {
     title: "Saints",
     description: "Saints and feast days",
     icon: "account-star",
@@ -57,7 +63,7 @@ const quickActions = [
   {
     title: "Choir Resources",
     description: "Catholic songs and hymns",
-    icon: "music-note-multiple",
+    icon: "music-note",
     route: "/(tabs)/choir",
   },
   {

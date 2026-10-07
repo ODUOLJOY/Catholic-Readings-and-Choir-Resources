@@ -11,6 +11,7 @@ import {
   ScrollView,
 } from "react-native";
 import { router } from "expo-router";
+import { requestErrorMessage } from "@/lib/requestFailure";
 import { authService } from "@/services/authService";
 import { googleAuthService } from "@/services/googleAuthService";
 
@@ -60,6 +61,10 @@ export default function LoginScreen() {
       setError("Please enter your password.");
       return false;
     }
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return false;
+    }
     setError(null);
     return true;
   };
@@ -75,8 +80,7 @@ export default function LoginScreen() {
       await authService.login(email, password);
       await routeAfterAuth();
     } catch (error: any) {
-      const detail = error?.response?.data?.detail;
-      setError(detail || "Invalid email or password.");
+      setError(requestErrorMessage(error, "Invalid email or password."));
     } finally {
       setLoading(false);
     }
@@ -90,8 +94,7 @@ export default function LoginScreen() {
       await googleAuthService.signIn();
       await routeAfterAuth();
     } catch (error: any) {
-      const detail = error?.response?.data?.detail;
-      setError(detail || "Unable to sign in with Google.");
+      setError(requestErrorMessage(error, "Unable to sign in with Google."));
     } finally {
       setGoogleLoading(false);
     }

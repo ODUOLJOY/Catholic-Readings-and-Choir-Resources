@@ -1,6 +1,7 @@
 import { isAxiosError } from "axios";
 
 import { api } from "@/lib/api";
+import { detailMessage } from "@/lib/requestFailure";
 
 /**
  * Single authoritative client for the community, messaging, suggestion,
@@ -444,6 +445,9 @@ const REPORTABLE_RESOURCE_TYPES: ReportableResourceType[] = [
  * Turn an API failure into a member-readable sentence. FastAPI returns either a
  * string `detail`, a validation array, or nothing at all, so all three shapes are
  * handled before falling back to the caller's own wording.
+ *
+ * The `detail` extraction is shared with `@/lib/requestFailure` so the two
+ * cannot drift apart on the array shape.
  */
 export function describeError(error: unknown, fallback: string): string {
   if (isAxiosError(error)) {
@@ -452,18 +456,9 @@ export function describeError(error: unknown, fallback: string): string {
         ? "The server took too long to respond. Please try again."
         : "No connection to the server. Check your network and try again.";
     }
-    const data = error.response.data as
-      | { detail?: unknown }
-      | undefined;
-    const detail = data?.detail;
-    if (typeof detail === "string" && detail.trim()) {
-      return detail.trim();
-    }
-    if (Array.isArray(detail) && detail.length > 0) {
-      const first = detail[0] as { msg?: string };
-      if (first?.msg) {
-        return first.msg.replace(/^Value error, /i, "");
-      }
+    const detail = detailMessage(error);
+    if (detail) {
+      return detail;
     }
     if (error.response.status === 401) {
       return "Your session has expired or your account is no longer active. Sign in again to continue.";

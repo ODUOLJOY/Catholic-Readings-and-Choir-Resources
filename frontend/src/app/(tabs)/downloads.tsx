@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { api } from "@/lib/api";
+import { requestErrorMessage } from "@/lib/requestFailure";
 import {
   cacheResource,
   getCachedResource,
@@ -134,8 +135,7 @@ export default function Downloads() {
     } catch (error: any) {
       Alert.alert(
         "Remove Failed",
-        error?.response?.data?.detail ||
-          "Unable to remove this download."
+        requestErrorMessage(error, "Unable to remove this download.")
       );
     }
   }

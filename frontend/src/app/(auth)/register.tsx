@@ -13,6 +13,7 @@ import {
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/lib/api";
+import { detailMessage } from "@/lib/requestFailure";
 import { authService } from "@/services/authService";
 import {
   HierarchyPicker,
@@ -55,6 +56,11 @@ export default function RegisterScreen() {
 
     if (!fullName.trim()) {
       setError("Please enter your full name.");
+      return;
+    }
+
+    if (fullName.trim().length < 2) {
+      setError("Please enter at least 2 characters for your full name.");
       return;
     }
 
@@ -122,7 +128,7 @@ export default function RegisterScreen() {
         router.replace("/profile-setup");
       }
     } catch (error: any) {
-      let message = error?.response?.data?.detail || "Registration failed";
+      let message = detailMessage(error) ?? "Registration failed";
 
       if (error?.code === "ECONNABORTED") {
         message = "The server took too long to respond.";

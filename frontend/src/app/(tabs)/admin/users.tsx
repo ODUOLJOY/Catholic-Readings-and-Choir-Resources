@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native";
 import { api } from "@/lib/api";
+import { requestErrorMessage } from "@/lib/requestFailure";
 
 type User = {
   id: number;
@@ -31,7 +32,7 @@ export default function AdminUsers() {
     } catch (error: any) {
       Alert.alert(
         "Users unavailable",
-        error?.response?.data?.detail || "Unable to load users.",
+        requestErrorMessage(error, "Unable to load users."),
       );
     } finally {
       setLoading(false);
@@ -62,7 +63,7 @@ export default function AdminUsers() {
     } catch (error: any) {
       Alert.alert(
         "Update failed",
-        error?.response?.data?.detail || "Unable to update this user.",
+        requestErrorMessage(error, "Unable to update this user."),
       );
     } finally {
       setBusy(null);

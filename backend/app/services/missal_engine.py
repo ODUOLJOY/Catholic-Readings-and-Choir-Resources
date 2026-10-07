@@ -1,6 +1,9 @@
 from datetime import date
+from typing import Callable, Optional
+
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.readings import Reading
 from app.services.calendar import get_calendar_info, kenya_today
 from app.services.liturgical_sync import LiturgicalSyncService
@@ -54,7 +57,7 @@ class MissalEngine:
         return weekday or proper
 
     def get_readings(self, reading_date: date, language: str = "English"):
-        from app.models.liturgical import LiturgicalDay, ReadingSet
+        from app.models.liturgical import LiturgicalDay
 
         day = self.db.query(LiturgicalDay).filter(LiturgicalDay.date == reading_date).first()
 
@@ -193,19 +196,53 @@ class MissalEngine:
     # FUTURE AUTOMATIC LECTIONARY
     # ==========================================
 
-    def sync_official_lectionary(self):
+    @staticmethod
+    def sync_official_lectionary(
+        db: Session,
+        region: str = "KE",
+        target: Optional[date] = None,
+        fetcher: Optional[Callable[..., Optional[dict]]] = None,
+    ) -> dict:
         """
-        Reserved for future integration with
-        official Catholic lectionary providers.
+        Fetch verified liturgical data for a date from the Universalis online
+        lectionary and persist it through the standard verified-import pipeline
+        (see ``LiturgicalSyncService.import_verified_data``).
 
-        This method will automatically update:
-        - Daily Readings
-        - Saints
-        - Liturgical Calendar
-        - Liturgical Seasons
-        - Liturgical Year (A/B/C)
+        Only the liturgical calendar and reading *references* are fetched
+        here -- never the text of the readings, which is a separately-licensed
+        concern. On any network/source failure this returns ``success: False``
+        so callers can fall back to the calendar engine without raising.
         """
+        from app.services.universalis_sync import build_payload
+
+        target = target or kenya_today()
+        payload = build_payload(target, region, fetcher=fetcher)
+        if not payload:
+            return {
+                "success": False,
+                "date": target.isoformat(),
+                "source": "universalis",
+                "message": "Online lectionary source unavailable; fall back to the calendar engine.",
+            }
+        day = LiturgicalSyncService.import_verified_data(db, payload)
+        text_loaded = False
+        if settings.FETCH_READING_TEXT:
+            # Optional: also fetch public-domain Douay-Rheims *text* (English
+            # only) and persist a published `readings` row. Gated + fail-open so
+            # a text-source hiccup never breaks the reference sync, and
+            # Kiswahili is never synthesised (no PD source exists).
+            from app.services.readings_text import load_reading_text
+
+            try:
+                loaded = load_reading_text(db, target, language="English")
+                text_loaded = loaded is not None
+            except Exception:
+                text_loaded = False
         return {
-            "success": False,
-            "message": "Official lectionary synchronization is not yet enabled.",
+            "success": True,
+            "date": target.isoformat(),
+            "source": "universalis",
+            "liturgical_day_id": day.id,
+            "verification_status": day.verification_status,
+            "reading_text_loaded": text_loaded,
         }

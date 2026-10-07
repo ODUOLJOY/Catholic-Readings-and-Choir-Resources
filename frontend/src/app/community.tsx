@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -357,9 +358,19 @@ export default function CommunityScreen() {
         />
       </View>
       <Pressable style={styles.primaryButton} onPress={submitSuggestion} disabled={busy}>
-        <Text style={styles.primaryText}>
-          {anonymousSuggestion ? "Submit anonymous suggestion" : "Submit suggestion"}
-        </Text>
+        {busy ? (
+          <View style={styles.submitRow}>
+            <ActivityIndicator color="#fff" />
+
+            <Text style={styles.primaryText}>
+              Submitting…
+            </Text>
+          </View>
+        ) : (
+          <Text style={styles.primaryText}>
+            {anonymousSuggestion ? "Submit anonymous suggestion" : "Submit suggestion"}
+          </Text>
+        )}
       </Pressable>
 
       {mySuggestions.length > 0 ? (
@@ -708,6 +719,11 @@ const styles = StyleSheet.create({
     marginTop: 9,
   },
   primaryText: { color: "#fff", fontWeight: "700" },
+  submitRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   secondaryButton: {
     backgroundColor: "#EAF2EC",
     padding: 12,

@@ -438,6 +438,24 @@ def _swap_status_check(bind, target_sql: str, *, offline: bool, workflow: bool) 
         return
 
     checks = _status_checks(bind)
+
+    # Postgres can reflect `status IN (...)` back as
+    # `status = ANY(ARRAY[...])`, which `_status_checks` filters out because its
+    # sqltext no longer starts with "status in". The live constraint then becomes
+    # invisible here: `stale` stays empty, the drop loop below iterates over
+    # nothing, and the create fails with DuplicateObject on the very constraint
+    # being replaced. Looking the target up by name closes that hole, and since
+    # a reflected form that differs from `target_sql` counts as stale, the
+    # mismatched constraint is dropped and rebuilt the way this function intends.
+    reflected = {
+        check["name"]: check.get("sqltext") or ""
+        for check in sa.inspect(bind).get_check_constraints(SUGGESTIONS_TABLE)
+        if check.get("name")
+    }
+    known = {name for name, _ in checks}
+    if SUGGESTION_STATUS_CONSTRAINT in reflected and SUGGESTION_STATUS_CONSTRAINT not in known:
+        checks.append((SUGGESTION_STATUS_CONSTRAINT, reflected[SUGGESTION_STATUS_CONSTRAINT]))
+
     stale = [
         name
         for name, sqltext in checks

@@ -2,7 +2,9 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import hmac
 import logging
+import re
 import secrets
+import string
 from typing import Optional
 
 from fastapi import HTTPException, status
@@ -197,6 +199,22 @@ def authenticate_user(
     return user
 
 
+def _generate_unique_username(db: Session, email: str) -> str:
+    """Build a unique, human-readable username from the email local-part.
+
+    The ``username`` column is NOT NULL with a UNIQUE constraint, so every
+    INSERT must supply a value. We derive one from the email and append a short
+    random suffix when the base name is already taken.
+    """
+    local = email.split("@")[0]
+    base = re.sub(r"[^a-zA-Z0-9._-]", "", local)[:15] or "user"
+    base = base.lower()
+    candidate = base
+    while db.query(User).filter(User.username == candidate).first() is not None:
+        candidate = f"{base}_{secrets.token_hex(3)}"
+    return candidate or f"user_{secrets.token_hex(3)}"
+
+
 def create_user(
     db: Session,
     full_name: str,
@@ -220,6 +238,7 @@ def create_user(
     user = User(
         full_name=full_name,
         email=email.lower(),
+        username=_generate_unique_username(db, email),
         hashed_password=hash_password(password),
         parish_id=parish_id,
         role="user",
@@ -230,17 +249,32 @@ def create_user(
     db.add(user)
     try:
         db.commit()
-    except IntegrityError:
+    except IntegrityError as error:
         db.rollback()
-        # The uniqueness pre-check above is best-effort. The users.email
-        # UNIQUE constraint is the authoritative guard against concurrent
-        # registrations of the same email: one transaction wins and the
-        # conflicting one is serialised into a clean conflict response
-        # (HTTP 409 -> AUTH_EMAIL_ALREADY_EXISTS) rather than an opaque 500.
+        # Inspect the actual PostgreSQL error code instead of assuming every
+        # uniqueness conflict is a duplicate email. 23505 = unique violation
+        # (could be email or username); 23502 = NOT NULL violation (previously
+        # reported as "Email already registered" when username was missing).
+        pgcode = getattr(getattr(error, "orig", None), "pgcode", None)
+        if pgcode == "23505":
+            constraint = getattr(
+                getattr(error, "orig", None), "diag", None
+            )
+            constraint_name = getattr(constraint, "constraint_name", None) if constraint else None
+            if constraint_name and "email" in constraint_name:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Email already registered.",
+                ) from error
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Username already taken.",
+            ) from error
+        logger.exception("Unexpected IntegrityError during user creation")
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Email already registered.",
-        ) from None
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not create user.",
+        ) from error
     db.refresh(user)
 
     return user
@@ -312,6 +346,7 @@ def login_with_google_identity(
         user = User(
             full_name=identity.name or email.split("@")[0],
             email=email,
+            username=_generate_unique_username(db, email),
             hashed_password=hash_password(secrets.token_urlsafe(48)),
             role="user",
             is_active=True,

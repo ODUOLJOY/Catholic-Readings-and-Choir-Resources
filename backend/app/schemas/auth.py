@@ -15,6 +15,7 @@ class RegisterRequest(BaseModel):
 
 class UserResponse(BaseModel):
     id: int
+    username: Optional[str] = None
     full_name: str
     email: EmailStr
     role: str

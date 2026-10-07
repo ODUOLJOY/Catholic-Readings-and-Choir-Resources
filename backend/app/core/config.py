@@ -52,7 +52,15 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     AUTO_CREATE_TABLES: bool = False
     BOOTSTRAP_SUPER_ADMIN_EMAIL: str = ""
+    BOOTSTRAP_SUPER_ADMIN_PASSWORD: str = ""
     SCHEDULED_JOB_TOKEN: str = ""
+
+    # When True, the liturgical sync additionally fetches public-domain
+    # Douay-Rheims reading *text* (English, per date) from bible-api.com and
+    # stores it in the `readings` table so `GET /api/readings/{date}?language=English`
+    # returns 200. Default off = references-only behaviour is unchanged. Kiswahili
+    # text is never synthesised (no PD Swahili biblical-text source).
+    FETCH_READING_TEXT: bool = False
 
     # ==========================================
     # API
@@ -234,6 +242,14 @@ class Settings(BaseSettings):
         "accept any host". The configured ``BASE_URL`` host is the minimum, and it
         is added even when the operator supplied a list without it -- otherwise
         the service would reject its own public hostname.
+
+        The loopback names are added unconditionally rather than only when the
+        list comes out empty. ``BASE_URL`` always contributes a host, so the
+        "empty" branch below can never fire, which meant a local server was
+        rejected with ``400 Invalid host header`` for every single request until
+        an operator edited deployment settings -- the opposite of what the field
+        comment promises. ``TrustedHostMiddleware`` compares only the hostname,
+        so the port a dev server listens on is irrelevant here.
         """
         hosts: list[str] = []
         for host in value:
@@ -259,11 +275,13 @@ class Settings(BaseSettings):
             if base_host and base_host not in hosts:
                 hosts.append(base_host)
 
-        if not hosts:
-            # Starlette treats an empty list as "allow nothing", which would take
-            # the service down, so fall back to the loopback names a local server
-            # is reached by.
-            hosts = ["localhost", "127.0.0.1", "[::1]"]
+        # Loopback is never a way to reach the deployed service from outside, and
+        # it cannot be supplied by a remote caller in place of the real Host, so
+        # admitting it costs no security while keeping local development working.
+        for loopback in ("localhost", "127.0.0.1", "[::1]"):
+            if loopback not in hosts:
+                hosts.append(loopback)
+
         return hosts
 
     model_config = SettingsConfigDict(

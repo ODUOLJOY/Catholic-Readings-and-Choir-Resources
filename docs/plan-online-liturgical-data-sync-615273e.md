@@ -83,6 +83,105 @@ all follow from that single var; future origin changes need one edit.
 (from Google Cloud Console) into the Dashboard if Google sign-in is wanted
 (`sync: false`; not the cause of login/liturgy failure — that is CORS).
 
+## Local backend won't restart on the new `.env` (operational, not a code defect)
+The user re-ran `uvicorn app.main:app --reload` in a terminal that resolved
+`uvicorn`/`python` to the **system Python 3.12** (`C:\Users\hp\AppData\Local\Programs\Python\Python3.12`),
+which has no `sqlalchemy` → `ModuleNotFoundError: No module named 'sqlalchemy'`
+in the worker spawn. A second attempt hit `WinError 10013` (port 8000 already in use
+by leftover processes). The project venv (`.venv`, Python 3.11.5, sqlalchemy
+2.0.40) is correct and has all deps.
+
+### Fix steps
+1. Free port 8000: `taskkill /F /PID 6060 /PID 1732 /PID 30228` (stale uvicorn
+   workers; PID 28828 is `WmiPrvSE`, not the backend, and is left alone).
+2. Start with the **venv** interpreter so deps resolve:
+   `.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload`.
+3. Verify: `curl http://127.0.0.1:8000/health` → `{"status":"healthy",...}` and
+   `OPTIONS /api/auth/login` with `Origin: https://catholic-readings-and-choir-resourc.vercel.app`
+   → `200` + `access-control-allow-origin: https://catholic-readings-and-choir-resourc.vercel.app`.
+
+## Testing strategy
+- Local: `.\.venv\Scripts\python.exe -m pytest test_api_integration.py test_runtime_error_repair.py -q`
+  green (CORS/login/liturgy); `OPTIONS /api/auth/login` from the Vercel origin now
+  returns `200` + `ACAO`; `GET /api/v1/liturgy/today?region=KE` → `200`.
+- `/health` → healthy; manual browser login + liturgy load on localhost.
+
+## Phone/LAN testing + local backend restart (this turn)
+
+### Root causes
+1. Local backend won't start → two failure modes:
+   - bare `uvicorn` resolves to **system Python 3.12** (no `sqlalchemy`) →
+     `ModuleNotFoundError`; must invoke via the **project venv**.
+   - `WinError 10013` on port 8000 → a leftover process (my temp `backend-dev`
+     instance) still holds the socket; must free 8000 first.
+2. Phone/LAN dev rejected by CORS → `LOOPBACK_ORIGIN_RE` only matches
+   `localhost|127.0.0.1|[::1]`; a phone origin like `http://192.168.1.50:8081`
+   matches neither the `allow_origins` list nor the regex → Starlette returns
+   `400 Disallowed` (no `ACAO`) → browser reports a CORS/network error.
+
+### Fix 1 — operational (free port + venv launch)
+Kill the temp instance on 8000, then launch with the venv on `0.0.0.0` so LAN
+devices can reach it. `.env` (local-only, gitignored) is already corrected
+(`FRONTEND_URL`, `ALLOWED_ORIGINS`, `GOOGLE_*_REDIRECT_URI` → Vercel).
+
+### Fix 2 — code: dev-gated LAN origins (secure by default)
+`backend/app/core/config.py`:
+```python
+# After LOOPBACK_ORIGIN_RE:
+LAN_ORIGIN_RE = re.compile(
+    r"^https?://(?:"
+    r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}"
+    r"|172\.(?:1[6-9]|2[0-9]|3[01])\.\d{1,3}\.\d{1,3}"
+    r"|192\.168\.\d{1,3}\.\d{1,3}"
+    r"|169\.254\.\d{1,3}\.\d{1,3}"
+    r")(?::\d{1,5})?$", re.IGNORECASE,
+)
+
+def origin_regex(allow_lan: bool = False) -> re.Pattern[str]:
+    if allow_lan:
+        return re.compile("|".join([LOOPBACK_ORIGIN_RE.pattern, LAN_ORIGIN_RE.pattern]), re.IGNORECASE)
+    return LOOPBACK_ORIGIN_RE
+
+def is_allowed_origin(origin, allowed_origins, allow_lan: bool = False) -> bool:
+    if not origin: return False
+    candidate = origin.strip().rstrip("/")
+    if candidate == "*": return False
+    if candidate in allowed_origins or LOOPBACK_ORIGIN_RE.match(candidate): return True
+    return allow_lan and LAN_ORIGIN_RE.match(candidate) is not None
+```
+Add field `ALLOW_LAN_ORIGINS: bool = False` (CORS section). Default `False` keeps
+production safe; the existing 2-arg `is_allowed_origin` callers stay compatible via
+the default.
+
+`backend/app/main.py`:
+- import: `from app.core.config import is_allowed_origin, origin_regex, settings`
+  (drop `LOOPBACK_ORIGIN_RE` — now unused here).
+- `allow_origin_regex=origin_regex(settings.ALLOW_LAN_ORIGINS)`.
+- `_cors_headers`: `is_allowed_origin(origin, _allowed_origins, allow_lan=settings.ALLOW_LAN_ORIGINS)`.
+
+`backend/.env` (local) — append:
+```
+# Local dev only: permit private/LAN origins for phone/tablet dev. NEVER on Render.
+ALLOW_LAN_ORIGINS=True
+```
+
+Frontend (no code change): on the phone set
+`EXPO_PUBLIC_API_URL=http://192.168.1.50:8000` (your LAN IP) so the dev client
+points at the `0.0.0.0`-bound backend.
+
+### Security note
+`ALLOW_LAN_ORIGINS` widens credentialed-CORS to anyone on the same Wi-Fi — an
+explicit dev-only trade-off, defaulting off, and never set in `render.yaml`.
+
+## Testing strategy
+- `pytest test_api_integration.py test_runtime_error_repair.py -q` green (no
+  signature regression; loopback still allowed, LAN still rejected when flag off).
+- Start venv backend `0.0.0.0:8000`; `curl` OPTIONS preflight with
+  `Origin: http://192.168.1.50:8081` → `200` + `ACAO` = that LAN origin (flag on),
+  and `http://localhost:8081` → `200` (regression). `/health` 200, login 401,
+  `/api/v1/liturgy/today?region=KE` 200. Then stop the instance to free 8000 and
+  hand the launch command back to the user.
+
 ## Testing strategy
 - `python -m pytest test_api_integration.py -q -p no:cacheprovider -p no:asyncio` (CORS + login + liturgy routes): all green; default `FRONTEND_URL` is localhost and already allow-listed, so no behavior change in tests.
 - `python -c "import ast; ast.parse(open('backend/app/main.py').read())"` compiles.

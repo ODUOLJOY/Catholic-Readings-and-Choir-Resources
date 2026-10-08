@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   RefreshControl,
   StyleSheet,
@@ -12,6 +11,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { api } from "@/lib/api";
+import { requestErrorMessage } from "@/lib/requestFailure";
 import { LiturgicalCache } from "@/services/liturgicalCache";
 import { formatKenyaDate, kenyaDateString, shiftCalendarDate } from "@/utils/calendar";
 
@@ -65,6 +65,7 @@ export default function Readings() {
   const [refreshing, setRefreshing] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   const [isFromCache, setIsFromCache] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
   
   const filtered = useMemo(() => {
     if (!liturgicalDay || selectedCategory === "All") {
@@ -92,6 +93,7 @@ export default function Readings() {
     try {
       setLoading(true);
       setIsFromCache(false);
+      setApiError(null);
 
       // Try to load from cache first
       const cached = await LiturgicalCache.get(dateStr, "KE");
@@ -110,9 +112,13 @@ export default function Readings() {
       // Cache the response
       await LiturgicalCache.set(dateStr, "KE", response.data);
     } catch (error) {
-      console.log("Readings error:", error);
+      setApiError(
+        requestErrorMessage(
+          error,
+          "Unable to load readings. Check your connection and try again.",
+        ),
+      );
       setLiturgicalDay(null);
-      Alert.alert("Error", "Unable to load readings.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -216,6 +222,14 @@ export default function Readings() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* ERROR BANNER */}
+      {apiError ? (
+        <View style={styles.errorBanner}>
+          <Ionicons name="alert-circle" size={16} color="#b91c1c" />
+          <Text style={styles.errorBannerText}>{apiError}</Text>
+        </View>
+      ) : null}
 
       {/* DATE NAVIGATION */}
       <View style={styles.dateNavigation}>
@@ -343,6 +357,23 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginRight: 8,
+  },
+
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#FEF2F2",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 12,
+  },
+
+  errorBannerText: {
+    color: "#b91c1c",
+    fontSize: 13,
+    flex: 1,
   },
 
   heading: {

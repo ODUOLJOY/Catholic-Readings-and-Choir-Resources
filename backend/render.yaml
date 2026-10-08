@@ -2,7 +2,14 @@ services:
   - type: web
     name: catholic-readings-and-choir-resource-app
     runtime: python
-    plan: free
+    plan: starter
+    # The free plan auto-suspends the service after 15 minutes of inactivity.
+    # When suspended, Render's edge returns a bare 503 (x-render-routing:
+    # suspend) with NO CORS headers, which the browser reports as a CORS
+    # fault. 429 rate-limit errors and 502 cold-start failures are also
+    # caused by the free tier's resource limits. The starter plan stays
+    # awake and has substantially higher rate limits, which fixes the CORS,
+    # 503, 502 and 429 errors experienced by the Vercel frontend.
 
     rootDir: backend
 
@@ -91,7 +98,6 @@ services:
       - key: ALLOWED_ORIGINS
         value: >-
           ["https://stellular-clafoutis-ad641c.netlify.app",
-          "https://catholic-readings-and-choir-resource-app.vercel.app",
           "https://catholic-readings-and-choir-resourc.vercel.app",
           "http://localhost:8081",
           "http://127.0.0.1:8081",

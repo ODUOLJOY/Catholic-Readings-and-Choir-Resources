@@ -8,6 +8,56 @@ export const api = axios.create({
 	timeout: 20000,
 });
 
+// Retry transient failures with exponential backoff.
+//
+// When the backend runs on Render's free plan it auto-suspends after 15
+// minutes of inactivity. The first request after suspension hits a 503 from
+// Render's edge (no CORS headers, so the browser reports a CORS error), or a
+// 502 during cold-start. 429s come from free-tier rate limiting. All of these
+// are transient: a retry a few seconds later usually succeeds because the
+// service has finished waking up. The interceptor retries GET requests that
+// failed for network, timeout, or any 5xx/429 status, with backoff so the
+// second attempt arrives after the cold-start window.
+const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+const MAX_RETRIES = 3;
+const RETRY_BASE_DELAY = 1000; // ms
+
+function isRetryable(error: unknown): boolean {
+	const axiosErr = error as { response?: { status?: number }; code?: string };
+	if (axiosErr.response) {
+		return RETRYABLE_STATUS.has(axiosErr.response.status ?? 0);
+	}
+	// No response means the request never reached the server (network error,
+	// CORS block at the infra level, timeout) -- retryable.
+	return true;
+}
+
+function isRetryableMethod(method: string): boolean {
+	return ["get", "head", "options"].includes(method.toLowerCase());
+}
+
+/** Retry interceptor: retries GET/HEAD/OPTIONS on transient failures. */
+api.interceptors.response.use(undefined, async (error) => {
+	const config = error.config as typeof error.config & { _retryCount?: number };
+	const method = (config?.method ?? "get").toLowerCase();
+
+	if (!config || !isRetryableMethod(method) || !isRetryable(error)) {
+		return Promise.reject(error);
+	}
+
+	const attempt = config._retryCount ?? 0;
+	if (attempt >= MAX_RETRIES) {
+		return Promise.reject(error);
+	}
+
+	config._retryCount = attempt + 1;
+	const delay = RETRY_BASE_DELAY * Math.pow(2, attempt);
+
+	await new Promise((resolve) => setTimeout(resolve, delay));
+
+	return api(config);
+});
+
 let refreshPromise: Promise<string> | null = null;
 
 type SessionListener = (sessionActive: boolean) => void;

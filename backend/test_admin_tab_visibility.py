@@ -137,6 +137,10 @@ def register_verified_admin(client, db_session, monkeypatch, email=ADMIN_EMAIL):
     """
     monkeypatch.setattr(settings, "BOOTSTRAP_SUPER_ADMIN_EMAIL", email)
     password = secrets.token_urlsafe(24)
+    # `bootstrap()` always (re)sets the user's password to
+    # BOOTSTRAP_SUPER_ADMIN_PASSWORD, so the test's password must match it or
+    # the subsequent login with the generated password fails with 401.
+    monkeypatch.setattr(settings, "BOOTSTRAP_SUPER_ADMIN_PASSWORD", password)
 
     response = client.post(
         "/api/auth/register",

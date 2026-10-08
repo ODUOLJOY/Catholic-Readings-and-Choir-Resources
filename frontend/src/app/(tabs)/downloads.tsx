@@ -10,7 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { api } from "@/lib/api";
+import { api, fetchConcurrent } from "@/lib/api";
 import { requestErrorMessage } from "@/lib/requestFailure";
 import {
   cacheResource,
@@ -55,7 +55,7 @@ export default function Downloads() {
         ? response.data
         : response.data?.items || [];
 
-      const hydrated = await Promise.all(
+      const hydrated = await fetchConcurrent(
         records.map(async (record) => {
           try {
             const resource = await api.get(
@@ -71,7 +71,8 @@ export default function Downloads() {
               file_url: "",
             } as DownloadItem;
           }
-        })
+        }),
+        3,
       );
 
       setDownloads(hydrated);

@@ -56,6 +56,7 @@ import {
   type ChoirSort,
 } from "@/services/choirService";
 import { classifyRequestFailure } from "@/lib/requestFailure";
+import { fetchConcurrent } from "@/lib/api";
 import { ErrorState } from "@/components/ScreenStates";
 import { canonicaliseCategory } from "@/config/choirCategories";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -309,7 +310,10 @@ export default function Choir() {
       setSeasonShelf(null);
     }
 
-    await Promise.all(jobs);
+    // Use fetchConcurrent to cap simultaneous shelf requests at 4 instead
+    // of firing all 5-6 at once. When the backend is slow this prevents the
+    // retry interceptor from amplifying 8 initial requests into 24 retries.
+    await fetchConcurrent(jobs, 4);
   }, [loadShelf, loadOfflineShelf, liturgy]);
 
   useEffect(() => {

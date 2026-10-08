@@ -72,19 +72,36 @@ function toToday(day: CachedLiturgicalDay, fromCache: boolean): LiturgicalToday 
   };
 }
 
+let inFlightTodayPromise: Promise<CachedLiturgicalDay> | null = null;
+
 async function fetchToday(): Promise<CachedLiturgicalDay> {
-  const response = await api.get("/api/v1/liturgy/today", {
-    params: { region: LITURGY_REGION },
-  });
-  const day = response.data as CachedLiturgicalDay;
-  // Populate the shared cache so the readings screen benefits too. A cache write
-  // failure must not turn a successful fetch into an error.
-  try {
-    await LiturgicalCache.set(day.date, day.region ?? LITURGY_REGION, day);
-  } catch {
-    // ignored on purpose: the value in hand is already correct.
+  // Deduplicate: if a fetch is already in progress (e.g. the Home tab and
+  // the Choir tab both mounted at the same time), share the in-flight
+  // promise instead of firing a second request.
+  if (inFlightTodayPromise) {
+    return inFlightTodayPromise;
   }
-  return day;
+
+  inFlightTodayPromise = (async () => {
+    const response = await api.get("/api/v1/liturgy/today", {
+      params: { region: LITURGY_REGION },
+    });
+    const day = response.data as CachedLiturgicalDay;
+    // Populate the shared cache so the readings screen benefits too. A cache write
+    // failure must not turn a successful fetch into an error.
+    try {
+      await LiturgicalCache.set(day.date, day.region ?? LITURGY_REGION, day);
+    } catch {
+      // ignored on purpose: the value in hand is already correct.
+    }
+    return day;
+  })();
+
+  try {
+    return await inFlightTodayPromise;
+  } finally {
+    inFlightTodayPromise = null;
+  }
 }
 
 export function useLiturgicalToday(): LiturgicalTodayState & { reload: () => void } {

@@ -1,1060 +1,614 @@
 {
-  "report_title": "Kenya Catholic Hierarchy Data Completeness Report 2026",
+  "generated_at": "2026-10-02",
+  "source_url": "https://kccb.or.ke/dioceses/",
+  "verification_date": "2026-10-02",
   "summary": {
-    "country": "Kenya (KE)",
-    "total_provinces": 4,
-    "total_jurisdictions": 28,
+    "countries": 1,
+    "provinces": 4,
+    "dioceses": 28,
     "geographic_dioceses": 27,
     "military_ordinariates": 1,
-    "total_deaneries": 92,
-    "total_parishes": 287,
-    "deaneries_with_verified_parishes": 43,
-    "deaneries_with_zero_parishes": 49,
-    "dioceses_with_deaneries": 11
+    "deaneries": 94,
+    "parishes": 430,
+    "dioceses_with_parish_data": [
+      "KE-KSM-KAP",
+      "KE-KSM-LOD",
+      "KE-NRB-KTI",
+      "KE-NRB-NBI",
+      "KE-NRB-NGO",
+      "KE-NRB-WTE",
+      "KE-NRY-ISL",
+      "KE-NRY-MRG",
+      "KE-NRY-MSB",
+      "KE-NRY-NYR"
+    ],
+    "dioceses_without_official_deanery_data": [
+      "KE-KSM-BUN",
+      "KE-KSM-ELD",
+      "KE-KSM-HBY",
+      "KE-KSM-KAK",
+      "KE-KSM-KSI",
+      "KE-KSM-KSM",
+      "KE-MBA-GRS",
+      "KE-MBA-MLD",
+      "KE-NRB-KRC",
+      "KE-NRB-MKS",
+      "KE-NRB-NKR",
+      "KE-NRY-EMB",
+      "KE-NRY-ISL",
+      "KE-NRY-MRL",
+      "KE-NRY-MSB",
+      "KE-NRY-NYH"
+    ],
+    "dioceses_with_deaneries_but_pending_parishes": [
+      "KE-NRY-MER",
+      "KE-MBA-MBA",
+      "KE-KSM-KTL"
+    ],
+    "total_parishes_in_db": 430,
+    "total_deaneries_in_db": 94
   },
-  "provinces": [
-    {
-      "id": 3,
-      "code": "KE-KSM",
-      "name": "Ecclesiastical Province of Kisumu"
-    },
-    {
-      "id": 4,
-      "code": "KE-MBA",
-      "name": "Ecclesiastical Province of Mombasa"
-    },
-    {
-      "id": 1,
-      "code": "KE-NRB",
-      "name": "Ecclesiastical Province of Nairobi"
-    },
-    {
-      "id": 2,
-      "code": "KE-NRY",
-      "name": "Ecclesiastical Province of Nyeri"
-    }
-  ],
-  "dioceses_with_no_deaneries": [
-    {
-      "name": "Archdiocese of Kisumu",
-      "id": 17,
-      "code": "arch_ksm",
-      "verification_status": "NEEDS_REVIEW",
-      "website": null
-    },
-    {
-      "name": "Diocese of Bungoma",
-      "id": 22,
-      "code": "dio_bun",
-      "verification_status": "NEEDS_REVIEW",
-      "website": null
-    },
-    {
-      "name": "Diocese of Eldoret",
-      "id": 18,
-      "code": "dio_eld",
-      "verification_status": "NEEDS_REVIEW",
-      "website": null
-    },
-    {
-      "name": "Diocese of Embu",
-      "id": 13,
-      "code": "dio_emb",
-      "verification_status": "NEEDS_REVIEW",
-      "website": null
-    },
-    {
-      "name": "Diocese of Garissa",
-      "id": 27,
-      "code": "dio_grs",
-      "verification_status": "NEEDS_REVIEW",
-      "website": null
-    },
-    {
-      "name": "Diocese of Homa Bay",
-      "id": 23,
-      "code": "dio_hby",
-      "verification_status": "NEEDS_REVIEW",
-      "website": null
-    },
-    {
-      "name": "Diocese of Isiolo",
-      "id": 16,
-      "code": "dio_isl",
-      "verification_status": "NEEDS_REVIEW",
-      "website": null
-    },
-    {
-      "name": "Diocese of Kakamega",
-      "id": 21,
-      "code": "dio_kak",
-      "verification_status": "NEEDS_REVIEW",
-      "website": null
-    },
-    {
-      "name": "Diocese of Kericho",
-      "id": 7,
-      "code": "dio_krc",
-      "verification_status": "NEEDS_REVIEW",
-      "website": null
-    },
-    {
-      "name": "Diocese of Kisii",
-      "id": 19,
-      "code": "dio_ksi",
-      "verification_status": "NEEDS_REVIEW",
-      "website": null
-    },
-    {
-      "name": "Diocese of Machakos",
-      "id": 3,
-      "code": "dio_mks",
-      "verification_status": "NEEDS_REVIEW",
-      "website": null
-    },
-    {
-      "name": "Diocese of Malindi",
-      "id": 28,
-      "code": "dio_mld",
-      "verification_status": "NEEDS_REVIEW",
-      "website": null
-    },
-    {
-      "name": "Diocese of Maralal",
-      "id": 15,
-      "code": "dio_mrl",
-      "verification_status": "NEEDS_REVIEW",
-      "website": null
-    },
-    {
-      "name": "Diocese of Marsabit",
-      "id": 11,
-      "code": "dio_msb",
-      "verification_status": "NEEDS_REVIEW",
-      "website": null
-    },
-    {
-      "name": "Diocese of Nakuru",
-      "id": 4,
-      "code": "dio_nku",
-      "verification_status": "NEEDS_REVIEW",
-      "website": null
-    },
-    {
-      "name": "Diocese of Nyahururu",
-      "id": 14,
-      "code": "dio_nyh",
-      "verification_status": "NEEDS_REVIEW",
-      "website": null
-    },
-    {
-      "name": "Military Ordinariate",
-      "id": 6,
-      "code": "mil_ord",
-      "verification_status": "NEEDS_REVIEW",
-      "website": null,
-      "note": "Military Ordinariate - excluded from standard hierarchy (no deaneries)"
-    }
-  ],
-  "dioceses_with_verified_parish_data": [
-    {
+  "by_diocese": {
+    "arch_mba": {
       "name": "Archdiocese of Mombasa",
-      "code": "arch_mba",
-      "deanery_count": 12,
-      "parish_count": 0
+      "deaneries": [
+        {
+          "name": "Bura Deanery",
+          "code": "KE-MBA-MBA-BURA",
+          "parishes": 0
+        },
+        {
+          "name": "Central Deanery",
+          "code": "KE-MBA-MBA-CENTRAL",
+          "parishes": 0
+        },
+        {
+          "name": "Giriama Deanery",
+          "code": "KE-MBA-MBA-GIRIAMA",
+          "parishes": 0
+        },
+        {
+          "name": "Kilifi Deanery",
+          "code": "KE-MBA-MBA-KILIFI",
+          "parishes": 0
+        },
+        {
+          "name": "Kwale East Deanery",
+          "code": "KE-MBA-MBA-KWALE-EAST",
+          "parishes": 0
+        },
+        {
+          "name": "Kwale West Deanery",
+          "code": "KE-MBA-MBA-KWALE-WEST",
+          "parishes": 0
+        },
+        {
+          "name": "North Deanery",
+          "code": "KE-MBA-MBA-NORTH",
+          "parishes": 0
+        },
+        {
+          "name": "South Deanery",
+          "code": "KE-MBA-MBA-SOUTH",
+          "parishes": 0
+        },
+        {
+          "name": "Taita Taveta Deanery",
+          "code": "KE-MBA-MBA-TAITA-TAVETA",
+          "parishes": 0
+        },
+        {
+          "name": "Voi Deanery",
+          "code": "KE-MBA-MBA-VOI",
+          "parishes": 0
+        },
+        {
+          "name": "West Deanery",
+          "code": "KE-MBA-MBA-WEST",
+          "parishes": 0
+        },
+        {
+          "name": "Wunganyi Deanery",
+          "code": "KE-MBA-MBA-WUNGANYI",
+          "parishes": 0
+        }
+      ],
+      "total_deaneries": 12,
+      "total_parishes": 0
     },
-    {
+    "arch_nbo": {
       "name": "Archdiocese of Nairobi",
-      "code": "arch_nbo",
-      "deanery_count": 17,
-      "parish_count": 127
+      "deaneries": [
+        {
+          "name": "Embakasi Deanery",
+          "code": "KE-NRB-NBI-EMBAKASI",
+          "parishes": 6
+        },
+        {
+          "name": "Gatundu Deanery",
+          "code": "KE-NRB-NBI-GATUNDU",
+          "parishes": 9
+        },
+        {
+          "name": "Githunguri Deanery",
+          "code": "KE-NRB-NBI-GITHUNGURI",
+          "parishes": 7
+        },
+        {
+          "name": "Githurai Deanery",
+          "code": "KE-NRB-NBI-GITHURAI",
+          "parishes": 7
+        },
+        {
+          "name": "Kabete Deanery",
+          "code": "KE-NRB-NBI-KABETE",
+          "parishes": 7
+        },
+        {
+          "name": "Kiambu Deanery",
+          "code": "KE-NRB-NBI-KIAMBU",
+          "parishes": 9
+        },
+        {
+          "name": "Kikuyu Deanery",
+          "code": "KE-NRB-NBI-KIKUYU",
+          "parishes": 10
+        },
+        {
+          "name": "Limuru Deanery",
+          "code": "KE-NRB-NBI-LIMURU",
+          "parishes": 7
+        },
+        {
+          "name": "Makadara Deanery",
+          "code": "KE-NRB-NBI-MAKADARA",
+          "parishes": 8
+        },
+        {
+          "name": "Mang'u Deanery",
+          "code": "KE-NRB-NBI-MANG-U",
+          "parishes": 8
+        },
+        {
+          "name": "Nairobi Central Deanery",
+          "code": "KE-NRB-NBI-NAIROBI-CENTRAL",
+          "parishes": 7
+        },
+        {
+          "name": "Nairobi-Western Deanery",
+          "code": "KE-NRB-NBI-NAIROBI-WESTERN",
+          "parishes": 7
+        },
+        {
+          "name": "Outering Deanery",
+          "code": "KE-NRB-NBI-OUTERING",
+          "parishes": 7
+        },
+        {
+          "name": "Ruai Deanery",
+          "code": "KE-NRB-NBI-RUAI",
+          "parishes": 6
+        },
+        {
+          "name": "Ruaraka Deanery",
+          "code": "KE-NRB-NBI-RUARAKA",
+          "parishes": 6
+        },
+        {
+          "name": "Ruiru Deanery",
+          "code": "KE-NRB-NBI-RUIRU",
+          "parishes": 9
+        },
+        {
+          "name": "Thika Deanery",
+          "code": "KE-NRB-NBI-THIKA",
+          "parishes": 7
+        }
+      ],
+      "total_deaneries": 17,
+      "total_parishes": 127
     },
-    {
+    "arch_nyr": {
       "name": "Archdiocese of Nyeri",
-      "code": "arch_nyr",
-      "deanery_count": 8,
-      "parish_count": 52
+      "deaneries": [
+        {
+          "name": "Gatarakwa Deanery",
+          "code": "KE-NRY-NYR-GATARAKWA",
+          "parishes": 8
+        },
+        {
+          "name": "Karatina Deanery",
+          "code": "KE-NRY-NYR-KARATINA",
+          "parishes": 8
+        },
+        {
+          "name": "Mukurwe-ini Deanery",
+          "code": "KE-NRY-NYR-MUKURWE-INI",
+          "parishes": 4
+        },
+        {
+          "name": "Nanyuki Deanery",
+          "code": "KE-NRY-NYR-NANYUKI",
+          "parishes": 5
+        },
+        {
+          "name": "Narumoru Deanery",
+          "code": "KE-NRY-NYR-NARUMORU",
+          "parishes": 5
+        },
+        {
+          "name": "Nyeri Municipality Deanery",
+          "code": "KE-NRY-NYR-NYERI-MUNICIPALITY",
+          "parishes": 7
+        },
+        {
+          "name": "Othaya Deanery",
+          "code": "KE-NRY-NYR-OTHAYA",
+          "parishes": 7
+        },
+        {
+          "name": "Tetu Deanery",
+          "code": "KE-NRY-NYR-TETU",
+          "parishes": 8
+        }
+      ],
+      "total_deaneries": 8,
+      "total_parishes": 52
     },
-    {
+    "dio_isl": {
+      "name": "Diocese of Isiolo",
+      "deaneries": [
+        {
+          "name": "Isiolo Deanery",
+          "code": "KE-NRY-ISL-ISIOLO",
+          "parishes": 15
+        }
+      ],
+      "total_deaneries": 1,
+      "total_parishes": 15
+    },
+    "dio_kap": {
       "name": "Diocese of Kapsabet",
-      "code": "dio_kap",
-      "deanery_count": 7,
-      "parish_count": 0
+      "deaneries": [
+        {
+          "name": "Cathedral Deanery",
+          "code": "KE-KSM-KAP-CATHEDRAL",
+          "parishes": 7
+        },
+        {
+          "name": "Chepterit Deanery",
+          "code": "KE-KSM-KAP-CHEPTERIT",
+          "parishes": 3
+        },
+        {
+          "name": "Kaiboi Deanery",
+          "code": "KE-KSM-KAP-KAIBOI",
+          "parishes": 5
+        },
+        {
+          "name": "Kobujoi Deanery",
+          "code": "KE-KSM-KAP-KOBUJOI",
+          "parishes": 6
+        },
+        {
+          "name": "Nandi Hills Deanery",
+          "code": "KE-KSM-KAP-NANDI-HILLS",
+          "parishes": 3
+        },
+        {
+          "name": "Ndalat Deanery",
+          "code": "KE-KSM-KAP-NDALAT",
+          "parishes": 6
+        },
+        {
+          "name": "Ol'Lessos Deanery",
+          "code": "KE-KSM-KAP-OL-LESSOS",
+          "parishes": 9
+        }
+      ],
+      "total_deaneries": 7,
+      "total_parishes": 39
     },
-    {
-      "name": "Diocese of Kitale",
-      "code": "dio_ktl",
-      "deanery_count": 7,
-      "parish_count": 0
-    },
-    {
+    "dio_kti": {
       "name": "Diocese of Kitui",
-      "code": "dio_kti",
-      "deanery_count": 6,
-      "parish_count": 36
+      "deaneries": [
+        {
+          "name": "Central Deanery",
+          "code": "KE-NRB-KTI-CENTRAL",
+          "parishes": 7
+        },
+        {
+          "name": "Eastern Deanery",
+          "code": "KE-NRB-KTI-EASTERN",
+          "parishes": 7
+        },
+        {
+          "name": "Northern Deanery",
+          "code": "KE-NRB-KTI-NORTHERN",
+          "parishes": 5
+        },
+        {
+          "name": "Southern Deanery",
+          "code": "KE-NRB-KTI-SOUTHERN",
+          "parishes": 4
+        },
+        {
+          "name": "Western Deanery",
+          "code": "KE-NRB-KTI-WESTERN",
+          "parishes": 9
+        },
+        {
+          "name": "Yatta Deanery",
+          "code": "KE-NRB-KTI-YATTA",
+          "parishes": 4
+        }
+      ],
+      "total_deaneries": 6,
+      "total_parishes": 36
     },
-    {
+    "dio_ktl": {
+      "name": "Diocese of Kitale",
+      "deaneries": [
+        {
+          "name": "Cathedral Deanery",
+          "code": "KE-KSM-KTL-CATHEDRAL",
+          "parishes": 0
+        },
+        {
+          "name": "Kapenguria Deanery",
+          "code": "KE-KSM-KTL-KAPENGURIA",
+          "parishes": 0
+        },
+        {
+          "name": "Kiminini Deanery",
+          "code": "KE-KSM-KTL-KIMININI",
+          "parishes": 0
+        },
+        {
+          "name": "Kolongolo Deanery",
+          "code": "KE-KSM-KTL-KOLONGOLO",
+          "parishes": 0
+        },
+        {
+          "name": "Ortun Deanery",
+          "code": "KE-KSM-KTL-ORTUN",
+          "parishes": 0
+        },
+        {
+          "name": "Suwerwa Deanery",
+          "code": "KE-KSM-KTL-SUWERWA",
+          "parishes": 0
+        },
+        {
+          "name": "Tartar Deanery",
+          "code": "KE-KSM-KTL-TARTAR",
+          "parishes": 0
+        }
+      ],
+      "total_deaneries": 7,
+      "total_parishes": 0
+    },
+    "dio_lod": {
       "name": "Diocese of Lodwar",
-      "code": "dio_lod",
-      "deanery_count": 4,
-      "parish_count": 30
+      "deaneries": [
+        {
+          "name": "Central Deanery",
+          "code": "KE-KSM-LOD-CENTRAL",
+          "parishes": 10
+        },
+        {
+          "name": "Lake Deanery",
+          "code": "KE-KSM-LOD-LAKE",
+          "parishes": 8
+        },
+        {
+          "name": "North Deanery",
+          "code": "KE-KSM-LOD-NORTH",
+          "parishes": 7
+        },
+        {
+          "name": "South Deanery",
+          "code": "KE-KSM-LOD-SOUTH",
+          "parishes": 5
+        }
+      ],
+      "total_deaneries": 4,
+      "total_parishes": 30
     },
-    {
+    "dio_mer": {
       "name": "Diocese of Meru",
-      "code": "dio_mer",
-      "deanery_count": 8,
-      "parish_count": 0
+      "deaneries": [
+        {
+          "name": "Buuri Deanery",
+          "code": "KE-NRY-MER-BUURI",
+          "parishes": 0
+        },
+        {
+          "name": "Igembe Deanery",
+          "code": "KE-NRY-MER-IGEMBE",
+          "parishes": 0
+        },
+        {
+          "name": "Imenti Central Deanery",
+          "code": "KE-NRY-MER-IMENTI-CENTRAL",
+          "parishes": 0
+        },
+        {
+          "name": "Imenti North Deanery",
+          "code": "KE-NRY-MER-IMENTI-NORTH",
+          "parishes": 0
+        },
+        {
+          "name": "Maara Deanery",
+          "code": "KE-NRY-MER-MAARA",
+          "parishes": 0
+        },
+        {
+          "name": "South Imenti Deanery",
+          "code": "KE-NRY-MER-SOUTH-IMENTI",
+          "parishes": 0
+        },
+        {
+          "name": "Tharaka Deanery",
+          "code": "KE-NRY-MER-THARAKA",
+          "parishes": 0
+        },
+        {
+          "name": "Tigania Deanery",
+          "code": "KE-NRY-MER-TIGANIA",
+          "parishes": 0
+        }
+      ],
+      "total_deaneries": 8,
+      "total_parishes": 0
     },
-    {
+    "dio_mrg": {
       "name": "Diocese of Murang'a",
-      "code": "dio_mrg",
-      "deanery_count": 8,
-      "parish_count": 0
+      "deaneries": [
+        {
+          "name": "Baricho Deanery",
+          "code": "KE-NRY-MRG-BARICHO",
+          "parishes": 9
+        },
+        {
+          "name": "Gaichanjiru Deanery",
+          "code": "KE-NRY-MRG-GAICHANJIRU",
+          "parishes": 8
+        },
+        {
+          "name": "Gatanga Deanery",
+          "code": "KE-NRY-MRG-GATANGA",
+          "parishes": 8
+        },
+        {
+          "name": "Kianyaga Deanery",
+          "code": "KE-NRY-MRG-KIANYAGA",
+          "parishes": 6
+        },
+        {
+          "name": "Maragua Deanery",
+          "code": "KE-NRY-MRG-MARAGUA",
+          "parishes": 9
+        },
+        {
+          "name": "Murang'a Deanery",
+          "code": "KE-NRY-MRG-MURANG-A",
+          "parishes": 5
+        },
+        {
+          "name": "Mwea Deanery",
+          "code": "KE-NRY-MRG-MWEA",
+          "parishes": 5
+        },
+        {
+          "name": "Tuthu Deanery",
+          "code": "KE-NRY-MRG-TUTHU",
+          "parishes": 6
+        }
+      ],
+      "total_deaneries": 8,
+      "total_parishes": 56
     },
-    {
+    "dio_msb": {
+      "name": "Diocese of Marsabit",
+      "deaneries": [
+        {
+          "name": "Marsabit Deanery",
+          "code": "KE-NRY-MSB-MARSABIT",
+          "parishes": 18
+        }
+      ],
+      "total_deaneries": 1,
+      "total_parishes": 18
+    },
+    "dio_ngo": {
       "name": "Diocese of Ngong",
-      "code": "dio_ngo",
-      "deanery_count": 7,
-      "parish_count": 0
+      "deaneries": [
+        {
+          "name": "Kajiado Deanery",
+          "code": "KE-NRB-NGO-KAJIADO",
+          "parishes": 4
+        },
+        {
+          "name": "Kilgoris Deanery",
+          "code": "KE-NRB-NGO-KILGORIS",
+          "parishes": 1
+        },
+        {
+          "name": "Kiserian Deanery",
+          "code": "KE-NRB-NGO-KISERIAN",
+          "parishes": 2
+        },
+        {
+          "name": "Narok Deanery",
+          "code": "KE-NRB-NGO-NAROK",
+          "parishes": 3
+        },
+        {
+          "name": "Ngong Deanery",
+          "code": "KE-NRB-NGO-NGONG",
+          "parishes": 2
+        },
+        {
+          "name": "Oloitokitok Deanery",
+          "code": "KE-NRB-NGO-OLOITOKITOK",
+          "parishes": 1
+        },
+        {
+          "name": "Ololulunga Deanery",
+          "code": "KE-NRB-NGO-OLOLULUNGA",
+          "parishes": 2
+        }
+      ],
+      "total_deaneries": 7,
+      "total_parishes": 15
     },
-    {
+    "dio_wte": {
       "name": "Diocese of Wote",
-      "code": "dio_wte",
-      "deanery_count": 8,
-      "parish_count": 42
+      "deaneries": [
+        {
+          "name": "Kasikeu Deanery",
+          "code": "KE-NRB-WTE-KASIKEU",
+          "parishes": 4
+        },
+        {
+          "name": "Kathonzweni Deanery",
+          "code": "KE-NRB-WTE-KATHONZWENI",
+          "parishes": 5
+        },
+        {
+          "name": "Kiambu Deanery",
+          "code": "KE-NRB-WTE-KIAMBU",
+          "parishes": 5
+        },
+        {
+          "name": "Kibwezi Deanery",
+          "code": "KE-NRB-WTE-KIBWEZI",
+          "parishes": 6
+        },
+        {
+          "name": "Kilungu Deanery",
+          "code": "KE-NRB-WTE-KILUNGU",
+          "parishes": 6
+        },
+        {
+          "name": "Mbooni Deanery",
+          "code": "KE-NRB-WTE-MBOONI",
+          "parishes": 5
+        },
+        {
+          "name": "Nzaui Deanery",
+          "code": "KE-NRB-WTE-NZAUI",
+          "parishes": 5
+        },
+        {
+          "name": "Wote Deanery",
+          "code": "KE-NRB-WTE-WOTE",
+          "parishes": 6
+        }
+      ],
+      "total_deaneries": 8,
+      "total_parishes": 42
     }
-  ],
-  "nairobi_verification": {
-    "expected_deaneries": 17,
-    "actual_deaneries": 17,
-    "all_meet_min_6": true,
-    "total_parishes": 127,
-    "deanery_details": {
-      "KE-NRB-NBI-EMBAKASI": {
-        "name": "Embakasi Deanery",
-        "parish_count": 6,
-        "meets_min_6": true
-      },
-      "KE-NRB-NBI-GATUNDU": {
-        "name": "Gatundu Deanery",
-        "parish_count": 9,
-        "meets_min_6": true
-      },
-      "KE-NRB-NBI-GITHUNGURI": {
-        "name": "Githunguri Deanery",
-        "parish_count": 7,
-        "meets_min_6": true
-      },
-      "KE-NRB-NBI-GITHURAI": {
-        "name": "Githurai Deanery",
-        "parish_count": 7,
-        "meets_min_6": true
-      },
-      "KE-NRB-NBI-KABETE": {
-        "name": "Kabete Deanery",
-        "parish_count": 7,
-        "meets_min_6": true
-      },
-      "KE-NRB-NBI-KIAMBU": {
-        "name": "Kiambu Deanery",
-        "parish_count": 9,
-        "meets_min_6": true
-      },
-      "KE-NRB-NBI-KIKUYU": {
-        "name": "Kikuyu Deanery",
-        "parish_count": 10,
-        "meets_min_6": true
-      },
-      "KE-NRB-NBI-LIMURU": {
-        "name": "Limuru Deanery",
-        "parish_count": 7,
-        "meets_min_6": true
-      },
-      "KE-NRB-NBI-MAKADARA": {
-        "name": "Makadara Deanery",
-        "parish_count": 8,
-        "meets_min_6": true
-      },
-      "KE-NRB-NBI-MANG-U": {
-        "name": "Mang'u Deanery",
-        "parish_count": 8,
-        "meets_min_6": true
-      },
-      "KE-NRB-NBI-NAIROBI-CENTRAL": {
-        "name": "Nairobi Central Deanery",
-        "parish_count": 7,
-        "meets_min_6": true
-      },
-      "KE-NRB-NBI-NAIROBI-WESTERN": {
-        "name": "Nairobi-Western Deanery",
-        "parish_count": 7,
-        "meets_min_6": true
-      },
-      "KE-NRB-NBI-OUTERING": {
-        "name": "Outering Deanery",
-        "parish_count": 7,
-        "meets_min_6": true
-      },
-      "KE-NRB-NBI-RUAI": {
-        "name": "Ruai Deanery",
-        "parish_count": 6,
-        "meets_min_6": true
-      },
-      "KE-NRB-NBI-RUARAKA": {
-        "name": "Ruaraka Deanery",
-        "parish_count": 6,
-        "meets_min_6": true
-      },
-      "KE-NRB-NBI-RUIRU": {
-        "name": "Ruiru Deanery",
-        "parish_count": 9,
-        "meets_min_6": true
-      },
-      "KE-NRB-NBI-THIKA": {
-        "name": "Thika Deanery",
-        "parish_count": 7,
-        "meets_min_6": true
-      }
-    }
-  },
-  "deaneries_with_parishes": [
-    {
-      "deanery_code": "KE-NRB-NBI-EMBAKASI",
-      "deanery_name": "Embakasi Deanery",
-      "diocese": "Archdiocese of Nairobi",
-      "diocese_code": "arch_nbo",
-      "parish_count": 6,
-      "source_url": "https://archdioceseofnairobi.org/?page_id=4665"
-    },
-    {
-      "deanery_code": "KE-NRB-NBI-GATUNDU",
-      "deanery_name": "Gatundu Deanery",
-      "diocese": "Archdiocese of Nairobi",
-      "diocese_code": "arch_nbo",
-      "parish_count": 9,
-      "source_url": "https://archdioceseofnairobi.org/?page_id=4671"
-    },
-    {
-      "deanery_code": "KE-NRB-NBI-GITHUNGURI",
-      "deanery_name": "Githunguri Deanery",
-      "diocese": "Archdiocese of Nairobi",
-      "diocese_code": "arch_nbo",
-      "parish_count": 7,
-      "source_url": "https://archdioceseofnairobi.org/?page_id=4672"
-    },
-    {
-      "deanery_code": "KE-NRB-NBI-GITHURAI",
-      "deanery_name": "Githurai Deanery",
-      "diocese": "Archdiocese of Nairobi",
-      "diocese_code": "arch_nbo",
-      "parish_count": 7,
-      "source_url": "https://archdioceseofnairobi.org/?page_id=6928"
-    },
-    {
-      "deanery_code": "KE-NRB-NBI-KABETE",
-      "deanery_name": "Kabete Deanery",
-      "diocese": "Archdiocese of Nairobi",
-      "diocese_code": "arch_nbo",
-      "parish_count": 7,
-      "source_url": "https://archdioceseofnairobi.org/?page_id=6588"
-    },
-    {
-      "deanery_code": "KE-NRB-NBI-KIAMBU",
-      "deanery_name": "Kiambu Deanery",
-      "diocese": "Archdiocese of Nairobi",
-      "diocese_code": "arch_nbo",
-      "parish_count": 9,
-      "source_url": "https://archdioceseofnairobi.org/?page_id=4674"
-    },
-    {
-      "deanery_code": "KE-NRB-NBI-KIKUYU",
-      "deanery_name": "Kikuyu Deanery",
-      "diocese": "Archdiocese of Nairobi",
-      "diocese_code": "arch_nbo",
-      "parish_count": 10,
-      "source_url": "https://archdioceseofnairobi.org/?page_id=4673"
-    },
-    {
-      "deanery_code": "KE-NRB-NBI-LIMURU",
-      "deanery_name": "Limuru Deanery",
-      "diocese": "Archdiocese of Nairobi",
-      "diocese_code": "arch_nbo",
-      "parish_count": 7,
-      "source_url": "https://archdioceseofnairobi.org/?page_id=4675"
-    },
-    {
-      "deanery_code": "KE-NRB-NBI-MAKADARA",
-      "deanery_name": "Makadara Deanery",
-      "diocese": "Archdiocese of Nairobi",
-      "diocese_code": "arch_nbo",
-      "parish_count": 8,
-      "source_url": "https://archdioceseofnairobi.org/?page_id=4667"
-    },
-    {
-      "deanery_code": "KE-NRB-NBI-MANG-U",
-      "deanery_name": "Mang'u Deanery",
-      "diocese": "Archdiocese of Nairobi",
-      "diocese_code": "arch_nbo",
-      "parish_count": 8,
-      "source_url": "https://archdioceseofnairobi.org/?page_id=4670"
-    },
-    {
-      "deanery_code": "KE-NRB-NBI-NAIROBI-CENTRAL",
-      "deanery_name": "Nairobi Central Deanery",
-      "diocese": "Archdiocese of Nairobi",
-      "diocese_code": "arch_nbo",
-      "parish_count": 7,
-      "source_url": "https://archdioceseofnairobi.org/?page_id=4623"
-    },
-    {
-      "deanery_code": "KE-NRB-NBI-NAIROBI-WESTERN",
-      "deanery_name": "Nairobi-Western Deanery",
-      "diocese": "Archdiocese of Nairobi",
-      "diocese_code": "arch_nbo",
-      "parish_count": 7,
-      "source_url": "https://archdioceseofnairobi.org/?page_id=4664"
-    },
-    {
-      "deanery_code": "KE-NRB-NBI-OUTERING",
-      "deanery_name": "Outering Deanery",
-      "diocese": "Archdiocese of Nairobi",
-      "diocese_code": "arch_nbo",
-      "parish_count": 7,
-      "source_url": "https://archdioceseofnairobi.org/?page_id=4668"
-    },
-    {
-      "deanery_code": "KE-NRB-NBI-RUAI",
-      "deanery_name": "Ruai Deanery",
-      "diocese": "Archdiocese of Nairobi",
-      "diocese_code": "arch_nbo",
-      "parish_count": 6,
-      "source_url": "https://archdioceseofnairobi.org/?page_id=7497"
-    },
-    {
-      "deanery_code": "KE-NRB-NBI-RUARAKA",
-      "deanery_name": "Ruaraka Deanery",
-      "diocese": "Archdiocese of Nairobi",
-      "diocese_code": "arch_nbo",
-      "parish_count": 6,
-      "source_url": "https://archdioceseofnairobi.org/?page_id=4666"
-    },
-    {
-      "deanery_code": "KE-NRB-NBI-RUIRU",
-      "deanery_name": "Ruiru Deanery",
-      "diocese": "Archdiocese of Nairobi",
-      "diocese_code": "arch_nbo",
-      "parish_count": 9,
-      "source_url": "https://archdioceseofnairobi.org/?page_id=5097"
-    },
-    {
-      "deanery_code": "KE-NRB-NBI-THIKA",
-      "deanery_name": "Thika Deanery",
-      "diocese": "Archdiocese of Nairobi",
-      "diocese_code": "arch_nbo",
-      "parish_count": 7,
-      "source_url": "https://archdioceseofnairobi.org/?page_id=4669"
-    },
-    {
-      "deanery_code": "KE-NRY-NYR-GATARAKWA",
-      "deanery_name": "Gatarakwa Deanery",
-      "diocese": "Archdiocese of Nyeri",
-      "diocese_code": "arch_nyr",
-      "parish_count": 8,
-      "source_url": "https://www.adnyeri.org"
-    },
-    {
-      "deanery_code": "KE-NRY-NYR-KARATINA",
-      "deanery_name": "Karatina Deanery",
-      "diocese": "Archdiocese of Nyeri",
-      "diocese_code": "arch_nyr",
-      "parish_count": 8,
-      "source_url": "https://www.adnyeri.org"
-    },
-    {
-      "deanery_code": "KE-NRY-NYR-MUKURWE-INI",
-      "deanery_name": "Mukurwe-ini Deanery",
-      "diocese": "Archdiocese of Nyeri",
-      "diocese_code": "arch_nyr",
-      "parish_count": 4,
-      "source_url": "https://www.adnyeri.org"
-    },
-    {
-      "deanery_code": "KE-NRY-NYR-NANYUKI",
-      "deanery_name": "Nanyuki Deanery",
-      "diocese": "Archdiocese of Nyeri",
-      "diocese_code": "arch_nyr",
-      "parish_count": 5,
-      "source_url": "https://www.adnyeri.org"
-    },
-    {
-      "deanery_code": "KE-NRY-NYR-NARUMORU",
-      "deanery_name": "Narumoru Deanery",
-      "diocese": "Archdiocese of Nyeri",
-      "diocese_code": "arch_nyr",
-      "parish_count": 5,
-      "source_url": "https://www.adnyeri.org"
-    },
-    {
-      "deanery_code": "KE-NRY-NYR-NYERI-MUNICIPALITY",
-      "deanery_name": "Nyeri Municipality Deanery",
-      "diocese": "Archdiocese of Nyeri",
-      "diocese_code": "arch_nyr",
-      "parish_count": 7,
-      "source_url": "https://www.adnyeri.org"
-    },
-    {
-      "deanery_code": "KE-NRY-NYR-OTHAYA",
-      "deanery_name": "Othaya Deanery",
-      "diocese": "Archdiocese of Nyeri",
-      "diocese_code": "arch_nyr",
-      "parish_count": 7,
-      "source_url": "https://www.adnyeri.org"
-    },
-    {
-      "deanery_code": "KE-NRY-NYR-TETU",
-      "deanery_name": "Tetu Deanery",
-      "diocese": "Archdiocese of Nyeri",
-      "diocese_code": "arch_nyr",
-      "parish_count": 8,
-      "source_url": "https://www.adnyeri.org"
-    },
-    {
-      "deanery_code": "KE-NRB-KTI-CENTRAL",
-      "deanery_name": "Central Deanery",
-      "diocese": "Diocese of Kitui",
-      "diocese_code": "dio_kti",
-      "parish_count": 7,
-      "source_url": "https://dioceseofkitui.org/parishes"
-    },
-    {
-      "deanery_code": "KE-NRB-KTI-EASTERN",
-      "deanery_name": "Eastern Deanery",
-      "diocese": "Diocese of Kitui",
-      "diocese_code": "dio_kti",
-      "parish_count": 7,
-      "source_url": "https://dioceseofkitui.org/parishes"
-    },
-    {
-      "deanery_code": "KE-NRB-KTI-NORTHERN",
-      "deanery_name": "Northern Deanery",
-      "diocese": "Diocese of Kitui",
-      "diocese_code": "dio_kti",
-      "parish_count": 5,
-      "source_url": "https://dioceseofkitui.org/parishes"
-    },
-    {
-      "deanery_code": "KE-NRB-KTI-SOUTHERN",
-      "deanery_name": "Southern Deanery",
-      "diocese": "Diocese of Kitui",
-      "diocese_code": "dio_kti",
-      "parish_count": 4,
-      "source_url": "https://dioceseofkitui.org/parishes"
-    },
-    {
-      "deanery_code": "KE-NRB-KTI-WESTERN",
-      "deanery_name": "Western Deanery",
-      "diocese": "Diocese of Kitui",
-      "diocese_code": "dio_kti",
-      "parish_count": 9,
-      "source_url": "https://dioceseofkitui.org/parishes"
-    },
-    {
-      "deanery_code": "KE-NRB-KTI-YATTA",
-      "deanery_name": "Yatta Deanery",
-      "diocese": "Diocese of Kitui",
-      "diocese_code": "dio_kti",
-      "parish_count": 4,
-      "source_url": "https://dioceseofkitui.org/parishes"
-    },
-    {
-      "deanery_code": "KE-KSM-LOD-CENTRAL",
-      "deanery_name": "Central Deanery",
-      "diocese": "Diocese of Lodwar",
-      "diocese_code": "dio_lod",
-      "parish_count": 10,
-      "source_url": "https://dioceseoflodwar.org/parishes"
-    },
-    {
-      "deanery_code": "KE-KSM-LOD-LAKE",
-      "deanery_name": "Lake Deanery",
-      "diocese": "Diocese of Lodwar",
-      "diocese_code": "dio_lod",
-      "parish_count": 8,
-      "source_url": "https://dioceseoflodwar.org/parishes"
-    },
-    {
-      "deanery_code": "KE-KSM-LOD-NORTH",
-      "deanery_name": "North Deanery",
-      "diocese": "Diocese of Lodwar",
-      "diocese_code": "dio_lod",
-      "parish_count": 7,
-      "source_url": "https://dioceseoflodwar.org/parishes"
-    },
-    {
-      "deanery_code": "KE-KSM-LOD-SOUTH",
-      "deanery_name": "South Deanery",
-      "diocese": "Diocese of Lodwar",
-      "diocese_code": "dio_lod",
-      "parish_count": 5,
-      "source_url": "https://dioceseoflodwar.org/parishes"
-    },
-    {
-      "deanery_code": "KE-NRB-WTE-KASIKEU",
-      "deanery_name": "Kasikeu Deanery",
-      "diocese": "Diocese of Wote",
-      "diocese_code": "dio_wte",
-      "parish_count": 4,
-      "source_url": "https://catholicdioceseofwote.org/kasikeu-deanery"
-    },
-    {
-      "deanery_code": "KE-NRB-WTE-KATHONZWENI",
-      "deanery_name": "Kathonzweni Deanery",
-      "diocese": "Diocese of Wote",
-      "diocese_code": "dio_wte",
-      "parish_count": 5,
-      "source_url": "https://catholicdioceseofwote.org/kathonzweni-deanery"
-    },
-    {
-      "deanery_code": "KE-NRB-WTE-KIAMBU",
-      "deanery_name": "Kiambu Deanery",
-      "diocese": "Diocese of Wote",
-      "diocese_code": "dio_wte",
-      "parish_count": 5,
-      "source_url": "https://catholicdioceseofwote.org/kiambu-deanery"
-    },
-    {
-      "deanery_code": "KE-NRB-WTE-KIBWEZI",
-      "deanery_name": "Kibwezi Deanery",
-      "diocese": "Diocese of Wote",
-      "diocese_code": "dio_wte",
-      "parish_count": 6,
-      "source_url": "https://catholicdioceseofwote.org/kibwezi-deanery"
-    },
-    {
-      "deanery_code": "KE-NRB-WTE-KILUNGU",
-      "deanery_name": "Kilungu Deanery",
-      "diocese": "Diocese of Wote",
-      "diocese_code": "dio_wte",
-      "parish_count": 6,
-      "source_url": "https://catholicdioceseofwote.org/kilungu-deanery"
-    },
-    {
-      "deanery_code": "KE-NRB-WTE-MBOONI",
-      "deanery_name": "Mbooni Deanery",
-      "diocese": "Diocese of Wote",
-      "diocese_code": "dio_wte",
-      "parish_count": 5,
-      "source_url": "https://catholicdioceseofwote.org/mbooni-deanery"
-    },
-    {
-      "deanery_code": "KE-NRB-WTE-NZAUI",
-      "deanery_name": "Nzaui Deanery",
-      "diocese": "Diocese of Wote",
-      "diocese_code": "dio_wte",
-      "parish_count": 5,
-      "source_url": "https://catholicdioceseofwote.org/nzaui-deanery"
-    },
-    {
-      "deanery_code": "KE-NRB-WTE-WOTE",
-      "deanery_name": "Wote Deanery",
-      "diocese": "Diocese of Wote",
-      "diocese_code": "dio_wte",
-      "parish_count": 6,
-      "source_url": "https://catholicdioceseofwote.org/wote-deanery"
-    }
-  ],
-  "deaneries_with_no_parishes": [
-    {
-      "deanery_code": "KE-MBA-MBA-BURA",
-      "deanery_name": "Bura Deanery",
-      "diocese": "Archdiocese of Mombasa",
-      "diocese_code": "arch_mba",
-      "parish_count": 0,
-      "source_url": "https://mombasacatholic.org/index.php/deaneries"
-    },
-    {
-      "deanery_code": "KE-MBA-MBA-CENTRAL",
-      "deanery_name": "Central Deanery",
-      "diocese": "Archdiocese of Mombasa",
-      "diocese_code": "arch_mba",
-      "parish_count": 0,
-      "source_url": "https://mombasacatholic.org/index.php/deaneries"
-    },
-    {
-      "deanery_code": "KE-MBA-MBA-GIRIAMA",
-      "deanery_name": "Giriama Deanery",
-      "diocese": "Archdiocese of Mombasa",
-      "diocese_code": "arch_mba",
-      "parish_count": 0,
-      "source_url": "https://mombasacatholic.org/index.php/deaneries"
-    },
-    {
-      "deanery_code": "KE-MBA-MBA-KILIFI",
-      "deanery_name": "Kilifi Deanery",
-      "diocese": "Archdiocese of Mombasa",
-      "diocese_code": "arch_mba",
-      "parish_count": 0,
-      "source_url": "https://mombasacatholic.org/index.php/deaneries"
-    },
-    {
-      "deanery_code": "KE-MBA-MBA-KWALE-EAST",
-      "deanery_name": "Kwale East Deanery",
-      "diocese": "Archdiocese of Mombasa",
-      "diocese_code": "arch_mba",
-      "parish_count": 0,
-      "source_url": "https://mombasacatholic.org/index.php/deaneries"
-    },
-    {
-      "deanery_code": "KE-MBA-MBA-KWALE-WEST",
-      "deanery_name": "Kwale West Deanery",
-      "diocese": "Archdiocese of Mombasa",
-      "diocese_code": "arch_mba",
-      "parish_count": 0,
-      "source_url": "https://mombasacatholic.org/index.php/deaneries"
-    },
-    {
-      "deanery_code": "KE-MBA-MBA-NORTH",
-      "deanery_name": "North Deanery",
-      "diocese": "Archdiocese of Mombasa",
-      "diocese_code": "arch_mba",
-      "parish_count": 0,
-      "source_url": "https://mombasacatholic.org/index.php/deaneries"
-    },
-    {
-      "deanery_code": "KE-MBA-MBA-SOUTH",
-      "deanery_name": "South Deanery",
-      "diocese": "Archdiocese of Mombasa",
-      "diocese_code": "arch_mba",
-      "parish_count": 0,
-      "source_url": "https://mombasacatholic.org/index.php/deaneries"
-    },
-    {
-      "deanery_code": "KE-MBA-MBA-TAITA-TAVETA",
-      "deanery_name": "Taita Taveta Deanery",
-      "diocese": "Archdiocese of Mombasa",
-      "diocese_code": "arch_mba",
-      "parish_count": 0,
-      "source_url": "https://mombasacatholic.org/index.php/deaneries"
-    },
-    {
-      "deanery_code": "KE-MBA-MBA-VOI",
-      "deanery_name": "Voi Deanery",
-      "diocese": "Archdiocese of Mombasa",
-      "diocese_code": "arch_mba",
-      "parish_count": 0,
-      "source_url": "https://mombasacatholic.org/index.php/deaneries"
-    },
-    {
-      "deanery_code": "KE-MBA-MBA-WEST",
-      "deanery_name": "West Deanery",
-      "diocese": "Archdiocese of Mombasa",
-      "diocese_code": "arch_mba",
-      "parish_count": 0,
-      "source_url": "https://mombasacatholic.org/index.php/deaneries"
-    },
-    {
-      "deanery_code": "KE-MBA-MBA-WUNGANYI",
-      "deanery_name": "Wunganyi Deanery",
-      "diocese": "Archdiocese of Mombasa",
-      "diocese_code": "arch_mba",
-      "parish_count": 0,
-      "source_url": "https://mombasacatholic.org/index.php/deaneries"
-    },
-    {
-      "deanery_code": "KE-KSM-KAP-CATHEDRAL",
-      "deanery_name": "Cathedral Deanery",
-      "diocese": "Diocese of Kapsabet",
-      "diocese_code": "dio_kap",
-      "parish_count": 0,
-      "source_url": "https://www.dioceseofkapsabet.org"
-    },
-    {
-      "deanery_code": "KE-KSM-KAP-CHEPTERIT",
-      "deanery_name": "Chepterit Deanery",
-      "diocese": "Diocese of Kapsabet",
-      "diocese_code": "dio_kap",
-      "parish_count": 0,
-      "source_url": "https://www.dioceseofkapsabet.org"
-    },
-    {
-      "deanery_code": "KE-KSM-KAP-KAIBOI",
-      "deanery_name": "Kaiboi Deanery",
-      "diocese": "Diocese of Kapsabet",
-      "diocese_code": "dio_kap",
-      "parish_count": 0,
-      "source_url": "https://www.dioceseofkapsabet.org"
-    },
-    {
-      "deanery_code": "KE-KSM-KAP-KOBUJOI",
-      "deanery_name": "Kobujoi Deanery",
-      "diocese": "Diocese of Kapsabet",
-      "diocese_code": "dio_kap",
-      "parish_count": 0,
-      "source_url": "https://www.dioceseofkapsabet.org"
-    },
-    {
-      "deanery_code": "KE-KSM-KAP-NANDI-HILLS",
-      "deanery_name": "Nandi Hills Deanery",
-      "diocese": "Diocese of Kapsabet",
-      "diocese_code": "dio_kap",
-      "parish_count": 0,
-      "source_url": "https://www.dioceseofkapsabet.org"
-    },
-    {
-      "deanery_code": "KE-KSM-KAP-NDALAT",
-      "deanery_name": "Ndalat Deanery",
-      "diocese": "Diocese of Kapsabet",
-      "diocese_code": "dio_kap",
-      "parish_count": 0,
-      "source_url": "https://www.dioceseofkapsabet.org"
-    },
-    {
-      "deanery_code": "KE-KSM-KAP-OL-LESSOS",
-      "deanery_name": "Ol'Lessos Deanery",
-      "diocese": "Diocese of Kapsabet",
-      "diocese_code": "dio_kap",
-      "parish_count": 0,
-      "source_url": "https://www.dioceseofkapsabet.org"
-    },
-    {
-      "deanery_code": "KE-KSM-KTL-CATHEDRAL",
-      "deanery_name": "Cathedral Deanery",
-      "diocese": "Diocese of Kitale",
-      "diocese_code": "dio_ktl",
-      "parish_count": 0,
-      "source_url": "https://catholickitale.org"
-    },
-    {
-      "deanery_code": "KE-KSM-KTL-KAPENGURIA",
-      "deanery_name": "Kapenguria Deanery",
-      "diocese": "Diocese of Kitale",
-      "diocese_code": "dio_ktl",
-      "parish_count": 0,
-      "source_url": "https://catholickitale.org"
-    },
-    {
-      "deanery_code": "KE-KSM-KTL-KIMININI",
-      "deanery_name": "Kiminini Deanery",
-      "diocese": "Diocese of Kitale",
-      "diocese_code": "dio_ktl",
-      "parish_count": 0,
-      "source_url": "https://catholickitale.org"
-    },
-    {
-      "deanery_code": "KE-KSM-KTL-KOLONGOLO",
-      "deanery_name": "Kolongolo Deanery",
-      "diocese": "Diocese of Kitale",
-      "diocese_code": "dio_ktl",
-      "parish_count": 0,
-      "source_url": "https://catholickitale.org"
-    },
-    {
-      "deanery_code": "KE-KSM-KTL-ORTUN",
-      "deanery_name": "Ortun Deanery",
-      "diocese": "Diocese of Kitale",
-      "diocese_code": "dio_ktl",
-      "parish_count": 0,
-      "source_url": "https://catholickitale.org"
-    },
-    {
-      "deanery_code": "KE-KSM-KTL-SUWERWA",
-      "deanery_name": "Suwerwa Deanery",
-      "diocese": "Diocese of Kitale",
-      "diocese_code": "dio_ktl",
-      "parish_count": 0,
-      "source_url": "https://catholickitale.org"
-    },
-    {
-      "deanery_code": "KE-KSM-KTL-TARTAR",
-      "deanery_name": "Tartar Deanery",
-      "diocese": "Diocese of Kitale",
-      "diocese_code": "dio_ktl",
-      "parish_count": 0,
-      "source_url": "https://catholickitale.org"
-    },
-    {
-      "deanery_code": "KE-NRY-MER-BUURI",
-      "deanery_name": "Buuri Deanery",
-      "diocese": "Diocese of Meru",
-      "diocese_code": "dio_mer",
-      "parish_count": 0,
-      "source_url": "https://catholicdioceseofmeru.org"
-    },
-    {
-      "deanery_code": "KE-NRY-MER-IGEMBE",
-      "deanery_name": "Igembe Deanery",
-      "diocese": "Diocese of Meru",
-      "diocese_code": "dio_mer",
-      "parish_count": 0,
-      "source_url": "https://catholicdioceseofmeru.org"
-    },
-    {
-      "deanery_code": "KE-NRY-MER-IMENTI-CENTRAL",
-      "deanery_name": "Imenti Central Deanery",
-      "diocese": "Diocese of Meru",
-      "diocese_code": "dio_mer",
-      "parish_count": 0,
-      "source_url": "https://catholicdioceseofmeru.org"
-    },
-    {
-      "deanery_code": "KE-NRY-MER-IMENTI-NORTH",
-      "deanery_name": "Imenti North Deanery",
-      "diocese": "Diocese of Meru",
-      "diocese_code": "dio_mer",
-      "parish_count": 0,
-      "source_url": "https://catholicdioceseofmeru.org"
-    },
-    {
-      "deanery_code": "KE-NRY-MER-MAARA",
-      "deanery_name": "Maara Deanery",
-      "diocese": "Diocese of Meru",
-      "diocese_code": "dio_mer",
-      "parish_count": 0,
-      "source_url": "https://catholicdioceseofmeru.org"
-    },
-    {
-      "deanery_code": "KE-NRY-MER-SOUTH-IMENTI",
-      "deanery_name": "South Imenti Deanery",
-      "diocese": "Diocese of Meru",
-      "diocese_code": "dio_mer",
-      "parish_count": 0,
-      "source_url": "https://catholicdioceseofmeru.org"
-    },
-    {
-      "deanery_code": "KE-NRY-MER-THARAKA",
-      "deanery_name": "Tharaka Deanery",
-      "diocese": "Diocese of Meru",
-      "diocese_code": "dio_mer",
-      "parish_count": 0,
-      "source_url": "https://catholicdioceseofmeru.org"
-    },
-    {
-      "deanery_code": "KE-NRY-MER-TIGANIA",
-      "deanery_name": "Tigania Deanery",
-      "diocese": "Diocese of Meru",
-      "diocese_code": "dio_mer",
-      "parish_count": 0,
-      "source_url": "https://catholicdioceseofmeru.org"
-    },
-    {
-      "deanery_code": "KE-NRY-MRG-BARICHO",
-      "deanery_name": "Baricho Deanery",
-      "diocese": "Diocese of Murang'a",
-      "diocese_code": "dio_mrg",
-      "parish_count": 0,
-      "source_url": "https://catholicdioceseofmuranga.org"
-    },
-    {
-      "deanery_code": "KE-NRY-MRG-GAICHANJIRU",
-      "deanery_name": "Gaichanjiru Deanery",
-      "diocese": "Diocese of Murang'a",
-      "diocese_code": "dio_mrg",
-      "parish_count": 0,
-      "source_url": "https://catholicdioceseofmuranga.org"
-    },
-    {
-      "deanery_code": "KE-NRY-MRG-GATANGA",
-      "deanery_name": "Gatanga Deanery",
-      "diocese": "Diocese of Murang'a",
-      "diocese_code": "dio_mrg",
-      "parish_count": 0,
-      "source_url": "https://catholicdioceseofmuranga.org"
-    },
-    {
-      "deanery_code": "KE-NRY-MRG-KIANYAGA",
-      "deanery_name": "Kianyaga Deanery",
-      "diocese": "Diocese of Murang'a",
-      "diocese_code": "dio_mrg",
-      "parish_count": 0,
-      "source_url": "https://catholicdioceseofmuranga.org"
-    },
-    {
-      "deanery_code": "KE-NRY-MRG-MARAGUA",
-      "deanery_name": "Maragua Deanery",
-      "diocese": "Diocese of Murang'a",
-      "diocese_code": "dio_mrg",
-      "parish_count": 0,
-      "source_url": "https://catholicdioceseofmuranga.org"
-    },
-    {
-      "deanery_code": "KE-NRY-MRG-MURANG-A",
-      "deanery_name": "Murang'a Deanery",
-      "diocese": "Diocese of Murang'a",
-      "diocese_code": "dio_mrg",
-      "parish_count": 0,
-      "source_url": "https://catholicdioceseofmuranga.org"
-    },
-    {
-      "deanery_code": "KE-NRY-MRG-MWEA",
-      "deanery_name": "Mwea Deanery",
-      "diocese": "Diocese of Murang'a",
-      "diocese_code": "dio_mrg",
-      "parish_count": 0,
-      "source_url": "https://catholicdioceseofmuranga.org"
-    },
-    {
-      "deanery_code": "KE-NRY-MRG-TUTHU",
-      "deanery_name": "Tuthu Deanery",
-      "diocese": "Diocese of Murang'a",
-      "diocese_code": "dio_mrg",
-      "parish_count": 0,
-      "source_url": "https://catholicdioceseofmuranga.org"
-    },
-    {
-      "deanery_code": "KE-NRB-NGO-KAJIADO",
-      "deanery_name": "Kajiado Deanery",
-      "diocese": "Diocese of Ngong",
-      "diocese_code": "dio_ngo",
-      "parish_count": 0,
-      "source_url": "https://www.dioceseofngong.org"
-    },
-    {
-      "deanery_code": "KE-NRB-NGO-KILGORIS",
-      "deanery_name": "Kilgoris Deanery",
-      "diocese": "Diocese of Ngong",
-      "diocese_code": "dio_ngo",
-      "parish_count": 0,
-      "source_url": "https://www.dioceseofngong.org"
-    },
-    {
-      "deanery_code": "KE-NRB-NGO-KISERIAN",
-      "deanery_name": "Kiserian Deanery",
-      "diocese": "Diocese of Ngong",
-      "diocese_code": "dio_ngo",
-      "parish_count": 0,
-      "source_url": "https://www.dioceseofngong.org"
-    },
-    {
-      "deanery_code": "KE-NRB-NGO-NAROK",
-      "deanery_name": "Narok Deanery",
-      "diocese": "Diocese of Ngong",
-      "diocese_code": "dio_ngo",
-      "parish_count": 0,
-      "source_url": "https://www.dioceseofngong.org"
-    },
-    {
-      "deanery_code": "KE-NRB-NGO-NGONG",
-      "deanery_name": "Ngong Deanery",
-      "diocese": "Diocese of Ngong",
-      "diocese_code": "dio_ngo",
-      "parish_count": 0,
-      "source_url": "https://www.dioceseofngong.org"
-    },
-    {
-      "deanery_code": "KE-NRB-NGO-OLOITOKITOK",
-      "deanery_name": "Oloitokitok Deanery",
-      "diocese": "Diocese of Ngong",
-      "diocese_code": "dio_ngo",
-      "parish_count": 0,
-      "source_url": "https://www.dioceseofngong.org"
-    },
-    {
-      "deanery_code": "KE-NRB-NGO-OLOLULUNGA",
-      "deanery_name": "Ololulunga Deanery",
-      "diocese": "Diocese of Ngong",
-      "diocese_code": "dio_ngo",
-      "parish_count": 0,
-      "source_url": "https://www.dioceseofngong.org"
-    }
-  ]
+  }
 }
